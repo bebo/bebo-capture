@@ -4,8 +4,8 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <stdbool.h>
-#include "../obfuscate.h"
-#include "../inject-library.h"
+#include "obfuscate.h"
+#include "inject-library.h"
 
 #if defined(_MSC_VER) && !defined(inline)
 #define inline __inline
