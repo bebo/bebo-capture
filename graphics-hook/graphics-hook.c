@@ -1,7 +1,7 @@
 #include <windows.h>
 #include <psapi.h>
 #include "graphics-hook.h"
-//#include "obfuscate.h"
+#include "obfuscate.h"
 #include "funchook.h"
 
 #define DEBUG_OUTPUT

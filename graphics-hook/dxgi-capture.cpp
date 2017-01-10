@@ -5,7 +5,7 @@
 
 #include "d3d1x_shaders.hpp"
 #include "graphics-hook.h"
-#include "../funchook.h"
+#include "funchook.h"
 
 #if COMPILE_D3D12_HOOK
 #include <d3d12.h>

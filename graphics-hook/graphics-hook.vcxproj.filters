@@ -50,37 +50,10 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\graphics-hook.bak\dxgi-helpers.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\graphics-hook.bak\funchook.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\graphics-hook.bak\gl-decs.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\graphics-hook.bak\graphics-hook-bak.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\graphics-hook.bak\graphics-hook-config.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\graphics-hook.bak\graphics-hook-info.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\graphics-hook.bak\hook-helpers.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\graphics-hook.bak\pch.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\graphics-hook.bak\targetver.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\graphics-hook.bak\d3d1x_shaders.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\graphics-hook.bak\d3d9-patches.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="pch.h">

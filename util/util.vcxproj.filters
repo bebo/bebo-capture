@@ -15,6 +15,21 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <Text Include="ReadMe.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="bmem.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="dstr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="lexer.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="obfuscate.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="pipe-windows.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -24,36 +39,36 @@
     <ClCompile Include="platform-windows.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="bmem.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="dstr.c">
+    <ClCompile Include="threading-windows.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="utf8.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="lexer.c">
+    <ClCompile Include="base.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="obfuscate.c">
+    <ClCompile Include="..\third_party\ipc-util\ipc-util\pipe-posix.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="platform.h">
+    <ClInclude Include="dstr.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="bmem.h">
+    <ClInclude Include="dstr.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lexer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="obfuscate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="pipe.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="base.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="c99defs.h">
+    <ClInclude Include="platform.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="threading.h">
@@ -62,17 +77,35 @@
     <ClInclude Include="threading-windows.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="utf8.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="base.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bmem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="c99defs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="darray.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="windows\ComPtr.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="windows\CoTaskMemPtr.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="windows\HRError.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="windows\WinHandle.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="windows\win-version.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="obfuscate.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="platform-cocoa.m" />
   </ItemGroup>
 </Project>
