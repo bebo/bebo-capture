@@ -8,7 +8,7 @@
 #include <dxgi1_4.h>
 
 #include "dxgi-helpers.hpp"
-#include "../funchook.h"
+#include "funchook.h"
 
 #define MAX_BACKBUFFERS 8
 

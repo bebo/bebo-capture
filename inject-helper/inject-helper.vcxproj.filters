@@ -21,9 +21,6 @@
     <ClCompile Include="inject-library.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="obfuscate.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="inject-library.h">

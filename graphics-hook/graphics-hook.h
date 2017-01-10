@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "graphics-hook-config.h"
 
@@ -7,8 +7,8 @@
 #pragma warning(disable: 4152)
 #endif
 
-#include "../graphics-hook-info.h"
-#include <ipc-util/pipe.h>
+#include "graphics-hook-info.h"
+#include "../third_party/ipc-util/ipc-util/pipe.h"
 #include <psapi.h>
 
 #ifdef __cplusplus

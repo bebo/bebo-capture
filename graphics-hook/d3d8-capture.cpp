@@ -1,8 +1,10 @@
+#include "pch.h"
+
 #include <dxgi.h>
 
-#include "../d3d8-api/d3d8.h"
+#include "../third_party/d3d8-api/d3d8.h"
 #include "graphics-hook.h"
-#include "../funchook.h"
+#include "funchook.h"
 
 typedef HRESULT(STDMETHODCALLTYPE *reset_t)(IDirect3DDevice8*,
 		D3DPRESENT_PARAMETERS*);

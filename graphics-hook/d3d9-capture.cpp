@@ -3,7 +3,7 @@
 #include <dxgi.h>
 
 #include "graphics-hook.h"
-#include "../funchook.h"
+#include "funchook.h"
 #include "d3d9-patches.hpp"
 
 typedef HRESULT (STDMETHODCALLTYPE *present_t)(IDirect3DDevice9*,

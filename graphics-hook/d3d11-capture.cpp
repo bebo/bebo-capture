@@ -1,9 +1,10 @@
+#include "pch.h"
 #include <d3d11.h>
 #include <dxgi.h>
 
 #include "dxgi-helpers.hpp"
 #include "graphics-hook.h"
-#include "../funchook.h"
+#include "funchook.h"
 
 struct d3d11_data {
 	ID3D11Device                   *device; /* do not release */
