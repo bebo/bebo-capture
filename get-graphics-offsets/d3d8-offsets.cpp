@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <windows.h>
-#include "../d3d8-api/d3d8.h"
+#include "../third_party/d3d8-api/d3d8.h"
 #include "get-graphics-offsets.h"
 
 typedef IDirect3D8 *(WINAPI *d3d8create_t)(UINT);
