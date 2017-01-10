@@ -103,13 +103,13 @@
     <IntDir Condition="'$(Configuration)|$(Platform)'=='releasex64|x64'">$(Platform)\$(Configuration)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='releasex64|Win32'">$(Platform)\$(Configuration)\</IntDir>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
-    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</LinkIncremental>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='releasex64|x64'">false</LinkIncremental>
-    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='releasex64|Win32'">false</LinkIncremental>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(MSBuildProjectDirectory)\..\third_party\Windows-classic-samples\Samples\Win7Samples\multimedia\directshow\baseclasses\x64\Release;$(VCInstallDir)lib\amd64;$(VCInstallDir)atlmfc\lib\amd64;$(WindowsSdkDir)lib\x64;G:\Program Files\Microsoft SDKs\Windows\v7.1\Lib\x64;G:\Program Files\Microsoft SDKs\Windows\v7.1\Samples\multimedia\directshow_64\baseclasses\x64\Release;$(LibraryPath);$(OutDir)</LibraryPath>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(VCInstallDir)lib\amd64;$(VCInstallDir)atlmfc\lib\amd64;$(WindowsSdkDir)lib\x64;G:\Program Files\Microsoft SDKs\Windows\v7.1\Lib\x64;G:\Program Files\Microsoft SDKs\Windows\v7.1\Samples\multimedia\directshow_64\baseclasses\x64\Release;$(OutDir)</LibraryPath>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='releasex64|Win32'">true</LinkIncremental>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)$(Platform)\$(Configuration)\;$(VCInstallDir)lib\$(PlatformTarget);$(VCInstallDir)atlmfc\lib\$(PlatformTarget);$(WindowsSdkDir)lib\$(PlatformTarget);$(FrameworkSDKDir)\lib\$(PlatformTarget);$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(SolutionDir)$(Platform)\$(Configuration)\;$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib;$(FrameworkSDKDir)\lib;$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
     <LibraryPath Condition="'$(Configuration)|$(Platform)'=='releasex64|x64'">$(VCInstallDir)lib\amd64;$(VCInstallDir)atlmfc\lib\amd64;$(WindowsSdkDir)lib\x64;C:\Program Files\Microsoft SDKs\Windows\v7.1\Samples\multimedia\directshow\baseclasses-x64\x64\Release;C:\Program Files\Microsoft SDKs\Windows\v7.1\Lib\x64;$(OutDir)</LibraryPath>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='releasex64|Win32'">$(VCInstallDir)lib\amd64;$(VCInstallDir)atlmfc\lib\amd64;$(WindowsSdkDir)lib\x64;G:\Program Files\Microsoft SDKs\Windows\v7.1\Samples\multimedia\directshow_64\baseclasses\x64\Release;G:\Program Files\Microsoft SDKs\Windows\v7.1\Lib\x64;$(OutDir)</LibraryPath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='releasex64|Win32'">$(SolutionDir)$(Platform)\$(Configuration)\;$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib;$(FrameworkSDKDir)\lib;$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
     <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.DLL</TargetExt>
     <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">.DLL</TargetExt>
     <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(SolutionDir)$(Platform)\$(Configuration)\;$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib;$(FrameworkSDKDir)\lib;$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
@@ -118,7 +118,7 @@
     <TargetName Condition="'$(Configuration)|$(Platform)'=='releasex64|x64'">$(ProjectName)</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LibraryPath>$(SolutionDir)$(Platform)\$(Configuration)\;$(VCInstallDir)lib\$(PlatformTarget);$(VCInstallDir)atlmfc\lib\$(PlatformTarget);$(WindowsSdkDir)lib\$(PlatformTarget);$(FrameworkSDKDir)\lib\$(PlatformTarget);$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(SolutionDir)$(Platform)\$(Configuration)\;$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
     <IncludePath>$(SolutionDir)third_party\win7-directshow-samples\baseclasses;$(IncludePath)</IncludePath>
     <TargetExt>.DLL</TargetExt>
   </PropertyGroup>
@@ -158,7 +158,7 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>strmbasd.lib;winmm.lib;msvcrtd.lib;legacy_stdio_definitions.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\..\BaseClasses\x64\Debug\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ModuleDefinitionFile>BeboCapture.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
@@ -229,9 +229,8 @@
       <CallingConvention>StdCall</CallingConvention>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>strmbase.lib;winmm.lib;msvcrt.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\..\BaseClasses\x64\Release\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <AdditionalDependencies>strmbase.lib;winmm.lib;msvcrt.lib;legacy_stdio_definitions.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ModuleDefinitionFile>BeboCapture.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
@@ -281,7 +280,7 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>strmbase.lib;winmm.lib;msvcrt.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\..\BaseClasses\x64\Release\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
       <ModuleDefinitionFile>BeboCapture.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
