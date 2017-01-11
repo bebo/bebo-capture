@@ -17,11 +17,14 @@
 // #pragma comment(lib,"dwmapi.lib")  // ?
 #include <dwmapi.h>
 
+
+#define _DEBUG = 1;
+
 extern int show_performance;
 
 void logToFile(char *log_this) {
     FILE *f;
-	fopen_s(&f, "c:\\temp\\yo2", "a"); // this call fails if using the filter within flash player...
+	fopen_s(&f, "c:\\temp\\bebo-capture.log", "a"); // this call fails if using the filter within flash player...
 	fprintf(f, log_this);
 	fclose(f);
 }

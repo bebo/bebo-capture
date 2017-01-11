@@ -557,6 +557,7 @@ error:
 	return code;
 }
 
+#if 0 
 BOOL WINAPI DllMain(HINSTANCE hinst_dll, DWORD reason, LPVOID reserved)
 {
 	switch (reason) {
@@ -592,6 +593,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst_dll, DWORD reason, LPVOID reserved)
 	UNUSED_PARAMETER(reserved);
 	return true;
 }
+#endif
 
 os_performance_token_t *os_request_high_performance(const char *reason)
 {

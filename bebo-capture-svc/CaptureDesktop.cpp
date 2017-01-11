@@ -1,10 +1,11 @@
 #include <streams.h>
 
+#include <tchar.h>
 #include "Capture.h"
 #include "CaptureGuids.h"
 #include "DibHelper.h"
 #include <wmsdkidl.h>
-
+#include "GameCapture.h"
 
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
 
@@ -146,6 +147,30 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 wchar_t out[1000];
 bool ever_started = false;
 
+#if 1
+HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
+{
+	LocalOutput("video frame requested");
+
+	__int64 startThisRound = StartCounter();
+	BYTE *pData;
+
+	CheckPointer(pSample, E_POINTER);
+	if (m_bReReadRegistry) {
+		reReadCurrentStartXY(1);
+	}
+
+
+	if (!ever_started) {
+		//DbgBreak("!ever_started");
+		hook(_T("Overwatch"));
+	}
+		
+	return S_OK;
+}
+
+
+# else
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 {
 	LocalOutput("video frame requested");
@@ -160,6 +185,8 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 	
 	if(!ever_started) {
+		DbgBreak("!ever_started");
+
 		// allow it to startup until Run is called...so StreamTime can work see http://stackoverflow.com/questions/2469855/how-to-get-imediacontrol-run-to-start-a-file-playing-with-no-delay/2470548#2470548
 		// since StreamTime anticipates that the graph's start time has already been set
 		FILTER_STATE myState;
@@ -268,6 +295,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 #endif
     return S_OK;
 }
+#endif
 
 float CPushPinDesktop::GetFps() {
 	return (float) (UNITS / m_rtFrameLength);

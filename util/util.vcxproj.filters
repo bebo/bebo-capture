@@ -51,6 +51,15 @@
     <ClCompile Include="..\third_party\ipc-util\ipc-util\pipe-posix.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="inject-library.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="app-helpers.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="window-helpers.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="dstr.h">
@@ -105,6 +114,24 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="windows\win-version.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\graphics-hook\graphics-hook-info.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="graphics-hook-info.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="hook-helpers.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="inject-library.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="app-helpers.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="window-helpers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

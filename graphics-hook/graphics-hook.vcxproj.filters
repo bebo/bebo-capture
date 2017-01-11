@@ -86,9 +86,6 @@
     <ClInclude Include="graphics-hook-config.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="graphics-hook-info.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="hook-helpers.h">
       <Filter>Header Files</Filter>
     </ClInclude>

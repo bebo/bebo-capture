@@ -10,6 +10,7 @@
 #include "graphics-hook-info.h"
 #include "../third_party/ipc-util/ipc-util/pipe.h"
 #include <psapi.h>
+#include "../util/platform.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,7 +27,7 @@ extern void hlog_hr(const char *text, HRESULT hr);
 static inline const char *get_process_name(void);
 static inline HMODULE get_system_module(const char *module);
 static inline HMODULE load_system_library(const char *module);
-extern uint64_t os_gettime_ns(void);
+//extern uint64_t os_gettime_ns(void);
 
 static inline bool capture_active(void);
 static inline bool capture_ready(void);

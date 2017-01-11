@@ -43,7 +43,7 @@ enum {
 	 * Use in creation functions and core subsystem functions.  Places that
 	 * should definitely not fail.
 	 */
-	LOG_ERROR   = 100, 
+ 	LOG_ERROR   = 100, 
 
 	/**
 	 * Use if a problem occurs that doesn't affect the program and is

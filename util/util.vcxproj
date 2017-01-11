@@ -81,7 +81,7 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
@@ -95,7 +95,7 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
@@ -111,7 +111,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions> _CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_NONSTDC_NO_WARNINGS; _CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
@@ -129,7 +129,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
@@ -144,9 +144,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\third_party\ipc-util\ipc-util\pipe-posix.c" />
+    <ClCompile Include="app-helpers.c" />
     <ClCompile Include="base.c" />
     <ClCompile Include="bmem.c" />
     <ClCompile Include="dstr.c" />
+    <ClCompile Include="inject-library.c" />
     <ClCompile Include="lexer.c" />
     <ClCompile Include="obfuscate.c" />
     <ClCompile Include="pipe-windows.c" />
@@ -154,14 +156,20 @@
     <ClCompile Include="platform.c" />
     <ClCompile Include="threading-windows.c" />
     <ClCompile Include="utf8.c" />
+    <ClCompile Include="window-helpers.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\graphics-hook\graphics-hook-info.h" />
+    <ClInclude Include="app-helpers.h" />
     <ClInclude Include="base.h" />
     <ClInclude Include="bmem.h" />
     <ClInclude Include="c99defs.h" />
     <ClInclude Include="darray.h" />
     <ClInclude Include="dstr.h" />
     <ClInclude Include="dstr.hpp" />
+    <ClInclude Include="graphics-hook-info.h" />
+    <ClInclude Include="hook-helpers.h" />
+    <ClInclude Include="inject-library.h" />
     <ClInclude Include="lexer.h" />
     <ClInclude Include="obfuscate.h" />
     <ClInclude Include="pipe.h" />
@@ -169,6 +177,7 @@
     <ClInclude Include="threading-windows.h" />
     <ClInclude Include="threading.h" />
     <ClInclude Include="utf8.h" />
+    <ClInclude Include="window-helpers.h" />
     <ClInclude Include="windows\ComPtr.hpp" />
     <ClInclude Include="windows\CoTaskMemPtr.hpp" />
     <ClInclude Include="windows\HRError.hpp" />

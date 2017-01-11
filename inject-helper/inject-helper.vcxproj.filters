@@ -18,14 +18,8 @@
     <ClCompile Include="inject-helper.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="inject-library.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="inject-library.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="obfuscate.h">
       <Filter>Header Files</Filter>
     </ClInclude>

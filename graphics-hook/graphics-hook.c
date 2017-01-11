@@ -451,6 +451,7 @@ static inline uint64_t get_clockfreq(void)
 	return clock_freq.QuadPart;
 }
 
+#if 0
 uint64_t os_gettime_ns(void)
 {
 	LARGE_INTEGER current_time;
@@ -463,6 +464,7 @@ uint64_t os_gettime_ns(void)
 
 	return (uint64_t)time_val;
 }
+#endif
 
 static inline int try_lock_shmem_tex(int id)
 {
