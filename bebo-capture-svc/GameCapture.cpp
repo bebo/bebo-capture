@@ -16,9 +16,10 @@
 #include "inject-library.h"
 #include "DibHelper.h"
 #include "window-helpers.h"
+#include "ipc-util/pipe.h"
 
 #define do_log(level, format, ...) \
-	LocalOutput("[game-capture: '%s'] " format, ##__VA_ARGS__)
+	LocalOutput("[game-capture: '%s'] " format, "test", ##__VA_ARGS__)
 #define warn(format, ...)  do_log(LOG_WARNING, format, ##__VA_ARGS__)
 #define info(format, ...)  do_log(LOG_INFO,    format, ##__VA_ARGS__)
 #define debug(format, ...) do_log(LOG_DEBUG,   format, ##__VA_ARGS__)
@@ -27,6 +28,19 @@
 	"  This is most likely due to security software. Please make sure " \
         "that the Bebo Capture installation folder is excluded/ignored in the "      \
         "settings of the security software you are using."
+
+extern "C" {
+	char *bebo_find_file(const char *file) {
+		char * d = "C:\\Users\\fpn\\bebo-capture\\x64\\Debug\\";
+		char * result = (char *) bmalloc(strlen(file) + strlen(d));
+		strcpy(result, d);
+		strncat(result, file, strlen(file));
+		return result;
+		// TODO free result somewhere?
+	}
+	struct graphics_offsets offsets32 = {0};
+	struct graphics_offsets offsets64 = {0};
+}
 
 enum capture_mode {
 	CAPTURE_MODE_ANY,
@@ -88,7 +102,7 @@ struct game_capture {
 
 	struct game_capture_config    config;
 
-//	ipc_pipe_server_t             pipe;
+	ipc_pipe_server_t             pipe;
 //	gs_texture_t                  *texture;
 	struct hook_info              *global_hook_info;
 	HANDLE                        keepalive_thread;
@@ -118,8 +132,8 @@ struct game_capture {
 	void(*copy_texture)(struct game_capture*);
 };
 
-struct graphics_offsets offsets32 = {0};
-struct graphics_offsets offsets64 = {0};
+
+
 
 static inline int inject_library(HANDLE process, const wchar_t *dll)
 {
@@ -131,20 +145,61 @@ static inline int inject_library(HANDLE process, const wchar_t *dll)
 			"GbfkDaezbp~X", 0x76aff7238788f7db);
 }
 
-static char *find_file(const char *file) {
-	char * d = "C:\\Users\\fpn\\bebo-capture\\x64\\Debug\\";
-	char * result = (char *) bmalloc(strlen(file) + strlen(d));
-	strcpy(result, d);
-	strncat(result, file, strlen(file));
-	return result;
-    // TODO free result somewhere?
-}
 
 static inline bool use_anticheat(struct game_capture *gc)
 {
 	return gc->config.anticheat_hook && !gc->is_app;
 }
 
+static inline HANDLE open_mutex_plus_id(struct game_capture *gc,
+	const wchar_t *name, DWORD id)
+{
+	wchar_t new_name[64];
+	_snwprintf(new_name, 64, L"%s%lu", name, id);
+	return gc->is_app
+		? open_app_mutex(gc->app_sid, new_name)
+		: open_mutex(new_name);
+}
+
+static inline HANDLE open_mutex_gc(struct game_capture *gc,
+	const wchar_t *name)
+{
+	return open_mutex_plus_id(gc, name, gc->process_id);
+}
+
+static inline HANDLE open_event_plus_id(struct game_capture *gc,
+	const wchar_t *name, DWORD id)
+{
+	wchar_t new_name[64];
+	_snwprintf(new_name, 64, L"%s%lu", name, id);
+	return gc->is_app
+		? open_app_event(gc->app_sid, new_name)
+		: open_event(new_name);
+}
+
+static inline HANDLE open_event_gc(struct game_capture *gc,
+	const wchar_t *name)
+{
+	return open_event_plus_id(gc, name, gc->process_id);
+}
+
+static inline HANDLE open_map_plus_id(struct game_capture *gc,
+	const wchar_t *name, DWORD id)
+{
+	wchar_t new_name[64];
+	_snwprintf(new_name, 64, L"%s%lu", name, id);
+
+	debug("map id: %S", new_name);
+
+	return gc->is_app
+		? open_app_map(gc->app_sid, new_name)
+		: OpenFileMappingW(GC_MAPPING_FLAGS, false, new_name);
+}
+
+static inline HANDLE open_hook_info(struct game_capture *gc)
+{
+	return open_map_plus_id(gc, SHMEM_HOOK_INFO, gc->process_id);
+}
 static struct game_capture *game_capture_create()
 {
 	struct game_capture *gc = (struct game_capture*) bzalloc(sizeof(*gc));
@@ -180,13 +235,6 @@ static inline HMODULE kernel32(void)
 	if (!kernel32_handle)
 		kernel32_handle = GetModuleHandleW(L"kernel32");
 	return kernel32_handle;
-}
-
-static inline HANDLE open_event_gc(struct game_capture *gc,
-		const wchar_t *name)
-{
-// TODO 	return open_event_plus_id(gc, name, gc->process_id);
-	return NULL;
 }
 
 static inline HANDLE open_process(DWORD desired_access, bool inherit_handle,
@@ -521,13 +569,13 @@ static inline bool inject_hook(struct game_capture *gc)
 
 	if (gc->process_is_64bit) {
 		hook_dll = "graphics-hook64.dll";
-		inject_path = find_file("inject-helper64.exe");
+		inject_path = bebo_find_file("inject-helper64.exe");
 	} else {
 		hook_dll = "graphics-hook32.dll";
-		inject_path = find_file("inject-helper32.exe");
+		inject_path = bebo_find_file("inject-helper32.exe");
 	}
 
-	hook_path = find_file(hook_dll);
+	hook_path = bebo_find_file(hook_dll);
 
 	if (!check_file_integrity(gc, inject_path, "inject helper")) {
 		goto cleanup;
@@ -555,6 +603,235 @@ cleanup:
 	bfree(inject_path);
 	bfree(hook_path);
 	return success;
+}
+
+struct keepalive_data {
+	struct game_capture *gc;
+	HANDLE initialized;
+};
+
+#define DEF_FLAGS (WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS)
+
+static DWORD WINAPI keepalive_window_thread(struct keepalive_data *data)
+{
+	HANDLE initialized = data->initialized;
+	struct game_capture *gc = data->gc;
+	wchar_t new_name[64];
+	WNDCLASSW wc;
+	HWND window;
+	MSG msg;
+
+	_snwprintf(new_name, sizeof(new_name), L"%s%lu",
+			WINDOW_HOOK_KEEPALIVE, gc->process_id);
+
+	memset(&wc, 0, sizeof(wc));
+	wc.style = CS_OWNDC;
+	wc.hInstance = GetModuleHandleW(NULL);
+	wc.lpfnWndProc = (WNDPROC)DefWindowProc;
+	wc.lpszClassName = new_name;
+
+	if (!RegisterClass(&wc)) {
+		warn("Failed to create keepalive window class: %lu",
+				GetLastError());
+		return 0;
+	}
+
+	window = CreateWindowExW(0, new_name, NULL, DEF_FLAGS, 0, 0, 1, 1,
+			NULL, NULL, wc.hInstance, NULL);
+	if (!window) {
+		warn("Failed to create keepalive window: %lu",
+				GetLastError());
+		return 0;
+	}
+
+	SetEvent(initialized);
+
+	while (GetMessage(&msg, NULL, 0, 0)) {
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+
+	DestroyWindow(window);
+	UnregisterClassW(new_name, wc.hInstance);
+
+	return 0;
+}
+
+static inline bool init_keepalive(struct game_capture *gc)
+{
+	struct keepalive_data data;
+	HANDLE initialized = CreateEvent(NULL, false, false, NULL);
+
+	data.gc = gc;
+	data.initialized = initialized;
+
+	gc->keepalive_thread = CreateThread(NULL, 0,
+			(LPTHREAD_START_ROUTINE)keepalive_window_thread,
+			&data, 0, &gc->keepalive_thread_id);
+	if (!gc->keepalive_thread) {
+		warn("Failed to create keepalive window thread: %lu",
+				GetLastError());
+		return false;
+	}
+
+	WaitForSingleObject(initialized, INFINITE);
+	CloseHandle(initialized);
+
+	return true;
+}
+
+static inline bool init_texture_mutexes(struct game_capture *gc)
+{
+	gc->texture_mutexes[0] = open_mutex_gc(gc, MUTEX_TEXTURE1);
+	gc->texture_mutexes[1] = open_mutex_gc(gc, MUTEX_TEXTURE2);
+
+	if (!gc->texture_mutexes[0] || !gc->texture_mutexes[1]) {
+		DWORD error = GetLastError();
+		if (error == 2) {
+			if (!gc->retrying) {
+				gc->retrying = 2;
+				info("hook not loaded yet, retrying..");
+			}
+		} else {
+			warn("failed to open texture mutexes: %lu",
+					GetLastError());
+		}
+		return false;
+	}
+
+	return true;
+}
+static void pipe_log(void *param, uint8_t *data, size_t size)
+{
+//	struct game_capture *gc = param;
+	if (data && size)
+		info("%s", data);
+}
+
+static inline bool init_pipe(struct game_capture *gc)
+{
+	char name[64];
+	sprintf(name, "%s%lu", PIPE_NAME, gc->process_id);
+
+	if (!ipc_pipe_server_start(&gc->pipe, name, pipe_log, gc)) {
+		warn("init_pipe: failed to start pipe");
+		return false;
+	}
+
+	return true;
+}
+
+static inline void reset_frame_interval(struct game_capture *gc)
+{
+	// FIXME
+#if 0
+	struct obs_video_info ovi;
+	uint64_t interval = 0;
+
+	if (obs_get_video_info(&ovi)) {
+		interval = ovi.fps_den * 1000000000ULL / ovi.fps_num;
+
+		/* Always limit capture framerate to some extent.  If a game
+		 * running at 900 FPS is being captured without some sort of
+		 * limited capture interval, it will dramatically reduce
+		 * performance. */
+		if (!gc->config.limit_framerate)
+			interval /= 2;
+	}
+
+	gc->global_hook_info->frame_interval = interval;
+#endif 
+}
+
+static inline bool init_hook_info(struct game_capture *gc)
+{
+	gc->global_hook_info_map = open_hook_info(gc);
+	if (!gc->global_hook_info_map) {
+		warn("init_hook_info: get_hook_info failed: %lu",
+				GetLastError());
+		return false;
+	}
+
+	gc->global_hook_info = (hook_info *) MapViewOfFile(gc->global_hook_info_map,
+			FILE_MAP_ALL_ACCESS, 0, 0,
+			sizeof(*gc->global_hook_info));
+	if (!gc->global_hook_info) {
+		warn("init_hook_info: failed to map data view: %lu",
+				GetLastError());
+		return false;
+	}
+
+	gc->global_hook_info->offsets = gc->process_is_64bit ?
+		offsets64 : offsets32;
+	gc->global_hook_info->capture_overlay = gc->config.capture_overlays;
+	gc->global_hook_info->force_shmem = gc->config.force_shmem;
+	gc->global_hook_info->use_scale = gc->config.force_scaling;
+	gc->global_hook_info->cx = gc->config.scale_cx;
+	gc->global_hook_info->cy = gc->config.scale_cy;
+	reset_frame_interval(gc);
+
+#if 0 // FIXME
+	obs_enter_graphics();
+	if (!gs_shared_texture_available())
+		gc->global_hook_info->force_shmem = true;
+	obs_leave_graphics();
+
+	obs_enter_graphics();
+	if (!gs_shared_texture_available())
+		gc->global_hook_info->force_shmem = true;
+	obs_leave_graphics();
+#endif
+	return true;
+}
+
+static inline bool init_events(struct game_capture *gc)
+{
+	if (!gc->hook_restart) {
+		gc->hook_restart = open_event_gc(gc, EVENT_CAPTURE_RESTART);
+		if (!gc->hook_restart) {
+			warn("init_events: failed to get hook_restart "
+			     "event: %lu", GetLastError());
+			return false;
+		}
+	}
+
+	if (!gc->hook_stop) {
+		gc->hook_stop = open_event_gc(gc, EVENT_CAPTURE_STOP);
+		if (!gc->hook_stop) {
+			warn("init_events: failed to get hook_stop event: %lu",
+					GetLastError());
+			return false;
+		}
+	}
+
+	if (!gc->hook_init) {
+		gc->hook_init = open_event_gc(gc, EVENT_HOOK_INIT);
+		if (!gc->hook_init) {
+			warn("init_events: failed to get hook_init event: %lu",
+					GetLastError());
+			return false;
+		}
+	}
+
+	if (!gc->hook_ready) {
+		gc->hook_ready = open_event_gc(gc, EVENT_HOOK_READY);
+		if (!gc->hook_ready) {
+			warn("init_events: failed to get hook_ready event: %lu",
+					GetLastError());
+			return false;
+		}
+	}
+
+	if (!gc->hook_exit) {
+		gc->hook_exit = open_event_gc(gc, EVENT_HOOK_EXIT);
+		if (!gc->hook_exit) {
+			warn("init_events: failed to get hook_exit event: %lu",
+					GetLastError());
+			return false;
+		}
+	}
+
+	return true;
 }
 
 static bool init_hook(struct game_capture *gc)
@@ -587,26 +864,30 @@ static bool init_hook(struct game_capture *gc)
 	if (!open_target_process(gc)) {
 		return false;
 	}
+// TODO
 //	if (!init_keepalive(gc)) {
 //		return false;
 //	}
-//	if (!init_pipe(gc)) {
-//		return false;
-//	}
+	if (!init_pipe(gc)) {
+		return false;
+	}
+// FIXME
 //	if (!attempt_existing_hook(gc)) {
 		if (!inject_hook(gc)) {
 			return false;
 		}
 //	}
-//	if (!init_texture_mutexes(gc)) {
-//		return false;
-//	}
-//	if (!init_hook_info(gc)) {
-//		return false;
-//	}
-//	if (!init_events(gc)) {
-//		return false;
-//	}
+	if (!init_texture_mutexes(gc)) {
+		return false;
+	}
+
+	if (!init_hook_info(gc)) {
+		return false;
+	}
+
+	if (!init_events(gc)) {
+		return false;
+	}
 
 	SetEvent(gc->hook_init);
 

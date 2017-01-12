@@ -9,6 +9,11 @@
 
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
 
+extern "C" {
+	extern bool load_graphics_offsets(bool is32bit);
+}
+
+
 DWORD globalStart; // for some debug performance benchmarking
 int countMissed = 0;
 long fastestRoundMillis = 1000000; // random big number
@@ -19,6 +24,15 @@ long sumMillisTook = 0;
 #else
   int show_performance = 0;
 #endif
+
+ static DWORD WINAPI init_hooks(LPVOID unused)
+ {
+//	 if (USE_HOOK_ADDRESS_CACHE &&
+//		 cached_versions_match() &&
+	 load_graphics_offsets(true);
+	 load_graphics_offsets(false);
+	 return 0;
+ }
 
 // the default child constructor...
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
@@ -36,6 +50,10 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 {
 	// Get the device context of the main display, just to get some metrics for it...
 	globalStart = GetTickCount();
+
+    init_hooks_thread = CreateThread(NULL, 0, init_hooks, NULL, 0, NULL);
+
+	//TODO read registry to find path to our executables / dlls
 
 	m_iHwndToTrack = (HWND) read_config_setting(TEXT("hwnd_to_track"), NULL, false);
 	if(m_iHwndToTrack) {

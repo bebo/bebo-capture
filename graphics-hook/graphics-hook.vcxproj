@@ -69,22 +69,22 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IncludePath>$(SolutionDir)util;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)third_party\ipc-util;$(SolutionDir)util;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)$(Platform)\$(Configuration);$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(NETFXKitsDir)Lib\um\x86</LibraryPath>
     <TargetName>$(ProjectName)$(PlatformArchitecture)</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IncludePath>$(SolutionDir)util;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)third_party\ipc-util;$(SolutionDir)util;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)$(Platform)\$(Configuration)\;$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(NETFXKitsDir)Lib\um\x86</LibraryPath>
     <TargetName>$(ProjectName)$(PlatformArchitecture)</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>$(SolutionDir)util;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)third_party\ipc-util;$(SolutionDir)util;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)$(Platform)\$(Configuration);$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
     <TargetName>$(ProjectName)$(PlatformArchitecture)</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>$(SolutionDir)util;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)third_party\ipc-util;$(SolutionDir)util;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)$(Platform)\$(Configuration);$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
     <TargetName>$(ProjectName)$(PlatformArchitecture)</TargetName>
   </PropertyGroup>
@@ -158,19 +158,15 @@
     <ClCompile Include="dxgi-capture.cpp" />
     <ClCompile Include="funchook.c" />
     <ClCompile Include="gl-capture.c" />
-    <ClCompile Include="graphics-hook-bak.cpp" />
     <ClCompile Include="graphics-hook.c" />
     <ClCompile Include="pch.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\graphics-hook.bak\graphics-hook-bak.h" />
-    <ClInclude Include="..\graphics-hook.bak\targetver.h" />
     <ClInclude Include="d3d1x_shaders.hpp" />
     <ClInclude Include="d3d9-patches.hpp" />
     <ClInclude Include="dxgi-helpers.hpp" />
     <ClInclude Include="funchook.h" />
     <ClInclude Include="gl-decs.h" />
-    <ClInclude Include="graphics-hook-bak.h" />
     <ClInclude Include="graphics-hook-config.h" />
     <ClInclude Include="graphics-hook.h" />
     <ClInclude Include="hook-helpers.h" />

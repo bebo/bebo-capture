@@ -147,6 +147,7 @@
     <ClCompile Include="app-helpers.c" />
     <ClCompile Include="base.c" />
     <ClCompile Include="bmem.c" />
+    <ClCompile Include="config-file.c" />
     <ClCompile Include="dstr.c" />
     <ClCompile Include="inject-library.c" />
     <ClCompile Include="lexer.c" />
@@ -164,6 +165,7 @@
     <ClInclude Include="base.h" />
     <ClInclude Include="bmem.h" />
     <ClInclude Include="c99defs.h" />
+    <ClInclude Include="config-file.h" />
     <ClInclude Include="darray.h" />
     <ClInclude Include="dstr.h" />
     <ClInclude Include="dstr.hpp" />

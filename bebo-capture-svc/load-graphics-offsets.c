@@ -1,15 +1,17 @@
-#include <obs-module.h>
-#include <util/windows/win-version.h>
-#include <util/platform.h>
-#include <util/dstr.h>
-#include <util/config-file.h>
-#include <util/pipe.h>
+#include "windows/win-version.h"
+#include "platform.h"
+#include "dstr.h"
+#include "config-file.h"
+#include "pipe.h"
 
 #include <windows.h>
 #include "graphics-hook-info.h"
 
+
 extern struct graphics_offsets offsets32;
 extern struct graphics_offsets offsets64;
+
+extern char *bebo_find_file(const char *file);
 
 static inline bool load_offsets_from_string(struct graphics_offsets *offsets,
 		const char *str)
@@ -42,6 +44,7 @@ static inline bool load_offsets_from_string(struct graphics_offsets *offsets,
 	config_close(config);
 	return true;
 }
+#if 0
 
 static inline bool load_offsets_from_file(struct graphics_offsets *offsets,
 		const char *file)
@@ -150,6 +153,7 @@ failed:
 	config_close(config);
 	return !ver_mismatch;
 }
+#endif
 
 bool load_graphics_offsets(bool is32bit)
 {
@@ -169,7 +173,7 @@ bool load_graphics_offsets(bool is32bit)
 
 	dstr_copy(&offset_exe, "get-graphics-offsets");
 	dstr_cat(&offset_exe, is32bit ? "32.exe" : "64.exe");
-	offset_exe_path = obs_module_file(offset_exe.array);
+	offset_exe_path = bebo_find_file(offset_exe.array);
 
 	pp = os_process_pipe_create(offset_exe_path, "r");
 	if (!pp) {
@@ -186,10 +190,10 @@ bool load_graphics_offsets(bool is32bit)
 		dstr_ncat(&str, data, len);
 	}
 
-	config_ini = obs_module_config_path(is32bit ? "32.ini" : "64.ini");
-	os_quick_write_utf8_file_safe(config_ini, str.array, str.len, false,
-			"tmp", NULL);
-	bfree(config_ini);
+//	config_ini = obs_module_config_path(is32bit ? "32.ini" : "64.ini");
+//	os_quick_write_utf8_file_safe(config_ini, str.array, str.len, false,
+//			"tmp", NULL);
+//	bfree(config_ini);
 
 	success = load_offsets_from_string(is32bit ? &offsets32 : &offsets64,
 			str.array);
@@ -206,6 +210,7 @@ error:
 	return success;
 }
 
+#if 0
 bool load_cached_graphics_offsets(bool is32bit)
 {
 	char *config_ini = NULL;
@@ -220,3 +225,5 @@ bool load_cached_graphics_offsets(bool is32bit)
 	bfree(config_ini);
 	return success;
 }
+
+#endif

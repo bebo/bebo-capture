@@ -20,6 +20,13 @@ extern "C" {
 #endif
 #endif
 
+#define DEBUG_OUTPUT 1
+#ifdef DEBUG_OUTPUT
+#define DbgOut(x) OutputDebugStringA(x)
+#else
+#define DbgOut(x)
+#endif
+
 #define NUM_BUFFERS 3
 
 extern void hlog(const char *format, ...);

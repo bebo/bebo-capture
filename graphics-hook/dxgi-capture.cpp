@@ -40,6 +40,7 @@ static bool setup_dxgi(IDXGISwapChain *swap)
 	    _strcmpi(process_name, "iw6mp64_ship.exe") == 0 ||
 	    _strcmpi(process_name, "justcause3.exe") == 0) {
 		ignore_d3d10 = true;
+		DbgOut("setup_dxgi - ignore_d3d10");
 	}
 
 	if (!ignore_d3d10) {
@@ -49,6 +50,7 @@ static bool setup_dxgi(IDXGISwapChain *swap)
 			data.capture = d3d10_capture;
 			data.free = d3d10_free;
 			device->Release();
+		    DbgOut("setup_dxgi - d3d10_capture");
 			return true;
 		}
 	}
@@ -59,6 +61,7 @@ static bool setup_dxgi(IDXGISwapChain *swap)
 		data.capture = d3d11_capture;
 		data.free = d3d11_free;
 		device->Release();
+		DbgOut("setup_dxgi - d3d11_capture");
 		return true;
 	}
 
@@ -73,6 +76,7 @@ static bool setup_dxgi(IDXGISwapChain *swap)
 	}
 #endif
 
+	DbgOut("setup_dxgi - returning false");
 	return false;
 }
 

@@ -60,6 +60,9 @@
     <ClCompile Include="window-helpers.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="config-file.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="dstr.h">
@@ -132,6 +135,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="window-helpers.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="config-file.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

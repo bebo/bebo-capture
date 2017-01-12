@@ -86,6 +86,8 @@ protected:
 	int m_iCaptureConfigWidth;
 	int m_iCaptureConfigHeight;
 
+	HANDLE init_hooks_thread;
+
     //CMediaType m_MediaType;
     //CImageDisplay m_Display;            // Figures out our media type for us
 	

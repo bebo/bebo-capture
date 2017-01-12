@@ -4,13 +4,6 @@
 #include "obfuscate.h"
 #include "funchook.h"
 
-#define DEBUG_OUTPUT
-
-#ifdef DEBUG_OUTPUT
-#define DbgOut(x) OutputDebugStringA(x)
-#else
-#define DbgOut(x)
-#endif
 
 struct thread_data {
 	CRITICAL_SECTION       mutexes[NUM_BUFFERS];
@@ -307,6 +300,7 @@ static inline bool dxgi_hookable(void)
 
 static inline bool attempt_hook(void)
 {
+	DbgOut("attempt_hook\n");
 	//static bool ddraw_hooked = false;
 	static bool d3d8_hooked  = false;
 	static bool d3d9_hooked  = false;
@@ -373,7 +367,9 @@ static inline bool attempt_hook(void)
 
 static inline void capture_loop(void)
 {
+	DbgOut("capture_loop - waiting for signal_init\n");
 	WaitForSingleObject(signal_init, INFINITE);
+	DbgOut("capture_loop - got signal_init\n");
 
 	while (!attempt_hook())
 		Sleep(40);
@@ -388,6 +384,7 @@ static inline void capture_loop(void)
 
 static DWORD WINAPI main_capture_thread(HANDLE thread_handle)
 {
+	DbgOut("main_capture_thread\n");
 	if (!init_hook(thread_handle)) {
 		DbgOut("Failed to init hook\n");
 		free_hook();
@@ -488,6 +485,7 @@ static inline void unlock_shmem_tex(int id)
 
 static inline bool init_shared_info(size_t size)
 {
+	DbgOut("init_shared_info\n");
 	wchar_t name[64];
 	_snwprintf(name, 64, L"%s%ld", SHMEM_TEXTURE, ++shmem_id_counter);
 
@@ -514,6 +512,7 @@ bool capture_init_shtex(struct shtex_data **data, HWND window,
 		uint32_t base_cx, uint32_t base_cy, uint32_t cx, uint32_t cy,
 		uint32_t format, bool flip, uintptr_t handle)
 {
+	DbgOut("capture_init_shtex\n");
 	if (!init_shared_info(sizeof(struct shtex_data))) {
 		hlog("capture_init_shtex: Failed to initialize memory");
 		return false;
@@ -545,6 +544,7 @@ bool capture_init_shtex(struct shtex_data **data, HWND window,
 
 static DWORD CALLBACK copy_thread(LPVOID unused)
 {
+	DbgOut("copy_thread\n");
 	uint32_t pitch = thread_data.pitch;
 	uint32_t cy = thread_data.cy;
 	HANDLE events[2] = {NULL, NULL};
@@ -644,6 +644,7 @@ void shmem_texture_data_unlock(int idx)
 
 static inline bool init_shmem_thread(uint32_t pitch, uint32_t cy)
 {
+	DbgOut("init_shmem_thread\n");
 	struct shmem_data *data = shmem_info;
 
 	thread_data.pitch = pitch;
@@ -779,7 +780,9 @@ void capture_free(void)
 
 BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 {
+	DbgOut("DLLMain\n");
 	if (reason == DLL_PROCESS_ATTACH) {
+
 		wchar_t name[MAX_PATH];
 
 		dll_inst = hinst;
@@ -836,9 +839,10 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 __declspec(dllexport) LRESULT CALLBACK dummy_debug_proc(int code,
 		WPARAM wparam, LPARAM lparam)
 {
+	DbgOut("dummy_debug_proc\n");
 	static bool hooking = true;
 	MSG *msg = (MSG*)lparam;
-
+	DebugBreak();
 	if (hooking && msg->message == (WM_USER + 432)) {
 		HMODULE user32 = GetModuleHandleW(L"USER32");
 		BOOL (WINAPI *unhook_windows_hook_ex)(HHOOK) = NULL;
