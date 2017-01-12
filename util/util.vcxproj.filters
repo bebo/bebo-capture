@@ -119,9 +119,6 @@
     <ClInclude Include="windows\win-version.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\graphics-hook\graphics-hook-info.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="graphics-hook-info.h">
       <Filter>Header Files</Filter>
     </ClInclude>

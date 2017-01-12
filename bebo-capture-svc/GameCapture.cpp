@@ -834,6 +834,21 @@ static inline bool init_events(struct game_capture *gc)
 	return true;
 }
 
+/* if there's already a hook in the process, then signal and start */
+static inline bool attempt_existing_hook(struct game_capture *gc)
+{
+	gc->hook_restart = open_event_gc(gc, EVENT_CAPTURE_RESTART);
+	if (gc->hook_restart) {
+		debug("existing hook found, signaling process: %s",
+				gc->config.executable);
+		SetEvent(gc->hook_restart);
+		return true;
+	}
+
+	return false;
+}
+
+
 static bool init_hook(struct game_capture *gc)
 {
 	struct dstr exe = {0};
@@ -864,19 +879,17 @@ static bool init_hook(struct game_capture *gc)
 	if (!open_target_process(gc)) {
 		return false;
 	}
-// TODO
-//	if (!init_keepalive(gc)) {
-//		return false;
-//	}
+	if (!init_keepalive(gc)) {
+		return false;
+	}
 	if (!init_pipe(gc)) {
 		return false;
 	}
-// FIXME
-//	if (!attempt_existing_hook(gc)) {
+	if (!attempt_existing_hook(gc)) {
 		if (!inject_hook(gc)) {
 			return false;
 		}
-//	}
+	}
 	if (!init_texture_mutexes(gc)) {
 		return false;
 	}

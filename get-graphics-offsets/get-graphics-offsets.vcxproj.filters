@@ -35,13 +35,7 @@
     <ClInclude Include="get-graphics-offsets.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\obs-studio\plugins\win-capture\graphics-hook-info.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\obs-studio\plugins\win-capture\hook-helpers.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="graphics-hook-info.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="hook-helpers.h">

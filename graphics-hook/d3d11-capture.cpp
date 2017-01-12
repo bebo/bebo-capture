@@ -59,6 +59,7 @@ static struct d3d11_data data = {};
 
 void d3d11_free(void)
 {
+	DbgOut("d3d11_free");
 	if (data.scale_tex)
 		data.scale_tex->Release();
 	if (data.scale_resource)
@@ -481,6 +482,7 @@ static bool d3d11_shmem_init_buffers(size_t idx)
 
 static bool d3d11_shmem_init(HWND window)
 {
+	DbgOut("d3d11_shmem_init");
 	data.using_shtex = false;
 
 	for (size_t i = 0; i < NUM_BUFFERS; i++) {
@@ -500,6 +502,7 @@ static bool d3d11_shmem_init(HWND window)
 
 static bool d3d11_shtex_init(HWND window)
 {
+	DbgOut("d3d11_shtex_init");
 	ID3D11ShaderResourceView *resource = nullptr;
 	bool success;
 
@@ -526,6 +529,7 @@ static bool d3d11_shtex_init(HWND window)
 
 static void d3d11_init(IDXGISwapChain *swap)
 {
+	DbgOut("d3d11_init");
 	bool success = true;
 	HWND window;
 	HRESULT hr;
@@ -816,6 +820,8 @@ static inline void d3d11_shmem_capture(ID3D11Resource *backbuffer)
 
 void d3d11_capture(void *swap_ptr, void *backbuffer_ptr, bool)
 {
+	DbgOut("d3d11_capture");
+
 	IDXGIResource *dxgi_backbuffer = (IDXGIResource*)backbuffer_ptr;
 	IDXGISwapChain *swap = (IDXGISwapChain*)swap_ptr;
 
@@ -827,6 +833,7 @@ void d3d11_capture(void *swap_ptr, void *backbuffer_ptr, bool)
 		d3d11_init(swap);
 	}
 	if (capture_ready()) {
+		DbgOut("capture_ready !");
 		ID3D11Resource *backbuffer;
 
 		hr = dxgi_backbuffer->QueryInterface(__uuidof(ID3D11Resource),

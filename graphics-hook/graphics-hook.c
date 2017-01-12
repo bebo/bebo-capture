@@ -85,6 +85,7 @@ static HANDLE init_mutex(const wchar_t *name, DWORD pid)
 
 static inline bool init_signals(void)
 {
+	DbgOut("init_signals");
 	DWORD pid = GetCurrentProcessId();
 
 	signal_restart = init_event(EVENT_CAPTURE_RESTART, pid);
@@ -227,6 +228,7 @@ static inline void init_dummy_window_thread(void)
 static inline bool init_hook(HANDLE thread_handle)
 {
 	wait_for_dll_main_finish(thread_handle);
+	DbgOut("init_hook - wait_for_dll_main_finish complete");
 
 	_snwprintf(keepalive_name, sizeof(keepalive_name), L"%s%lu",
 			WINDOW_HOOK_KEEPALIVE, GetCurrentProcessId());
@@ -236,6 +238,7 @@ static inline bool init_hook(HANDLE thread_handle)
 	init_dummy_window_thread();
 	log_current_process();
 
+	DbgOut("init_hook - signal_restart");
 	SetEvent(signal_restart);
 	return true;
 }
@@ -250,6 +253,8 @@ static inline void close_handle(HANDLE *handle)
 
 static void free_hook(void)
 {
+	DbgOut("free_hook");
+
 	if (filemap_hook_info) {
 		CloseHandle(filemap_hook_info);
 		filemap_hook_info = NULL;
@@ -690,6 +695,7 @@ bool capture_init_shmem(struct shmem_data **data, HWND window,
 		uint32_t base_cx, uint32_t base_cy, uint32_t cx, uint32_t cy,
 		uint32_t pitch, uint32_t format, bool flip)
 {
+	DbgOut("capture_init_shmem");
 	uint32_t  tex_size       = cy * pitch;
 	uint32_t  aligned_header = ALIGN(sizeof(struct shmem_data), 32);
 	uint32_t  aligned_tex    = ALIGN(tex_size, 32);
@@ -765,6 +771,7 @@ static inline void thread_data_free(void)
 
 void capture_free(void)
 {
+	DbgOut("capture_free");
 	thread_data_free();
 
 	if (shmem_info) {

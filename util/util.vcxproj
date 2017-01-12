@@ -160,7 +160,6 @@
     <ClCompile Include="window-helpers.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\graphics-hook\graphics-hook-info.h" />
     <ClInclude Include="app-helpers.h" />
     <ClInclude Include="base.h" />
     <ClInclude Include="bmem.h" />
