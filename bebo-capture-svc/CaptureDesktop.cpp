@@ -54,6 +54,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
     init_hooks_thread = CreateThread(NULL, 0, init_hooks, NULL, 0, NULL);
 
 	//TODO read registry to find path to our executables / dlls
+	//DebugBreak();
 
 	m_iHwndToTrack = (HWND) read_config_setting(TEXT("hwnd_to_track"), NULL, false);
 	if(m_iHwndToTrack) {
@@ -97,8 +98,10 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	}
 
 	int config_width = read_config_setting(TEXT("capture_width"), 0, false);
+	config_width = 1280; // FIXME
 	ASSERT_RAISE(config_width >= 0); // negatives not allowed...
 	int config_height = read_config_setting(TEXT("capture_height"), 0, false);
+	config_height = 720; // FIXME
 	ASSERT_RAISE(config_height >= 0); // negatives not allowed, if it's set :)
 
 	if(config_width > 0) {
@@ -164,6 +167,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 
 wchar_t out[1000];
 bool ever_started = false;
+void * game_context;
 
 #if 1
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
@@ -178,12 +182,91 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 		reReadCurrentStartXY(1);
 	}
 
-
-	if (!ever_started) {
-		//DbgBreak("!ever_started");
-		hook(_T("Overwatch"));
+	boolean gotFrame = false ;
+	while (!gotFrame || !game_context) {
+		if (!game_context) {
+			// TODO different games
+			game_context = hook(_T("Overwatch"));
+			if (!game_context) {
+				Sleep(100);
+			}
+			continue;
+		}
+		gotFrame = get_game_frame(&game_context, 0.0, pSample);
+		if (!game_context) {
+			LocalOutput("Capture Ended");
+		}
+		if (gotFrame) {
+			LocalOutput("Got Frame");
+		} else {
+			Sleep(1000/120);
+		}
 	}
+
+	// capture some debug stats (how long it took) before we add in our own arbitrary delay to enforce fps...
+	long double millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
+	fastestRoundMillis = min(millisThisRoundTook, fastestRoundMillis); // keep stats :)
+	sumMillisTook += millisThisRoundTook;
+
+	CRefTime now;
+	CRefTime endFrame;
+	now = 0;
+	CSourceStream::m_pFilter->StreamTime(now);
+	if((now > 0) && (now < previousFrameEndTime)) { // now > 0 to accomodate for if there is no reference graph clock at all...also at boot strap time to ignore it XXXX can negatives even ever happen anymore though?
+		while(now < previousFrameEndTime) { // guarantees monotonicity too :P
+		  LocalOutput("sleeping because %llu < %llu", now, previousFrameEndTime);
+		  Sleep(1);
+          CSourceStream::m_pFilter->StreamTime(now);
+		}
+		// avoid a tidge of creep since we sleep until [typically] just past the previous end.
+		endFrame = previousFrameEndTime + m_rtFrameLength;
+	    previousFrameEndTime = endFrame;
+	    
+	} else {
+		// if there's no reference clock, it will "always" think it missed a frame
+	  if(show_performance) {
+		  if(now == 0) 
+			  LocalOutput("probable none reference clock, streaming fastly");
+		  else
+	          LocalOutput("it missed a frame--can't keep up %d %llu %llu", countMissed++, now, previousFrameEndTime); // we don't miss time typically I don't think, unless de-dupe is turned on, or aero, or slow computer, buffering problems downstream, etc.
+	  }
+	  // have to add a bit here, or it will always be "it missed a frame" for the next round...forever!
+	  endFrame = now + m_rtFrameLength;
+	  // most of this stuff I just made up because it "sounded right"
+	  //LocalOutput("checking to see if I can catch up again now: %llu previous end: %llu subtr: %llu %i", now, previousFrameEndTime, previousFrameEndTime - m_rtFrameLength, previousFrameEndTime - m_rtFrameLength);
+	  if(now > (previousFrameEndTime - (long long) m_rtFrameLength)) { // do I even need a long long cast?
+		// let it pretend and try to catch up, it's not quite a frame behind
+        previousFrameEndTime = previousFrameEndTime + m_rtFrameLength;
+	  } else {
+		endFrame = now + m_rtFrameLength/2; // ?? seems to not hurt, at least...I guess
+		previousFrameEndTime = endFrame;
+	  }
+	}
+
+	// accomodate for 0 to avoid startup negatives, which would kill our math on the next loop...
+	previousFrameEndTime = max(0, previousFrameEndTime); 
+
+    pSample->SetTime((REFERENCE_TIME *) &now, (REFERENCE_TIME *) &endFrame);
+	//pSample->SetMediaTime((REFERENCE_TIME *)&now, (REFERENCE_TIME *) &endFrame); 
+    LocalOutput("timestamping video packet as %lld -> %lld", now, endFrame);
+
+    m_iFrameNumber++;
+
+	// Set TRUE on every sample for uncompressed frames http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
+    pSample->SetSyncPoint(TRUE);
+
+	// only set discontinuous for the first...I think...
+	pSample->SetDiscontinuity(m_iFrameNumber <= 1);
 		
+	#ifdef _DEBUG
+		// the swprintf costs like 0.04ms (25000 fps LOL)
+		double m_fFpsSinceBeginningOfTime = ((double) m_iFrameNumber)/(GetTickCount() - globalStart)*1000;
+		swprintf(out, L"done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed %d", 
+			m_iFrameNumber, m_iCaptureConfigHeight, m_iCaptureConfigWidth, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0*1000/millisThisRoundTook,   
+			/* average */ 1.0*1000*m_iFrameNumber/sumMillisTook, 1.0*1000/fastestRoundMillis, GetFps(), countMissed);
+		LocalOutput(out);
+		set_config_string_setting(L"frame_stats", out);
+	#endif
 	return S_OK;
 }
 
@@ -555,6 +638,7 @@ void CPushPinDesktop::doDIBits(HDC hScrDC, HBITMAP hRawBitmap, int nHeightScanLi
 HRESULT CPushPinDesktop::DecideBufferSize(IMemAllocator *pAlloc,
                                       ALLOCATOR_PROPERTIES *pProperties)
 {
+	//DebugBreak();
     CheckPointer(pAlloc,E_POINTER);
     CheckPointer(pProperties,E_POINTER);
 

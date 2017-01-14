@@ -1,6 +1,7 @@
 #include "GameCapture.h"
 // TODO - should not need path:
 
+#include <dshow.h>
 #include <strsafe.h>
 #include <tchar.h>
 #include <windows.h>
@@ -129,7 +130,7 @@ struct game_capture {
 		void *data;
 	};
 
-	void(*copy_texture)(struct game_capture*);
+	void(*copy_texture)(struct game_capture*, IMediaSample *pSample);
 };
 
 
@@ -218,6 +219,7 @@ static struct game_capture *game_capture_create()
 // 	game_capture_update(gc, settings);
 	return gc;
 }
+
 
 static void close_handle(HANDLE *p_handle)
 {
@@ -761,13 +763,13 @@ static inline bool init_hook_info(struct game_capture *gc)
 		return false;
 	}
 
-	gc->global_hook_info->offsets = gc->process_is_64bit ?
-		offsets64 : offsets32;
+	gc->global_hook_info->offsets = gc->process_is_64bit ?  offsets64 : offsets32;
 	gc->global_hook_info->capture_overlay = gc->config.capture_overlays;
-	gc->global_hook_info->force_shmem = gc->config.force_shmem;
+	//gc->global_hook_info->force_shmem = gc->config.force_shmem;
+	gc->global_hook_info->force_shmem = true;
 	gc->global_hook_info->use_scale = gc->config.force_scaling;
-	gc->global_hook_info->cx = gc->config.scale_cx;
-	gc->global_hook_info->cy = gc->config.scale_cy;
+	gc->global_hook_info->cx = 720; // FIXME gc->config.scale_cx;
+	gc->global_hook_info->cy = 1280; // FIXME gc->config.scale_cy;
 	reset_frame_interval(gc);
 
 #if 0 // FIXME
@@ -945,14 +947,421 @@ static void try_hook(struct game_capture *gc)
 	}
 }
 
-void hook(LPCTSTR windowName) 
+void * hook(LPCTSTR windowName) 
 {
 	HWND hwnd = FindWindow(NULL, windowName);
-
 	LocalOutput("%X", hwnd);
 	struct game_capture *gc = game_capture_create();
 	struct dstr * klass = &gc->klass;
 	get_window_class(klass, hwnd);
-	DebugBreak();
 	try_hook(gc);
+	if (gc->active) {
+		return gc;
+	}
+	return NULL;
+}
+
+enum capture_result {
+	CAPTURE_FAIL,
+	CAPTURE_RETRY,
+	CAPTURE_SUCCESS
+};
+
+static inline enum capture_result init_capture_data(struct game_capture *gc)
+{
+	info("init_capture_data");
+	gc->cx = gc->global_hook_info->cx;
+	gc->cy = gc->global_hook_info->cy;
+	gc->pitch = gc->global_hook_info->pitch;
+
+	if (gc->data) {
+		UnmapViewOfFile(gc->data);
+		gc->data = NULL;
+	}
+
+	CloseHandle(gc->hook_data_map);
+
+	gc->hook_data_map = open_map_plus_id(gc, SHMEM_TEXTURE,
+			gc->global_hook_info->map_id);
+	if (!gc->hook_data_map) {
+		DWORD error = GetLastError();
+		if (error == 2) {
+			return CAPTURE_RETRY;
+		} else {
+			warn("init_capture_data: failed to open file "
+			     "mapping: %lu", error);
+		}
+		return CAPTURE_FAIL;
+	}
+
+	gc->data = MapViewOfFile(gc->hook_data_map, FILE_MAP_ALL_ACCESS, 0, 0,
+			gc->global_hook_info->map_size);
+	if (!gc->data) {
+		warn("init_capture_data: failed to map data view: %lu",
+				GetLastError());
+		return CAPTURE_FAIL;
+	}
+
+	return CAPTURE_SUCCESS;
+}
+
+static inline bool is_16bit_format(uint32_t format)
+{
+	return format == DXGI_FORMAT_B5G5R5A1_UNORM ||
+	       format == DXGI_FORMAT_B5G6R5_UNORM;
+}
+
+static void copy_b5g6r5_tex(struct game_capture *gc, int cur_texture,
+		uint8_t *data, uint32_t pitch)
+{
+	uint8_t *input = gc->texture_buffers[cur_texture];
+	uint32_t gc_cx = gc->cx;
+	uint32_t gc_cy = gc->cy;
+	uint32_t gc_pitch = gc->pitch;
+
+	for (uint32_t y = 0; y < gc_cy; y++) {
+		uint8_t *row = input + (gc_pitch * y);
+		uint8_t *out = data + (pitch * y);
+
+		for (uint32_t x = 0; x < gc_cx; x += 8) {
+			__m128i pixels_blue, pixels_green, pixels_red;
+			__m128i pixels_result;
+			__m128i *pixels_dest;
+
+			__m128i *pixels_src = (__m128i*)(row + x * sizeof(uint16_t));
+			__m128i pixels = _mm_load_si128(pixels_src);
+
+			__m128i zero = _mm_setzero_si128();
+			__m128i pixels_low = _mm_unpacklo_epi16(pixels, zero);
+			__m128i pixels_high = _mm_unpackhi_epi16(pixels, zero);
+
+			__m128i blue_channel_mask = _mm_set1_epi32(0x0000001F);
+			__m128i blue_offset = _mm_set1_epi32(0x00000003);
+			__m128i green_channel_mask = _mm_set1_epi32(0x000007E0);
+			__m128i green_offset = _mm_set1_epi32(0x00000008);
+			__m128i red_channel_mask = _mm_set1_epi32(0x0000F800);
+			__m128i red_offset = _mm_set1_epi32(0x00000300);
+
+			pixels_blue = _mm_and_si128(pixels_low, blue_channel_mask);
+			pixels_blue = _mm_slli_epi32(pixels_blue, 3);
+			pixels_blue = _mm_add_epi32(pixels_blue, blue_offset);
+
+			pixels_green = _mm_and_si128(pixels_low, green_channel_mask);
+			pixels_green = _mm_add_epi32(pixels_green, green_offset);
+			pixels_green = _mm_slli_epi32(pixels_green, 5);
+
+			pixels_red = _mm_and_si128(pixels_low, red_channel_mask);
+			pixels_red = _mm_add_epi32(pixels_red, red_offset);
+			pixels_red = _mm_slli_epi32(pixels_red, 8);
+
+			pixels_result = _mm_set1_epi32(0xFF000000);
+			pixels_result = _mm_or_si128(pixels_result, pixels_blue);
+			pixels_result = _mm_or_si128(pixels_result, pixels_green);
+			pixels_result = _mm_or_si128(pixels_result, pixels_red);
+
+			pixels_dest = (__m128i*)(out + x * sizeof(uint32_t));
+			_mm_store_si128(pixels_dest, pixels_result);
+
+			pixels_blue = _mm_and_si128(pixels_high, blue_channel_mask);
+			pixels_blue = _mm_slli_epi32(pixels_blue, 3);
+			pixels_blue = _mm_add_epi32(pixels_blue, blue_offset);
+
+			pixels_green = _mm_and_si128(pixels_high, green_channel_mask);
+			pixels_green = _mm_add_epi32(pixels_green, green_offset);
+			pixels_green = _mm_slli_epi32(pixels_green, 5);
+
+			pixels_red = _mm_and_si128(pixels_high, red_channel_mask);
+			pixels_red = _mm_add_epi32(pixels_red, red_offset);
+			pixels_red = _mm_slli_epi32(pixels_red, 8);
+
+			pixels_result = _mm_set1_epi32(0xFF000000);
+			pixels_result = _mm_or_si128(pixels_result, pixels_blue);
+			pixels_result = _mm_or_si128(pixels_result, pixels_green);
+			pixels_result = _mm_or_si128(pixels_result, pixels_red);
+
+			pixels_dest = (__m128i*)(out + (x + 4) * sizeof(uint32_t));
+			_mm_store_si128(pixels_dest, pixels_result);
+		}
+	}
+}
+
+static void copy_b5g5r5a1_tex(struct game_capture *gc, int cur_texture,
+		uint8_t *data, uint32_t pitch)
+{
+	uint8_t *input = gc->texture_buffers[cur_texture];
+	uint32_t gc_cx = gc->cx;
+	uint32_t gc_cy = gc->cy;
+	uint32_t gc_pitch = gc->pitch;
+
+	for (uint32_t y = 0; y < gc_cy; y++) {
+		uint8_t *row = input + (gc_pitch * y);
+		uint8_t *out = data + (pitch * y);
+
+		for (uint32_t x = 0; x < gc_cx; x += 8) {
+			__m128i pixels_blue, pixels_green, pixels_red, pixels_alpha;
+			__m128i pixels_result;
+			__m128i *pixels_dest;
+
+			__m128i *pixels_src = (__m128i*)(row + x * sizeof(uint16_t));
+			__m128i pixels = _mm_load_si128(pixels_src);
+
+			__m128i zero = _mm_setzero_si128();
+			__m128i pixels_low = _mm_unpacklo_epi16(pixels, zero);
+			__m128i pixels_high = _mm_unpackhi_epi16(pixels, zero);
+
+			__m128i blue_channel_mask = _mm_set1_epi32(0x0000001F);
+			__m128i blue_offset = _mm_set1_epi32(0x00000003);
+			__m128i green_channel_mask = _mm_set1_epi32(0x000003E0);
+			__m128i green_offset = _mm_set1_epi32(0x000000C);
+			__m128i red_channel_mask = _mm_set1_epi32(0x00007C00);
+			__m128i red_offset = _mm_set1_epi32(0x00000180);
+			__m128i alpha_channel_mask = _mm_set1_epi32(0x00008000);
+			__m128i alpha_offset = _mm_set1_epi32(0x00000001);
+			__m128i alpha_mask32 = _mm_set1_epi32(0xFF000000);
+
+			pixels_blue = _mm_and_si128(pixels_low, blue_channel_mask);
+			pixels_blue = _mm_slli_epi32(pixels_blue, 3);
+			pixels_blue = _mm_add_epi32(pixels_blue, blue_offset);
+
+			pixels_green = _mm_and_si128(pixels_low, green_channel_mask);
+			pixels_green = _mm_add_epi32(pixels_green, green_offset);
+			pixels_green = _mm_slli_epi32(pixels_green, 6);
+
+			pixels_red = _mm_and_si128(pixels_low, red_channel_mask);
+			pixels_red = _mm_add_epi32(pixels_red, red_offset);
+			pixels_red = _mm_slli_epi32(pixels_red, 9);
+
+			pixels_alpha = _mm_and_si128(pixels_low, alpha_channel_mask);
+			pixels_alpha = _mm_srli_epi32(pixels_alpha, 15);
+			pixels_alpha = _mm_sub_epi32(pixels_alpha, alpha_offset);
+			pixels_alpha = _mm_andnot_si128(pixels_alpha, alpha_mask32);
+
+			pixels_result = pixels_red;
+			pixels_result = _mm_or_si128(pixels_result, pixels_alpha);
+			pixels_result = _mm_or_si128(pixels_result, pixels_blue);
+			pixels_result = _mm_or_si128(pixels_result, pixels_green);
+
+			pixels_dest = (__m128i*)(out + x * sizeof(uint32_t));
+			_mm_store_si128(pixels_dest, pixels_result);
+
+			pixels_blue = _mm_and_si128(pixels_high, blue_channel_mask);
+			pixels_blue = _mm_slli_epi32(pixels_blue, 3);
+			pixels_blue = _mm_add_epi32(pixels_blue, blue_offset);
+
+			pixels_green = _mm_and_si128(pixels_high, green_channel_mask);
+			pixels_green = _mm_add_epi32(pixels_green, green_offset);
+			pixels_green = _mm_slli_epi32(pixels_green, 6);
+
+			pixels_red = _mm_and_si128(pixels_high, red_channel_mask);
+			pixels_red = _mm_add_epi32(pixels_red, red_offset);
+			pixels_red = _mm_slli_epi32(pixels_red, 9);
+
+			pixels_alpha = _mm_and_si128(pixels_high, alpha_channel_mask);
+			pixels_alpha = _mm_srli_epi32(pixels_alpha, 15);
+			pixels_alpha = _mm_sub_epi32(pixels_alpha, alpha_offset);
+			pixels_alpha = _mm_andnot_si128(pixels_alpha, alpha_mask32);
+
+			pixels_result = pixels_red;
+			pixels_result = _mm_or_si128(pixels_result, pixels_alpha);
+			pixels_result = _mm_or_si128(pixels_result, pixels_blue);
+			pixels_result = _mm_or_si128(pixels_result, pixels_green);
+
+			pixels_dest = (__m128i*)(out + (x + 4) * sizeof(uint32_t));
+			_mm_store_si128(pixels_dest, pixels_result);
+		}
+	}
+}
+
+static inline void copy_16bit_tex(struct game_capture *gc, int cur_texture,
+		uint8_t *data, uint32_t pitch)
+{
+	if (gc->global_hook_info->format == DXGI_FORMAT_B5G5R5A1_UNORM) {
+		copy_b5g5r5a1_tex(gc, cur_texture, data, pitch);
+
+	} else if (gc->global_hook_info->format == DXGI_FORMAT_B5G6R5_UNORM) {
+		copy_b5g6r5_tex(gc, cur_texture, data, pitch);
+	}
+}
+
+static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
+{
+	int cur_texture = gc->shmem_data->last_tex;
+	HANDLE mutex = NULL;
+	uint32_t pitch;
+	int next_texture;
+	uint8_t *data;
+
+	if (cur_texture < 0 || cur_texture > 1)
+		return;
+
+	next_texture = cur_texture == 1 ? 0 : 1;
+
+	if (object_signalled(gc->texture_mutexes[cur_texture])) {
+		mutex = gc->texture_mutexes[cur_texture];
+
+	} else if (object_signalled(gc->texture_mutexes[next_texture])) {
+		mutex = gc->texture_mutexes[next_texture];
+		cur_texture = next_texture;
+
+	} else {
+		return;
+	}
+
+	BYTE *pData;
+    pSample->GetPointer(&pData);
+
+	pitch = gc->pitch;
+
+	if (gc->convert_16bit) {
+		copy_16bit_tex(gc, cur_texture, pData, pitch);
+
+	} else if (pitch == gc->pitch) {
+		memcpy(pData, gc->texture_buffers[cur_texture],
+				pitch * gc->cy);
+	} else {
+		uint8_t *input = gc->texture_buffers[cur_texture];
+		uint32_t best_pitch =
+			pitch < gc->pitch ? pitch : gc->pitch;
+
+		for (uint32_t y = 0; y < gc->cy; y++) {
+			uint8_t *line_in = input + gc->pitch * y;
+			uint8_t *line_out = pData + pitch * y;
+			memcpy(line_out, line_in, best_pitch);
+		}
+	}
+	// TODO better time
+
+
+#if 0 // FIXME
+	if (gs_texture_map(gc->texture, &data, &pitch)) {
+
+		gs_texture_unmap(gc->texture);
+	}
+#endif
+
+	ReleaseMutex(mutex);
+}
+
+static inline bool init_shmem_capture(struct game_capture *gc)
+{
+//	enum gs_color_format format;
+//
+	gc->texture_buffers[0] = (uint8_t*)gc->data + gc->shmem_data->tex1_offset;
+	gc->texture_buffers[1] = (uint8_t*)gc->data + gc->shmem_data->tex2_offset;
+//
+	gc->convert_16bit = is_16bit_format(gc->global_hook_info->format);
+//	format = gc->convert_16bit ?  GS_BGRA : convert_format(gc->global_hook_info->format);
+//
+//	obs_enter_graphics();
+//	gs_texture_destroy(gc->texture);
+//	gc->texture = gs_texture_create(gc->cx, gc->cy, format, 1, NULL, GS_DYNAMIC);
+//	obs_leave_graphics();
+//
+//	if (!gc->texture) {
+//		warn("init_shmem_capture: failed to create texture");
+//		return false;
+//	}
+//
+	gc->copy_texture = copy_shmem_tex;
+	return true;
+}
+
+static inline bool init_shtex_capture(struct game_capture *gc)
+{
+//	obs_enter_graphics();
+//	gs_texture_destroy(gc->texture);
+//	gc->texture = gs_texture_open_shared(gc->shtex_data->tex_handle);
+//	obs_leave_graphics();
+//
+//	if (!gc->texture) {
+//		warn("init_shtex_capture: failed to open shared handle");
+//		return false;
+//	}
+
+	return true;
+}
+static bool start_capture(struct game_capture *gc)
+{
+	debug("Starting capture");
+
+	if (gc->global_hook_info->type == CAPTURE_TYPE_MEMORY) {
+		if (!init_shmem_capture(gc)) {
+			return false;
+		}
+
+		info("memory capture successful");
+	} else {
+		if (!init_shtex_capture(gc)) {
+			return false;
+		}
+
+		info("shared texture capture successful");
+	}
+
+	return true;
+}
+
+boolean get_game_frame(void **data, float seconds, IMediaSample *pSample) {
+	struct game_capture *gc = (game_capture *) *data;
+	if (!gc->active) {
+		*data = NULL;
+		return false;
+	}
+//	DebugBreak();
+
+	// TODO there are more interesting cases handled in the obs game_capture_tick - need to re-asses those
+
+	if (gc->active && !gc->hook_ready && gc->process_id) {
+		debug("re-subscribing to hook_ready");
+		gc->hook_ready = open_event_gc(gc, EVENT_HOOK_READY);
+	}
+
+	if (gc->hook_ready && object_signalled(gc->hook_ready)) {
+		debug("capture initializing!");
+		enum capture_result result = init_capture_data(gc);
+
+		if (result == CAPTURE_SUCCESS)
+			gc->capturing = start_capture(gc);
+		else
+			debug("init_capture_data failed");
+
+//		if (result != CAPTURE_RETRY && !gc->capturing) {
+//			gc->retry_interval = ERROR_RETRY_INTERVAL;
+//			stop_capture(gc);
+//		}
+	}
+
+	gc->retry_time += seconds;
+
+	if (gc->active) {
+//		if (!capture_valid(gc)) {
+//			info("capture window no longer exists, "
+//			     "terminating capture");
+//			stop_capture(gc);
+//		} else {
+//		debug("Ready To Capture");
+		if (gc->copy_texture) {
+//				obs_enter_graphics();
+			gc->copy_texture(gc, pSample);
+			return true;
+//				obs_leave_graphics();
+		}
+//
+//			if (gc->config.cursor) {
+//				obs_enter_graphics();
+//				cursor_capture(&gc->cursor_data);
+//				obs_leave_graphics();
+//			}
+//
+//			gc->fps_reset_time += seconds;
+//			if (gc->fps_reset_time >= gc->retry_interval) {
+//				reset_frame_interval(gc);
+//				gc->fps_reset_time = 0.0f;
+//			}
+//		}
+	}
+
+//	if (!gc->showing)
+//		gc->showing = true;
+	return false;
 }

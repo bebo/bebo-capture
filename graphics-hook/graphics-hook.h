@@ -156,9 +156,6 @@ static inline bool capture_alive(void)
 
 static inline bool capture_active(void)
 {
-	char s[1024];
-	sprintf(s, "capture_active %d", active);
-	DbgOut(s);
 	return active;
 }
 
@@ -224,12 +221,6 @@ extern bool init_pipe(void);
 static inline bool capture_should_init(void)
 {
 	bool restarted = capture_restarted();
-	char s[1024];
-	sprintf(s, "capture_should_init active: %d, restarted: %d, alive:%d",
-		capture_active(),
-		restarted,
-		capture_alive());
-	DbgOut(s);
 	if (!capture_active() && restarted) {
 		if (capture_alive()) {
 			if (!ipc_pipe_client_valid(&pipe)) {

@@ -747,6 +747,7 @@ static inline void d3d11_scale_texture(ID3D11RenderTargetView *target,
 static inline void d3d11_copy_texture(ID3D11Resource *dst, ID3D11Resource *src)
 {
 	if (data.multisampled) {
+		DbgOut("data.multisampled");
 		data.context->ResolveSubresource(dst, 0, src, 0, data.format);
 	} else {
 		data.context->CopyResource(dst, src);
@@ -820,8 +821,6 @@ static inline void d3d11_shmem_capture(ID3D11Resource *backbuffer)
 
 void d3d11_capture(void *swap_ptr, void *backbuffer_ptr, bool)
 {
-	DbgOut("d3d11_capture");
-
 	IDXGIResource *dxgi_backbuffer = (IDXGIResource*)backbuffer_ptr;
 	IDXGISwapChain *swap = (IDXGISwapChain*)swap_ptr;
 
@@ -833,7 +832,6 @@ void d3d11_capture(void *swap_ptr, void *backbuffer_ptr, bool)
 		d3d11_init(swap);
 	}
 	if (capture_ready()) {
-		DbgOut("capture_ready !");
 		ID3D11Resource *backbuffer;
 
 		hr = dxgi_backbuffer->QueryInterface(__uuidof(ID3D11Resource),

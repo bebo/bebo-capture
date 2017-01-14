@@ -18,6 +18,7 @@
 //
 HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 {
+	//DebugBreak();
 	CAutoLock cAutoLock(m_pFilter->pStateLock());
 
     CheckPointer(pMediaType,E_POINTER);
@@ -41,6 +42,13 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
     VIDEOINFO *pvi = (VIDEOINFO *) pMediaType->Format();
     if(pvi == NULL)
         return E_INVALIDARG; // usually never this...
+
+
+	// graphedit comes in with a really large one and then we set it (no good)
+	if (pvi->bmiHeader.biHeight > m_iCaptureConfigHeight || pvi->bmiHeader.biWidth > m_iCaptureConfigWidth) {
+        return E_INVALIDARG;
+	}
+
 
     if(    (SubType2 != MEDIASUBTYPE_RGB8) // these are all the same value? But maybe the pointers are different. Hmm.
         && (SubType2 != MEDIASUBTYPE_RGB565)
@@ -100,6 +108,7 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 // except WFMLE sends us a junk type, so we check it anyway LODO do we? Or is it the other method Set Format that they call in vain? Or it first?
 HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 {
+	//DebugBreak();
     CAutoLock cAutoLock(m_pFilter->pStateLock());
 
     // Pass the call up to my base class
@@ -158,6 +167,7 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 // sets fps, size, (etc.) maybe, or maybe just saves it away for later use...
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::SetFormat(AM_MEDIA_TYPE *pmt)
 {
+	//DebugBreak();
     CAutoLock cAutoLock(m_pFilter->pStateLock());
 
 	// I *think* it can go back and forth, then.  You can call GetStreamCaps to enumerate, then call
@@ -228,6 +238,7 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::SetFormat(AM_MEDIA_TYPE *pmt)
 // LODO the default, which probably we don't do yet...unless they've already called GetStreamCaps then it'll be the last index they used LOL.
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetFormat(AM_MEDIA_TYPE **ppmt)
 {
+	//DebugBreak();
     CAutoLock cAutoLock(m_pFilter->pStateLock());
 
     *ppmt = CreateMediaType(&m_mt); // windows internal method, also does copy
@@ -237,6 +248,7 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetFormat(AM_MEDIA_TYPE **ppmt)
 
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetNumberOfCapabilities(int *piCount, int *piSize)
 {
+	//DebugBreak();
     *piCount = 7;
     *piSize = sizeof(VIDEO_STREAM_CONFIG_CAPS); // VIDEO_STREAM_CONFIG_CAPS is an MS struct
     return S_OK;
@@ -245,6 +257,7 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetNumberOfCapabilities(int *piCount,
 // returns the "range" of fps, etc. for this index
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TYPE **pmt, BYTE *pSCC)
 {
+	//DebugBreak();
     CAutoLock cAutoLock(m_pFilter->pStateLock());
 	HRESULT hr = GetMediaType(iIndex, &m_mt); // ensure setup/re-use m_mt ...
 	// some are indeed shared, apparently.
@@ -304,6 +317,7 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TY
 // QuerySupported: Query whether the pin supports the specified property.
 HRESULT CPushPinDesktop::QuerySupported(REFGUID guidPropSet, DWORD dwPropID, DWORD *pTypeSupport)
 {
+	//DebugBreak();
     if (guidPropSet != AMPROPSETID_Pin) return E_PROP_SET_UNSUPPORTED;
     if (dwPropID != AMPROPERTY_PIN_CATEGORY) return E_PROP_ID_UNSUPPORTED;
     // We support getting this property, but not setting it.
@@ -328,6 +342,7 @@ STDMETHODIMP CGameCapture::Stop(){
 // according to msdn...
 HRESULT CGameCapture::GetState(DWORD dw, FILTER_STATE *pState)
 {
+	//DebugBreak();
     CheckPointer(pState, E_POINTER);
     *pState = m_State;
     if (m_State == State_Paused)
@@ -375,6 +390,7 @@ HRESULT CPushPinDesktop::Get(
     DWORD *pcbReturned     // Return the size of the property.
 )
 {
+	//DebugBreak();
     if (guidPropSet != AMPROPSETID_Pin)             return E_PROP_SET_UNSUPPORTED;
     if (dwPropID != AMPROPERTY_PIN_CATEGORY)        return E_PROP_ID_UNSUPPORTED;
     if (pPropData == NULL && pcbReturned == NULL)   return E_POINTER;
@@ -406,6 +422,7 @@ enum FourCC { FOURCC_NONE = 0, FOURCC_I420 = 100, FOURCC_YUY2 = 101, FOURCC_RGB3
 //
 HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDIA_TYPE basically == CMediaType
 {
+	//DebugBreak();
     CheckPointer(pmt, E_POINTER);
     CAutoLock cAutoLock(m_pFilter->pStateLock());
 	if(m_bFormatAlreadySet) {
@@ -543,4 +560,3 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
     return NOERROR;
 
 } // GetMediaType
-
