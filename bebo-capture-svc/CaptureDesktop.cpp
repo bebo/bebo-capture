@@ -41,7 +41,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 		m_bDeDupe(0),
         m_iFrameNumber(0),
 		pOldData(NULL),
-		m_bConvertToI420(false),
+		m_bConvertToI420(true),
 		m_pParent(pFilter),
 		m_bFormatAlreadySet(false),
 		hRawBitmap(NULL),

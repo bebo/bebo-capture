@@ -18,6 +18,7 @@
 #include "DibHelper.h"
 #include "window-helpers.h"
 #include "ipc-util/pipe.h"
+#include "libyuv/convert.h"
 
 #define do_log(level, format, ...) \
 	LocalOutput("[game-capture: '%s'] " format, "test", ##__VA_ARGS__)
@@ -1213,11 +1214,65 @@ static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 	pitch = gc->pitch;
 
 	if (gc->convert_16bit) {
+		/// FIXME LOG ERROR
+		warn("copy_shmem_text 16 bit - not handled");
 		copy_16bit_tex(gc, cur_texture, pData, pitch);
 
 	} else if (pitch == gc->pitch) {
-		memcpy(pData, gc->texture_buffers[cur_texture],
-				pitch * gc->cy);
+		// Convert camera sample to I420 with cropping, rotation and vertical flip.
+		// "src_size" is needed to parse MJPG.
+		// "dst_stride_y" number of bytes in a row of the dst_y plane.
+		//   Normally this would be the same as dst_width, with recommended alignment
+		//   to 16 bytes for better efficiency.
+		//   If rotation of 90 or 270 is used, stride is affected. The caller should
+		//   allocate the I420 buffer according to rotation.
+		// "dst_stride_u" number of bytes in a row of the dst_u plane.
+		//   Normally this would be the same as (dst_width + 1) / 2, with
+		//   recommended alignment to 16 bytes for better efficiency.
+		//   If rotation of 90 or 270 is used, stride is affected.
+		// "crop_x" and "crop_y" are starting position for cropping.
+		//   To center, crop_x = (src_width - dst_width) / 2
+		//              crop_y = (src_height - dst_height) / 2
+		// "src_width" / "src_height" is size of src_frame in pixels.
+		//   "src_height" can be negative indicating a vertically flipped image source.
+		// "crop_width" / "crop_height" is the size to crop the src to.
+		//    Must be less than or equal to src_width/src_height
+		//    Cropping parameters are pre-rotation.
+		// "rotation" can be 0, 90, 180 or 270.
+		// "format" is a fourcc. ie 'I420', 'YUY2'
+		// Returns 0 for successful; -1 for invalid parameter. Non-zero for failure.
+
+
+		// FIXME make sure 16 byte alignment!
+
+		const uint8* src_frame = gc->texture_buffers[cur_texture];
+		int src_stride_frame = pitch;
+
+		int width = gc->cx;
+		int height = gc->cy;
+		uint8* dst_y = pData;
+		int dst_stride_y = width;
+		uint8* dst_u = pData + (width * height);
+		int dst_stride_u = (width + 1) / 2;
+		//uint8* dst_v = pData + ((width * height) >> 2);
+		uint8* dst_v = dst_u + ((width * height) >> 2);
+		int dst_stride_v = dst_stride_u;
+
+		//int err = libyuv::RGBAToI420(src_frame,
+		int err = libyuv::ABGRToI420(src_frame,
+					   src_stride_frame,
+					   dst_y,
+					   dst_stride_y,
+					   dst_u,
+					   dst_stride_u,
+					   dst_v,
+					   dst_stride_v,
+					   width,
+					   height);
+		if (err) {
+			warn("yuv conversion failed");
+		}
+
 	} else {
 		uint8_t *input = gc->texture_buffers[cur_texture];
 		uint32_t best_pitch =
@@ -1250,6 +1305,7 @@ static inline bool init_shmem_capture(struct game_capture *gc)
 	gc->texture_buffers[1] = (uint8_t*)gc->data + gc->shmem_data->tex2_offset;
 //
 	gc->convert_16bit = is_16bit_format(gc->global_hook_info->format);
+//	DebugBreak();
 //	format = gc->convert_16bit ?  GS_BGRA : convert_format(gc->global_hook_info->format);
 //
 //	obs_enter_graphics();

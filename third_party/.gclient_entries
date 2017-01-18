@@ -1,0 +1,4 @@
+entries = {
+  'libyuv': 'https://chromium.googlesource.com/libyuv/libyuv',
+  'libyuv/third_party/gflags/src': 'https://chromium.googlesource.com/external/github.com/gflags/gflags@03bebcb065c83beff83d50ae025a55a4bf94dfca',
+}

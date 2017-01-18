@@ -155,7 +155,6 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 	  // also setup scaling here, as WFMLE and ffplay and VLC all get here...
 	  m_rScreen.right = m_rScreen.left + pvi->bmiHeader.biWidth; // allow them to set whatever "scaling size" they want [set m_rScreen is negotiated right here]
 	  m_rScreen.bottom = m_rScreen.top + pvi->bmiHeader.biHeight;
-
     }
 	
     return hr;
@@ -450,6 +449,10 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
     if(iPosition > 6)
         return VFW_S_NO_MORE_ITEMS;
 
+    // force I420 for now
+    if(iPosition > 1)
+        return VFW_S_NO_MORE_ITEMS;
+
     VIDEOINFO *pvi = (VIDEOINFO *) pmt->AllocFormatBuffer(sizeof(VIDEOINFO));
     if(NULL == pvi)
         return(E_OUTOFMEMORY);
@@ -470,6 +473,16 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
     {
         case 1:
         {    
+			// the i420 freak-o added just for FME's benefit...
+            //pvi->bmiHeader.biCompression = 0x30323449; // => ASCII "I420" is apparently right here...
+			pvi->bmiHeader.biCompression = MAKEFOURCC('I', '4', '2', '0');
+            pvi->bmiHeader.biBitCount    = 12;
+			pvi->bmiHeader.biSizeImage = (getCaptureDesiredFinalWidth()*getCaptureDesiredFinalHeight()*3)/2; 
+			pmt->SetSubtype(&WMMEDIASUBTYPE_I420);
+			break;
+        }
+        case 2:
+        {    
             // 32bit format
 
             // Since we use RGB888 (the default for 32 bit), there is
@@ -481,14 +494,14 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
             break;
         }
 
-        case 2:
+        case 3:
         {   // Return our 24bit format, same as above comments
             pvi->bmiHeader.biCompression = BI_RGB;
             pvi->bmiHeader.biBitCount    = 24;
             break;
         }
 
-        case 3:
+        case 4:
         {       
             // 16 bit per pixel RGB565 BI_BITFIELDS
 
@@ -502,7 +515,7 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
             break;
         }
 
-        case 4:
+        case 5:
         {   // 16 bits per pixel RGB555
 
             // Place the RGB masks as the first 3 doublewords in the palette area
@@ -515,7 +528,7 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
             break;
         }
 
-        case 5:
+        case 6:
         {   // 8 bit palettised
 
             pvi->bmiHeader.biCompression = BI_RGB;
@@ -523,14 +536,6 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
             pvi->bmiHeader.biClrUsed     = iPALETTE_COLORS;
             break;
         }
-		case 6:
-		{ // the i420 freak-o added just for FME's benefit...
-               pvi->bmiHeader.biCompression = 0x30323449; // => ASCII "I420" is apparently right here...
-               pvi->bmiHeader.biBitCount    = 12;
-			   pvi->bmiHeader.biSizeImage = (getCaptureDesiredFinalWidth()*getCaptureDesiredFinalHeight()*3)/2; 
-			   pmt->SetSubtype(&WMMEDIASUBTYPE_I420);
-			   break;
-		}
     }
 
     // Now adjust some parameters that are the same for all formats
@@ -556,6 +561,8 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
       const GUID SubTypeGUID = GetBitmapSubtype(&pvi->bmiHeader);
       pmt->SetSubtype(&SubTypeGUID);
 	}
+
+	LocalOutput("getMedia"); // FIXME - add meaningful output
 
     return NOERROR;
 
