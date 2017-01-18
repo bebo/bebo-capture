@@ -6,6 +6,12 @@
 
 #include <wmsdkidl.h>
 
+#define do_log(level, format, ...) \
+	LocalOutput("[game-capture: '%s'] " format, "test", ##__VA_ARGS__)
+#define warn(format, ...)  do_log(LOG_WARNING, format, ##__VA_ARGS__)
+#define info(format, ...)  do_log(LOG_INFO,    format, ##__VA_ARGS__)
+#define debug(format, ...) do_log(LOG_DEBUG,   format, ##__VA_ARGS__)
+
 //
 // CheckMediaType
 // I think VLC calls this once per each enumerated media type that it likes (3 times)
@@ -20,21 +26,25 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 {
 	//DebugBreak();
 	CAutoLock cAutoLock(m_pFilter->pStateLock());
+	info("CheckMediaType");
 
-    CheckPointer(pMediaType,E_POINTER);
+	CheckPointer(pMediaType, E_POINTER);
 
 	const GUID Type = *(pMediaType->Type());
-    if(Type != GUID_NULL && (Type != MEDIATYPE_Video) ||   // we only output video, GUID_NULL means any
-        !(pMediaType->IsFixedSize()))                  // in fixed size samples
-    {                                                  
-        return E_INVALIDARG;
-    }
+	if (Type != GUID_NULL && (Type != MEDIATYPE_Video) ||   // we only output video, GUID_NULL means any
+		!(pMediaType->IsFixedSize()))                  // in fixed size samples
+	{
+		warn("CheckMediaType - E_INVALID_ARG - we only output video, GUID_NULL means any - in fixed size samples");
+		return E_INVALIDARG;
+	}
 
 	// const GUID Type = *pMediaType->Type(); // always just MEDIATYPE_Video
 
-    // Check for the subtypes we support
-    if (pMediaType->Subtype() == NULL)
-        return E_INVALIDARG;
+	// Check for the subtypes we support
+	if (pMediaType->Subtype() == NULL) {
+		warn("CheckMediaType - E_INVALIDARG -  Subtype == NULL");
+		return E_INVALIDARG;
+	}
 
 	const GUID SubType2 = *pMediaType->Subtype();
 	
@@ -110,10 +120,13 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 {
 	//DebugBreak();
     CAutoLock cAutoLock(m_pFilter->pStateLock());
+	info("SetMediaType");
 
     // Pass the call up to my base class
     HRESULT hr = CSourceStream::SetMediaType(pMediaType); // assigns our local m_mt via m_mt.Set(*pmt) ... 
     m_bConvertToI420 = false; // in case we are re-negotiating the type and it was set to i420 before...
+
+	info("SetMediaType - hr: %d", SUCCEEDED(hr));
 
     if(SUCCEEDED(hr))
     {
@@ -167,6 +180,7 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::SetFormat(AM_MEDIA_TYPE *pmt)
 {
 	//DebugBreak();
+	info("SetFormat");
     CAutoLock cAutoLock(m_pFilter->pStateLock());
 
 	// I *think* it can go back and forth, then.  You can call GetStreamCaps to enumerate, then call
@@ -234,10 +248,11 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::SetFormat(AM_MEDIA_TYPE *pmt)
 
 // get's the current format...I guess...
 // or get default if they haven't called SetFormat yet...
-// LODO the default, which probably we don't do yet...unless they've already called GetStreamCaps then it'll be the last index they used LOL.
+// TODO the default, which probably we don't do yet...unless they've already called GetStreamCaps then it'll be the last index they used LOL.
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetFormat(AM_MEDIA_TYPE **ppmt)
 {
 	//DebugBreak();
+	info("GetFormat");
     CAutoLock cAutoLock(m_pFilter->pStateLock());
 
     *ppmt = CreateMediaType(&m_mt); // windows internal method, also does copy
@@ -248,7 +263,8 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetFormat(AM_MEDIA_TYPE **ppmt)
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetNumberOfCapabilities(int *piCount, int *piSize)
 {
 	//DebugBreak();
-    *piCount = 7;
+	info("GetNumberOfCapabilities");
+    *piCount = 1; // FPN
     *piSize = sizeof(VIDEO_STREAM_CONFIG_CAPS); // VIDEO_STREAM_CONFIG_CAPS is an MS struct
     return S_OK;
 }
@@ -256,6 +272,7 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetNumberOfCapabilities(int *piCount,
 // returns the "range" of fps, etc. for this index
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TYPE **pmt, BYTE *pSCC)
 {
+	info("GetStreamCaps");
 	//DebugBreak();
     CAutoLock cAutoLock(m_pFilter->pStateLock());
 	HRESULT hr = GetMediaType(iIndex, &m_mt); // ensure setup/re-use m_mt ...
@@ -316,6 +333,7 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TY
 // QuerySupported: Query whether the pin supports the specified property.
 HRESULT CPushPinDesktop::QuerySupported(REFGUID guidPropSet, DWORD dwPropID, DWORD *pTypeSupport)
 {
+	info("QuerySupported");
 	//DebugBreak();
     if (guidPropSet != AMPROPSETID_Pin) return E_PROP_SET_UNSUPPORTED;
     if (dwPropID != AMPROPERTY_PIN_CATEGORY) return E_PROP_ID_UNSUPPORTED;
@@ -327,6 +345,7 @@ HRESULT CPushPinDesktop::QuerySupported(REFGUID guidPropSet, DWORD dwPropID, DWO
 STDMETHODIMP CGameCapture::Stop(){
 
 	CAutoLock filterLock(m_pLock);
+	info("GameCapture::Stop");
 
 	//Default implementation
 	HRESULT hr = CBaseFilter::Stop();
@@ -341,8 +360,8 @@ STDMETHODIMP CGameCapture::Stop(){
 // according to msdn...
 HRESULT CGameCapture::GetState(DWORD dw, FILTER_STATE *pState)
 {
-	//DebugBreak();
     CheckPointer(pState, E_POINTER);
+	info("GameCapture::GetState");
     *pState = m_State;
     if (m_State == State_Paused)
         return VFW_S_CANT_CUE;
@@ -352,6 +371,7 @@ HRESULT CGameCapture::GetState(DWORD dw, FILTER_STATE *pState)
 
 HRESULT CPushPinDesktop::QueryInterface(REFIID riid, void **ppv)
 {   
+	info("GameCapture::QueryInterface");
     // Standard OLE stuff, needed for capture source
     if(riid == _uuidof(IAMStreamConfig))
         *ppv = (IAMStreamConfig*)this;
@@ -389,6 +409,7 @@ HRESULT CPushPinDesktop::Get(
     DWORD *pcbReturned     // Return the size of the property.
 )
 {
+	info("GameCapture::Get");
 	//DebugBreak();
     if (guidPropSet != AMPROPSETID_Pin)             return E_PROP_SET_UNSUPPORTED;
     if (dwPropID != AMPROPERTY_PIN_CATEGORY)        return E_PROP_ID_UNSUPPORTED;
@@ -424,6 +445,7 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
 	//DebugBreak();
     CheckPointer(pmt, E_POINTER);
     CAutoLock cAutoLock(m_pFilter->pStateLock());
+	info("GameCapture::GetMediaType position:%d", iPosition);
 	if(m_bFormatAlreadySet) {
 		// you can only have one option, buddy, if setFormat already called. (see SetFormat's msdn)
 		if(iPosition != 0)
