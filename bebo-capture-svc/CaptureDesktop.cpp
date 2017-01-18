@@ -7,6 +7,11 @@
 #include <wmsdkidl.h>
 #include "GameCapture.h"
 
+#define do_log(level, format, ...) \
+	LocalOutput("[game-capture: '%s'] " format, "test", ##__VA_ARGS__)
+#define warn(format, ...)  do_log(LOG_WARNING, format, ##__VA_ARGS__)
+#define info(format, ...)  do_log(LOG_INFO,    format, ##__VA_ARGS__)
+#define debug(format, ...) do_log(LOG_DEBUG,   format, ##__VA_ARGS__)
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
 
 extern "C" {
@@ -46,7 +51,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 		m_bFormatAlreadySet(false),
 		hRawBitmap(NULL),
 		m_bUseCaptureBlt(false),
-		previousFrameEndTime(0)
+		previousFrameEndTime(0),
+		active(false)
 {
 	// Get the device context of the main display, just to get some metrics for it...
 	globalStart = GetTickCount();
@@ -169,6 +175,17 @@ wchar_t out[1000];
 bool ever_started = false;
 void * game_context;
 
+
+HRESULT CPushPinDesktop::Inactive(void) {
+	active = false;
+	return CSourceStream::Inactive();
+};
+
+HRESULT CPushPinDesktop::Active(void) {
+	active = true;
+	return CSourceStream::Active();
+};
+
 #if 1
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 {
@@ -184,6 +201,13 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 	boolean gotFrame = false ;
 	while (!gotFrame || !game_context) {
+
+		// IsStopped() is not set until we have returned, so we need to do a peek to exit or we will never stop
+		if (!active) {
+			info("FillBuffer - inactive");
+			return S_FALSE;
+		}
+
 		if (!game_context) {
 			// TODO different games
 			game_context = hook(_T("Overwatch"));
@@ -192,6 +216,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			}
 			continue;
 		}
+
 		gotFrame = get_game_frame(&game_context, 0.0, pSample);
 		if (!game_context) {
 			LocalOutput("Capture Ended");
@@ -741,3 +766,17 @@ HRESULT CPushPinDesktop::OnThreadCreate() {
 	m_iFrameNumber = 0;
 	return S_OK;
 }
+
+HRESULT CPushPinDesktop::OnThreadDestroy() {
+	debug("CPushPinDesktop::OnThreadDestroy()");
+	if (game_context) {
+		stop_game_capture(&game_context);
+		game_context = NULL;
+	}
+	return NOERROR;
+};
+
+HRESULT CPushPinDesktop::OnThreadStartPlay() {
+	debug("CPushPinDesktop::OnThreadStartPlay()");
+	return NOERROR;
+};

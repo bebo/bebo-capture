@@ -102,6 +102,7 @@ protected:
 	bool m_bConvertToI420;
 	bool m_bUseCaptureBlt;
 	bool m_bCaptureMouse;
+	volatile bool active;
 	//int m_iScreenBitDepth;
 
 	float GetFps();
@@ -126,8 +127,12 @@ protected:
 
 public:
 
-	//CSourceStream
+	//CSourceStream overrrides
 	HRESULT OnThreadCreate(void);
+	HRESULT OnThreadDestroy(void);
+	HRESULT OnThreadStartPlay(void);
+	HRESULT Inactive(void);
+	HRESULT Active(void);
 
     //////////////////////////////////////////////////////////////////////////
     //  IUnknown

@@ -1,5 +1,4 @@
 #include "GameCapture.h"
-// TODO - should not need path:
 
 #include <dshow.h>
 #include <strsafe.h>
@@ -352,11 +351,6 @@ static void get_selected_window(struct game_capture *gc)
 	} else {
 		gc->wait_for_target_startup = true;
 	}
-}
-
-static void stop_capture(struct game_capture *gc)
-{
-	// FIXME
 }
 
 static inline bool hook_direct(struct game_capture *gc,
@@ -914,6 +908,63 @@ static bool init_hook(struct game_capture *gc)
 	return true;
 }
 
+static void stop_capture(struct game_capture *gc)
+{
+	ipc_pipe_server_free(&gc->pipe);
+
+	if (gc->hook_stop) {
+		SetEvent(gc->hook_stop);
+	}
+	if (gc->global_hook_info) {
+		UnmapViewOfFile(gc->global_hook_info);
+		gc->global_hook_info = NULL;
+	}
+	if (gc->data) {
+		UnmapViewOfFile(gc->data);
+		gc->data = NULL;
+	}
+
+	if (gc->keepalive_thread) {
+		PostThreadMessage(gc->keepalive_thread_id, WM_QUIT, 0, 0);
+		WaitForSingleObject(gc->keepalive_thread, 300);
+		close_handle(&gc->keepalive_thread);
+	}
+
+	if (gc->app_sid) {
+		LocalFree(gc->app_sid);
+		gc->app_sid = NULL;
+	}
+
+	close_handle(&gc->hook_restart);
+	close_handle(&gc->hook_stop);
+	close_handle(&gc->hook_ready);
+	close_handle(&gc->hook_exit);
+	close_handle(&gc->hook_init);
+	close_handle(&gc->hook_data_map);
+	close_handle(&gc->global_hook_info_map);
+	close_handle(&gc->target_process);
+	close_handle(&gc->texture_mutexes[0]);
+	close_handle(&gc->texture_mutexes[1]);
+
+//	if (gc->texture) {
+//		obs_enter_graphics();
+//		gs_texture_destroy(gc->texture);
+//		obs_leave_graphics();
+//		gc->texture = NULL;
+//	}
+
+	if (gc->active)
+		info("capture stopped");
+
+	gc->copy_texture = NULL;
+	gc->wait_for_target_startup = false;
+	gc->active = false;
+	gc->capturing = false;
+
+	if (gc->retrying)
+		gc->retrying--;
+}
+
 static void try_hook(struct game_capture *gc)
 {
 	if (0 && gc->config.mode == CAPTURE_MODE_ANY) {
@@ -1190,7 +1241,6 @@ static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 	HANDLE mutex = NULL;
 	uint32_t pitch;
 	int next_texture;
-	uint8_t *data;
 
 	if (cur_texture < 0 || cur_texture > 1)
 		return;
@@ -1420,4 +1470,11 @@ boolean get_game_frame(void **data, float seconds, IMediaSample *pSample) {
 //	if (!gc->showing)
 //		gc->showing = true;
 	return false;
+}
+
+
+boolean stop_game_capture(void **data) {
+	struct game_capture *gc = (game_capture *) *data;
+	stop_capture(gc);
+	return true;
 }

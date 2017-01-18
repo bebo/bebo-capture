@@ -352,7 +352,6 @@ STDMETHODIMP CGameCapture::Stop(){
 
 	//Reset pin resources
 	m_pPin->m_iFrameNumber = 0;
-
 	return hr;
 }
 
@@ -371,7 +370,7 @@ HRESULT CGameCapture::GetState(DWORD dw, FILTER_STATE *pState)
 
 HRESULT CPushPinDesktop::QueryInterface(REFIID riid, void **ppv)
 {   
-	info("GameCapture::QueryInterface");
+	//info("GameCapture::QueryInterface");
     // Standard OLE stuff, needed for capture source
     if(riid == _uuidof(IAMStreamConfig))
         *ppv = (IAMStreamConfig*)this;
