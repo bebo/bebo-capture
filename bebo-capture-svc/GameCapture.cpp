@@ -1407,6 +1407,14 @@ static bool start_capture(struct game_capture *gc)
 	return true;
 }
 
+static inline bool capture_valid(struct game_capture *gc)
+{
+	if (!gc->dwm_capture && !IsWindow(gc->window))
+	       return false;
+	
+	return !object_signalled(gc->target_process);
+}
+
 boolean get_game_frame(void **data, float seconds, IMediaSample *pSample) {
 	struct game_capture *gc = (game_capture *) *data;
 	if (!gc->active) {
@@ -1440,17 +1448,17 @@ boolean get_game_frame(void **data, float seconds, IMediaSample *pSample) {
 	gc->retry_time += seconds;
 
 	if (gc->active) {
-//		if (!capture_valid(gc)) {
-//			info("capture window no longer exists, "
-//			     "terminating capture");
-//			stop_capture(gc);
-//		} else {
-//		debug("Ready To Capture");
-		if (gc->copy_texture) {
-//				obs_enter_graphics();
-			gc->copy_texture(gc, pSample);
-			return true;
-//				obs_leave_graphics();
+
+		if (!capture_valid(gc)) {
+			info("capture window no longer exists, "
+			     "terminating capture");
+			stop_capture(gc);
+		} else {
+			//		debug("Ready To Capture");
+			if (gc->copy_texture) {
+				gc->copy_texture(gc, pSample);
+				return true;
+			}
 		}
 //
 //			if (gc->config.cursor) {
