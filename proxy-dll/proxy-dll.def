@@ -1,0 +1,6 @@
+LIBRARY        bebo-capture-proxy.dll
+DESCRIPTION    'Bebo Capture Api proxy/stub DLL'
+EXPORTS        DllGetClassObject      @1 PRIVATE
+               DllCanUnloadNow        @2 PRIVATE
+               DllRegisterServer      @4 PRIVATE
+               DllUnregisterServer    @5 PRIVATE

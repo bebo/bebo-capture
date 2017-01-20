@@ -298,6 +298,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="BeboCapture.cpp" />
     <ClCompile Include="DibHelper.cpp" />
     <ClCompile Include="GameCapture.cpp" />
     <ClCompile Include="load-graphics-offsets.c" />
@@ -310,13 +311,19 @@
     <None Include="BeboCapture.def" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="BeboCapture.h" />
+    <ClInclude Include="BeboCaptureGuids.h" />
     <ClInclude Include="DibHelper.h" />
     <ClInclude Include="CaptureGuids.h" />
     <ClInclude Include="Capture.h" />
     <ClInclude Include="GameCapture.h" />
+    <ClInclude Include="IBeboCapture.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Capture.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Midl Include="IBeboCapture.idl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

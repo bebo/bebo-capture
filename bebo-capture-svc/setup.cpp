@@ -10,7 +10,25 @@
 #include <initguid.h>
 
 #include "CaptureGuids.h"
+#include "BeboCaptureGuids.h"
 #include "Capture.h"
+#include "BeboCapture.h"
+#include "DibHelper.h"
+//#include "BeboCaptureFactory.h"
+
+#define do_log(level, format, ...) \
+	LocalOutput("[game-capture: '%s'] " format, "test", ##__VA_ARGS__)
+#define warn(format, ...)  do_log(LOG_WARNING, format, ##__VA_ARGS__)
+#define info(format, ...)  do_log(LOG_INFO,    format, ##__VA_ARGS__)
+#define debug(format, ...) do_log(LOG_DEBUG,   format, ##__VA_ARGS__)
+
+#define     BeboCaptureApiProgId L"Bebo.GameCaptureApi"
+
+HMODULE g_hModule = NULL;
+
+extern "C" {
+	extern char *bebo_find_file(const char *file);
+}
 
 // Note: It is better to register no media types than to register a partial 
 // media type (subtype == GUID_NULL) because that can slow down intelligent connect 
@@ -71,7 +89,7 @@ const AMOVIESETUP_FILTER sudPushSourceDesktop =
 // being created. The class factory will call the static CreateInstance.
 // We provide a set of filters in this one DLL.
 
-CFactoryTemplate g_Templates[1] = 
+CFactoryTemplate g_Templates[2] = 
 {
     { 
       g_wszPushDesktop,               // Name
@@ -79,7 +97,13 @@ CFactoryTemplate g_Templates[1] =
       CGameCapture::CreateInstance, // Method to create an instance of MyComponent
       NULL,                           // Initialization function
       &sudPushSourceDesktop           // Set-up information (for filters)
-    },
+    }, {
+      g_wszBeboCaptureApi,               // Name
+	  &CLSID_BeboCaptureApi,
+      CBeboCapture::CreateInstance, // Method to create an instance of MyComponent
+      NULL,                           // Initialization function
+      NULL, // Set-up information (for filters)
+    }
 };
 
 int g_cTemplates = sizeof(g_Templates) / sizeof(g_Templates[0]);    
@@ -145,14 +169,217 @@ STDAPI RegisterFilters( BOOL bRegister )
     CoUninitialize();
     return hr;
 }
+BOOL   HelperWriteKey(
+	HKEY roothk,
+	LPCWSTR lpSubKey,
+	LPCTSTR val_name,
+	DWORD dwType,
+	void *lpvData,
+	DWORD dwDataSize)
+{
+	//
+	//Helper function for doing the registry write operations
+	//
+	//roothk:either of HKCR, HKLM, etc
+
+	//lpSubKey: the key relative to 'roothk'
+
+	//val_name:the key value name where the data will be written
+
+	//dwType:the type of data that will be written ,REG_SZ,REG_BINARY, etc.
+
+	//lpvData:a pointer to the data buffer
+
+	//dwDataSize:the size of the data pointed to by lpvData
+	//
+	//
+
+	info("writing registry %S: %S", lpSubKey, lpvData);
+
+	HKEY hk;
+	if (ERROR_SUCCESS != RegCreateKey(roothk, lpSubKey, &hk)) return FALSE;
+
+	if (ERROR_SUCCESS != RegSetValueExW(hk, val_name, 0, dwType, (CONST BYTE *)lpvData, dwDataSize)) return FALSE;
+
+	if (ERROR_SUCCESS != RegCloseKey(hk))   return FALSE;
+	return TRUE;
+
+}
+
+STDAPI RegisterApi() {
+    //
+    //As per COM guidelines, every self installable COM inprocess component
+    //should export the function DllRegisterServer for printing the 
+    //specified information to the registry
+    //
+    //
+
+    WCHAR *lpwszClsid;
+    WCHAR *lpwszTypeLibId;
+    WCHAR szKey[MAX_PATH]=L"";
+    WCHAR szBuff[MAX_PATH]=L"";
+    WCHAR szClsid[MAX_PATH]=L"", szInproc[MAX_PATH]=L"",szProgId[MAX_PATH];
+    WCHAR szDescriptionVal[256]=L"";
+
+    StringFromCLSID(CLSID_BeboCaptureApi, &lpwszClsid);
+    StringFromCLSID(TYPELIBID_BeboCaptureApi, &lpwszTypeLibId);
+    
+    wsprintf(szClsid,L"%s",lpwszClsid);
+    wsprintf(szInproc,L"%s\\%s\\%s",L"clsid",szClsid,L"InprocServer32");
+    wsprintf(szProgId,L"%s\\%s\\%s",L"clsid",szClsid,L"ProgId");
+	info("lpwszClsid: %S", lpwszClsid);
+	info("szClsid: %S", szClsid);
+	info("szInproc: %S", szInproc);
+
+
+    //
+    //write the default value 
+    //
+    wsprintf(szBuff,L"%s",L"Bebo Capture COM API");
+    wsprintf(szDescriptionVal,L"%s\\%s",L"clsid",szClsid);
+
+	info("%S", szDescriptionVal);
+
+    HelperWriteKey (
+                HKEY_CLASSES_ROOT,
+                szDescriptionVal,
+                NULL,//write to the "default" value
+                REG_SZ,
+                (void*)szBuff,
+                (lstrlen(szBuff)+1)*2
+                );
+
+
+    //
+    //write the "InprocServer32" key data
+    //
+    GetModuleFileName(
+                g_hModule,
+                szBuff,
+                sizeof(szBuff));
+	info("%S", szBuff);
+    HelperWriteKey (
+                HKEY_CLASSES_ROOT,
+                szInproc,
+                NULL,//write to the "default" value
+                REG_SZ,
+                (void*)szBuff,
+                (lstrlen(szBuff)+1)*2
+                );
+
+    lstrcpy(szBuff, L"Both");
+    HelperWriteKey (
+                HKEY_CLASSES_ROOT,
+                szInproc,
+                L"ThreadingModel",
+                REG_SZ,
+                (void*)szBuff,
+                (lstrlen(szBuff)+1)*2
+                );
+
+    //
+    //write the "ProgId" key data under HKCR\clsid\{---}\ProgId
+    //
+    lstrcpy(szBuff, BeboCaptureApiProgId);
+    HelperWriteKey (
+                HKEY_CLASSES_ROOT,
+                szProgId,
+                NULL,
+                REG_SZ,
+                (void*)szBuff,
+                (lstrlen(szBuff)+1)*2
+                );
+
+    //
+    //write the "ProgId" data under HKCR\Bebo Capture...
+    //
+    wsprintf(szBuff,L"%s",L"Bebo Capture COM API");
+    HelperWriteKey (
+                HKEY_CLASSES_ROOT,
+                BeboCaptureApiProgId,
+                NULL,
+                REG_SZ,
+                (void*)szBuff,
+                (lstrlen(szBuff)+1)*2
+                );
+
+
+    wsprintf(szProgId,L"%s\\%s",BeboCaptureApiProgId,L"CLSID");
+    HelperWriteKey (
+                HKEY_CLASSES_ROOT,
+                szProgId,
+                NULL,
+                REG_SZ,
+                (void*)szClsid,
+                (lstrlen(szClsid)+1)*2
+                );
+
+
+	/// TYPELIB so we can ust this from dynamic languages... - https://blogs.msdn.microsoft.com/larryosterman/2006/01/09/com-registration-if-you-need-a-typelib/
+
+    wsprintf(szKey,L"%s\\%s\\%s",L"clsid",szClsid,L"TypeLib");
+    wsprintf(szBuff, L"%s", lpwszTypeLibId);
+    HelperWriteKey (
+                HKEY_CLASSES_ROOT,
+                szKey,
+                NULL,
+                REG_SZ,
+                (void*)szBuff,
+                (lstrlen(szBuff)+1)*2
+                );
+
+	wsprintf(szKey, L"Typelib\\%s\\1.0", lpwszTypeLibId);
+	wsprintf(szBuff, L"Library for Bebo Capture API");
+    HelperWriteKey (
+                HKEY_CLASSES_ROOT,
+                szKey,
+                NULL,
+                REG_SZ,
+                (void*)szBuff,
+                (lstrlen(szBuff)+1)*2
+                );
+
+	wsprintf(szKey, L"Typelib\\%s\\1.0\\FLAGS", lpwszTypeLibId);
+	wsprintf(szBuff, L"0");
+    HelperWriteKey (
+                HKEY_CLASSES_ROOT,
+                szKey,
+                NULL,
+                REG_SZ,
+                (void*)szBuff,
+                (lstrlen(szBuff)+1)*2
+                );
+
+
+#ifdef _WIN64
+	wsprintf(szKey, L"Typelib\\%s\\1.0\\0\\win64", lpwszTypeLibId);
+	wsprintf(szBuff, L"%hs", bebo_find_file("BeboCapture.tlb"));
+#else
+	wsprintf(szKey, L"Typelib\\%s\\1.0\\0\\win32", lpwszTypeLibId);
+	wsprintf(szBuff, L"0");
+#endif
+
+    HelperWriteKey (
+                HKEY_CLASSES_ROOT,
+                szKey,
+                NULL,
+                REG_SZ,
+                (void*)szBuff,
+                (lstrlen(szBuff)+1)*2
+                );
+
+    return 1;
+}
 
 STDAPI DllRegisterServer()
 {
+	RegisterApi();
     return RegisterFilters(TRUE); // && AMovieDllRegisterServer2( TRUE );
 }
 
 STDAPI DllUnregisterServer()
 {
+	// TODO unregister API
     return RegisterFilters(FALSE); // && AMovieDllRegisterServer2( FALSE );
 }
 
@@ -166,6 +393,8 @@ BOOL APIENTRY DllMain(HANDLE hModule,
                       DWORD  dwReason, 
                       LPVOID lpReserved)
 {
+	if (dwReason == DLL_PROCESS_ATTACH) {
+		g_hModule = (HMODULE)hModule;
+	}
 	return DllEntryPoint((HINSTANCE)(hModule), dwReason, lpReserved);
 }
-

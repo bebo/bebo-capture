@@ -1,0 +1,25 @@
+import "oaidl.idl";
+import "ocidl.idl";
+
+[oleautomation,
+uuid(f91d23ff-de1f-4ebb-be77-63401a62dd25),
+version(1.0),
+helpstring("Interface for Bebo Capture API")]
+
+interface IBeboCapture : IUnknown
+{
+	HRESULT SetTarget([in, range(0, 1024)] long size,
+		[in, size_is(size)] unsigned char *targetName);
+};
+
+[
+	uuid(252ddc13-a1cd-408b-96ee-bdeda6bb8342),
+    version(1.0),
+	helpstring("Library for Bebo Capture API"),
+]
+library BeboCaptureLib
+{
+	importlib("stdole32.tlb");
+	importlib("stdole2.tlb");
+	interface IBeboCapture;
+};
