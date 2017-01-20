@@ -105,9 +105,9 @@
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='releasex64|x64'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='releasex64|Win32'">true</LinkIncremental>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)$(Platform)\$(Configuration)\;$(VCInstallDir)lib\$(PlatformTarget);$(VCInstallDir)atlmfc\lib\$(PlatformTarget);$(WindowsSdkDir)lib\$(PlatformTarget);$(FrameworkSDKDir)\lib\$(PlatformTarget);$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)lib\$(Platform);$(SolutionDir)$(Platform)\$(Configuration);$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
     <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(SolutionDir)$(Platform)\$(Configuration)\;$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib;$(FrameworkSDKDir)\lib;$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='releasex64|x64'">$(VCInstallDir)lib\amd64;$(VCInstallDir)atlmfc\lib\amd64;$(WindowsSdkDir)lib\x64;C:\Program Files\Microsoft SDKs\Windows\v7.1\Samples\multimedia\directshow\baseclasses-x64\x64\Release;C:\Program Files\Microsoft SDKs\Windows\v7.1\Lib\x64;$(OutDir)</LibraryPath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='releasex64|x64'">$(SolutionDir)lib\$(Platform);$(SolutionDir)$(Platform)\$(Configuration);$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
     <LibraryPath Condition="'$(Configuration)|$(Platform)'=='releasex64|Win32'">$(SolutionDir)$(Platform)\$(Configuration)\;$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib;$(FrameworkSDKDir)\lib;$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
     <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.DLL</TargetExt>
     <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">.DLL</TargetExt>
@@ -163,7 +163,7 @@
       <CallingConvention>StdCall</CallingConvention>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>libyuv.lib;util.lib;ipc-util.lib;psapi.lib;strmbasd.lib;winmm.lib;msvcrtd.lib;legacy_stdio_definitions.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libyuv.lib;util.lib;ipc-util.lib;psapi.lib;strmbase.lib;winmm.lib;msvcrtd.lib;legacy_stdio_definitions.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ModuleDefinitionFile>BeboCapture.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -203,7 +203,7 @@
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;PUSHSOURCE_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_WINDOWS;_USRDLL;PUSHSOURCE_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
@@ -212,9 +212,9 @@
       <CallingConvention>StdCall</CallingConvention>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>strmbase.lib;winmm.lib;msvcrt.lib;vcruntime.lib;ucrt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libyuv.lib;util.lib;ipc-util.lib;psapi.lib;strmbase.lib;winmm.lib;ucrt.lib;msvcrt.lib;legacy_stdio_definitions.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <ModuleDefinitionFile>BeboCapture.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>

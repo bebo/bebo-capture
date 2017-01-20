@@ -146,7 +146,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_bCaptureMouse = read_config_setting(TEXT("capture_mouse_default_1"), 1, true) == 1;
 
 	// default 30 fps...hmm...
-	int config_max_fps = read_config_setting(TEXT("default_max_fps"), 30, false); // TODO allow floats [?] when ever requested
+	int config_max_fps = read_config_setting(TEXT("default_max_fps"), 60, false); // TODO allow floats [?] when ever requested
 	ASSERT_RAISE(config_max_fps > 0);	
 
 	// m_rtFrameLength is also re-negotiated later...
@@ -189,7 +189,7 @@ HRESULT CPushPinDesktop::Active(void) {
 #if 1
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 {
-	LocalOutput("video frame requested");
+	//LocalOutput("video frame requested");
 
 	__int64 startThisRound = StartCounter();
 	BYTE *pData;
@@ -222,7 +222,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			LocalOutput("Capture Ended");
 		}
 		if (gotFrame) {
-			LocalOutput("Got Frame");
+			//LocalOutput("Got Frame");
 		} else {
 			Sleep(1000/120);
 		}
@@ -273,7 +273,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
     pSample->SetTime((REFERENCE_TIME *) &now, (REFERENCE_TIME *) &endFrame);
 	//pSample->SetMediaTime((REFERENCE_TIME *)&now, (REFERENCE_TIME *) &endFrame); 
-    LocalOutput("timestamping video packet as %lld -> %lld", now, endFrame);
+    //LocalOutput("timestamping video packet as %lld -> %lld", now, endFrame);
 
     m_iFrameNumber++;
 

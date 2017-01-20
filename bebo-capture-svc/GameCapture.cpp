@@ -32,7 +32,7 @@
 
 extern "C" {
 	char *bebo_find_file(const char *file) {
-		char * d = "C:\\Users\\fpn\\bebo-capture\\x64\\Debug\\";
+		char * d = "C:\\Users\\fpn\\bebo-capture\\x64\\Release\\";
 		char * result = (char *) bmalloc(strlen(file) + strlen(d));
 		strcpy(result, d);
 		strncat(result, file, strlen(file));

@@ -276,3 +276,9 @@ __pycache__/
 /bak/capture-service.bak/c
 /bak
 /bebo-capture-svc/bak
+/proxy-dll/resource.h
+/proxy-dll/proxy-dll.rc
+/proxy-dll/IBeboCapture_h.h
+/bebo-capture-svc/IBeboCapture_h.h
+/bebo-capture-svc/IBeboCapture.h
+/bebo-capture-svc/BeboCaptureApi.h
