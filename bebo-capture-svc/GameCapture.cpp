@@ -32,12 +32,14 @@
 
 extern "C" {
 	char *bebo_find_file(const char *file) {
-		char * d = "C:\\Users\\fpn\\bebo-capture\\x64\\Release\\";
-		char * result = (char *) bmalloc(strlen(file) + strlen(d));
-		strcpy(result, d);
-		strncat(result, file, strlen(file));
+		DWORD directory;
+		LPCTSTR key = _T("Directory");
+		DWORD size = 1024;
+		BYTE data[1024];
+		RegGetBeboSZ(key, data, &size);
+		CHAR * result = (CHAR *)bmalloc(strlen(file) + size);
+		wsprintfA(result, "%s\\%s", data, size);
 		return result;
-		// TODO free result somewhere?
 	}
 	struct graphics_offsets offsets32 = {0};
 	struct graphics_offsets offsets64 = {0};

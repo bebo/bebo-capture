@@ -158,6 +158,41 @@ HRESULT RegGetDWord(HKEY hKey, LPCTSTR szValueName, DWORD * lpdwResult) {
 	return NOERROR;
 }
 
+HRESULT RegGetSZ(HKEY hKey, LPCTSTR szValueName, LPBYTE data, LPDWORD datasize) {
+
+	DWORD dwType = REG_SZ;
+	LONG lResult;
+
+	// Check input parameters...
+	if (hKey == NULL || data == NULL) return E_INVALIDARG;
+
+	// Get dword value from the registry...
+	lResult = RegQueryValueEx(hKey, szValueName, 0, &dwType, data, datasize );
+
+	// Check result and make sure the registry value is a DWORD(REG_DWORD)...
+	if (lResult != ERROR_SUCCESS) return HRESULT_FROM_WIN32(lResult);
+	else if (dwType != REG_SZ) return DISP_E_TYPEMISMATCH;
+
+	return NOERROR;
+}
+
+HRESULT RegGetBeboSZ(LPCTSTR szValueName, LPBYTE data, LPDWORD datasize) {
+
+	HKEY hKey;
+	LONG i;
+	i = RegOpenKeyEx(HKEY_CURRENT_USER, L"SOFTWARE\\bebo-game-capture", 0, KEY_READ, &hKey);
+
+	if (i != ERROR_SUCCESS) {
+		return E_INVALIDARG;
+	}
+	HRESULT hr = RegGetSZ(hKey, szValueName, data, datasize);
+	RegCloseKey(hKey);
+	if (FAILED(hr)) {
+		// key doesn't exist in the reg at all...
+		return E_INVALIDARG;
+	}
+	return NOERROR;
+}
 
 boolean is_config_set_to_1(LPCTSTR szValueName) {
   return read_config_setting(szValueName, 0, true) == 1;
