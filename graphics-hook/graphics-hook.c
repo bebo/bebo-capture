@@ -787,7 +787,6 @@ void capture_free(void)
 
 BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 {
-	DbgOut("DLLMain\n");
 	if (reason == DLL_PROCESS_ATTACH) {
 
 		wchar_t name[MAX_PATH];

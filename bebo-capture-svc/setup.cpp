@@ -194,7 +194,7 @@ BOOL   HelperWriteKey(
 	//
 	//
 
-	info("writing registry %S: %S", lpSubKey, lpvData);
+	info("Writing registry %S: %S", lpSubKey, lpvData);
 
 	HKEY hk;
 	if (ERROR_SUCCESS != RegCreateKey(roothk, lpSubKey, &hk)) return FALSE;
@@ -374,6 +374,7 @@ STDAPI RegisterApi() {
 STDAPI DllRegisterServer()
 {
 	RegisterApi();
+	info("registerApi done");
     return RegisterFilters(TRUE); // && AMovieDllRegisterServer2( TRUE );
 }
 
@@ -393,6 +394,7 @@ BOOL APIENTRY DllMain(HANDLE hModule,
                       DWORD  dwReason, 
                       LPVOID lpReserved)
 {
+	info("DllEntryPoint");
 	if (dwReason == DLL_PROCESS_ATTACH) {
 		g_hModule = (HMODULE)hModule;
 	}

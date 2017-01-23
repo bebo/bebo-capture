@@ -32,13 +32,18 @@
 
 extern "C" {
 	char *bebo_find_file(const char *file) {
-		DWORD directory;
-		LPCTSTR key = _T("Directory");
+		LPCTSTR key = L"Directory";
 		DWORD size = 1024;
 		BYTE data[1024];
-		RegGetBeboSZ(key, data, &size);
+		HRESULT r;
+		r = RegGetBeboSZ(key, data, &size);
+		if (r != S_OK) {
+			warn("can not find registry key: %S", key);
+			return NULL;
+		}
 		CHAR * result = (CHAR *)bmalloc(strlen(file) + size);
-		wsprintfA(result, "%s\\%s", data, size);
+		wsprintfA(result, "%S\\%s", data, file);
+		info("RegGetBeboSZ %S, %S, %d, %s", key, data, size, result);
 		return result;
 	}
 	struct graphics_offsets offsets32 = {0};

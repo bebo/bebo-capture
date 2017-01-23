@@ -192,7 +192,6 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	//LocalOutput("video frame requested");
 
 	__int64 startThisRound = StartCounter();
-	BYTE *pData;
 
 	CheckPointer(pSample, E_POINTER);
 	if (m_bReReadRegistry) {
