@@ -50,6 +50,7 @@ extern "C" {
 	struct graphics_offsets offsets64 = {0};
 }
 
+
 enum capture_mode {
 	CAPTURE_MODE_ANY,
 	CAPTURE_MODE_WINDOW,
@@ -1006,7 +1007,7 @@ static void try_hook(struct game_capture *gc)
 	}
 }
 
-void * hook(LPCTSTR windowName) 
+void * hook(LPCWSTR windowName) 
 {
 	HWND hwnd = FindWindow(NULL, windowName);
 	LocalOutput("%X", hwnd);

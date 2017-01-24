@@ -59,7 +59,6 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 
     init_hooks_thread = CreateThread(NULL, 0, init_hooks, NULL, 0, NULL);
 
-	//TODO read registry to find path to our executables / dlls
 	//DebugBreak();
 
 	m_iHwndToTrack = (HWND) read_config_setting(TEXT("hwnd_to_track"), NULL, false);
@@ -103,11 +102,9 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	  LocalOutput("ignoring startx, starty since hwnd was specified");
 	}
 
-	int config_width = read_config_setting(TEXT("capture_width"), 0, false);
-	config_width = 1280; // FIXME
+	int config_width = read_config_setting(TEXT("CaptureWidth"), 1280, true);
 	ASSERT_RAISE(config_width >= 0); // negatives not allowed...
-	int config_height = read_config_setting(TEXT("capture_height"), 0, false);
-	config_height = 720; // FIXME
+	int config_height = read_config_setting(TEXT("CaptureHeight"), 720, true);
 	ASSERT_RAISE(config_height >= 0); // negatives not allowed, if it's set :)
 
 	if(config_width > 0) {
@@ -137,6 +134,17 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_iCaptureConfigHeight = m_rScreen.bottom - m_rScreen.top;
 	ASSERT_RAISE(m_iCaptureConfigHeight > 0);
 
+	DWORD size = 1024;
+	BYTE data[1024];
+	if (RegGetBeboSZ(TEXT("CaptureWindowName"), data, &size) == S_OK) {
+		m_pCaptureWindowName = (WCHAR *) malloc(size*2);
+		wsprintfW(m_pCaptureWindowName, L"%s", data);
+	} else {
+		WCHAR * default = L"Overwatch";
+		m_pCaptureWindowName = (WCHAR *) malloc((wcslen(default)+1)*2);
+		wsprintfW(m_pCaptureWindowName, L"%S", data);
+	}
+
 	m_iStretchToThisConfigWidth = read_config_setting(TEXT("stretch_to_width"), 0, false);
 	m_iStretchToThisConfigHeight = read_config_setting(TEXT("stretch_to_height"), 0, false);
 	m_iStretchMode = read_config_setting(TEXT("stretch_mode_high_quality_if_1"), 0, true); // guess it's either stretch mode 0 or 1
@@ -146,7 +154,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_bCaptureMouse = read_config_setting(TEXT("capture_mouse_default_1"), 1, true) == 1;
 
 	// default 30 fps...hmm...
-	int config_max_fps = read_config_setting(TEXT("default_max_fps"), 60, false); // TODO allow floats [?] when ever requested
+	int config_max_fps = read_config_setting(TEXT("CaptureFPS"), 60, false);
 	ASSERT_RAISE(config_max_fps > 0);	
 
 	// m_rtFrameLength is also re-negotiated later...
@@ -208,8 +216,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 		}
 
 		if (!game_context) {
-			// TODO different games
-			game_context = hook(_T("Overwatch"));
+			game_context = hook(m_pCaptureWindowName);
 			if (!game_context) {
 				Sleep(100);
 			}
