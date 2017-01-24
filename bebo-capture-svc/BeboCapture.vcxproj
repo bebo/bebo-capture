@@ -30,7 +30,7 @@
     <ProjectGuid>{39469123-3EB7-45F3-A15B-3854DFD2C2EB}</ProjectGuid>
     <RootNamespace>PushSource</RootNamespace>
     <Keyword>Win32Proj</Keyword>
-    <ProjectName>BeboCapture</ProjectName>
+    <ProjectName>BeboGameCapture</ProjectName>
     <WindowsTargetPlatformVersion>10.0.14393.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -165,7 +165,7 @@
     <Link>
       <AdditionalDependencies>libyuv.lib;util.lib;ipc-util.lib;psapi.lib;strmbase.lib;winmm.lib;msvcrtd.lib;legacy_stdio_definitions.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <ModuleDefinitionFile>BeboCapture.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>BeboGameCapture.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <TargetMachine>MachineX64</TargetMachine>
@@ -192,7 +192,7 @@
     <Link>
       <AdditionalDependencies>strmbasd.lib;winmm.lib;msvcrtd.lib;legacy_stdio_definitions.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <ModuleDefinitionFile>BeboCapture.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>BeboGameCapture.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <AdditionalOptions>/VERBOSE:LIB %(AdditionalOptions)</AdditionalOptions>
@@ -217,7 +217,7 @@
       <AdditionalDependencies>libyuv.lib;util.lib;ipc-util.lib;psapi.lib;strmbase.lib;winmm.lib;msvcrt.lib;OLDNAMES.lib;legacy_stdio_definitions.lib;ucrt.lib;vcruntime.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
-      <ModuleDefinitionFile>BeboCapture.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>BeboGameCapture.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
@@ -242,7 +242,7 @@
     <Link>
       <AdditionalDependencies>strmbase.lib;winmm.lib;msvcrt.lib;legacy_stdio_definitions.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <ModuleDefinitionFile>BeboCapture.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>BeboGameCapture.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
@@ -269,7 +269,7 @@
       <AdditionalDependencies>strmbase.lib;winmm.lib;msvcrt.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\..\BaseClasses\x64\Release\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
-      <ModuleDefinitionFile>BeboCapture.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>BeboGameCapture.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
@@ -295,7 +295,7 @@
       <AdditionalDependencies>strmbase.lib;winmm.lib;msvcrt.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
-      <ModuleDefinitionFile>BeboCapture.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>BeboGameCapture.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
@@ -314,7 +314,7 @@
     <ClCompile Include="setup.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="BeboCapture.def" />
+    <None Include="BeboGameCapture.def" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BeboCapture.h" />
