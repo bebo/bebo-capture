@@ -56,6 +56,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 {
 	// Get the device context of the main display, just to get some metrics for it...
 	globalStart = GetTickCount();
+	config = (struct game_capture_config*) malloc(sizeof game_capture_config);
+	memset(config, 0, sizeof game_capture_config);
 
     init_hooks_thread = CreateThread(NULL, 0, init_hooks, NULL, 0, NULL);
 
@@ -181,6 +183,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 
 wchar_t out[1000];
 bool ever_started = false;
+bool starting = false;
 void * game_context;
 
 
@@ -207,7 +210,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	}
 
 	boolean gotFrame = false ;
-	while (!gotFrame || !game_context) {
+	while (!gotFrame) {
 
 		// IsStopped() is not set until we have returned, so we need to do a peek to exit or we will never stop
 		if (!active) {
@@ -215,19 +218,33 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			return S_FALSE;
 		}
 
-		if (!game_context) {
-			game_context = hook(m_pCaptureWindowName);
-			if (!game_context) {
+		if (!isReady(&game_context)) {
+
+			config->scale_cx = m_iCaptureConfigWidth;
+			config->scale_cy = m_iCaptureConfigHeight;
+			config->force_scaling = 1;
+#if 0
+			config->scale_cx = m_iCaptureConfigHeight;
+			config->scale_cy = m_iCaptureConfigWidth;
+			config->force_scaling = 1;
+#endif
+
+			game_context = hook(&game_context, m_pCaptureWindowName, config);
+			if (!isReady(&game_context)) {
 				Sleep(100);
 			}
+
 			continue;
 		}
 
 		gotFrame = get_game_frame(&game_context, 0.0, pSample);
 		if (!game_context) {
+			gotFrame = false;
+			starting = false;
 			LocalOutput("Capture Ended");
 		}
 		if (gotFrame) {
+			starting = false;
 			//LocalOutput("Got Frame");
 		} else {
 			Sleep(1000/120);

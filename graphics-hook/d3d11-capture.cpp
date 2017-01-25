@@ -446,6 +446,7 @@ static bool d3d11_init_scaling(void)
 
 static bool d3d11_shmem_init_buffers(size_t idx)
 {
+	DbgOut("d3d11_shmem_init_buffers");
 	bool success;
 
 	success = create_d3d11_stage_surface(&data.copy_surfaces[idx]);

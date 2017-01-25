@@ -7,6 +7,7 @@
 //------------------------------------------------------------------------------
 
 #include <strsafe.h>
+#include "GameCapture.h"
 
 /*
 // UNITS = 10 ^ 7  
@@ -82,6 +83,8 @@ protected:
 
     int getNegotiatedFinalWidth();
     int getNegotiatedFinalHeight();                   
+
+	game_capture_config * config;
 
 	int m_iCaptureConfigWidth;
 	int m_iCaptureConfigHeight;

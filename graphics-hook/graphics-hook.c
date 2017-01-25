@@ -85,7 +85,7 @@ static HANDLE init_mutex(const wchar_t *name, DWORD pid)
 
 static inline bool init_signals(void)
 {
-	DbgOut("init_signals");
+	DbgOut("[graphics-hook] init_signals");
 	DWORD pid = GetCurrentProcessId();
 
 	signal_restart = init_event(EVENT_CAPTURE_RESTART, pid);
@@ -118,6 +118,7 @@ static inline bool init_signals(void)
 
 static inline bool init_mutexes(void)
 {
+	DbgOut("[graphics-hook] init_mutexes");
 	DWORD pid = GetCurrentProcessId();
 
 	tex_mutexes[0] = init_mutex(MUTEX_TEXTURE1, pid);
@@ -135,6 +136,7 @@ static inline bool init_mutexes(void)
 
 static inline bool init_system_path(void)
 {
+	DbgOut("[graphics-hook] init_system_path");
 	UINT ret = GetSystemDirectoryA(system_path, MAX_PATH);
 	if (!ret) {
 		hlog("Failed to get windows system path: %lu", GetLastError());
@@ -158,6 +160,7 @@ static inline void log_current_process(void)
 
 static inline bool init_hook_info(void)
 {
+	DbgOut("[graphics-hook] init_hook_info");
 	filemap_hook_info = create_hook_info(GetCurrentProcessId());
 	if (!filemap_hook_info) {
 		hlog("Failed to create hook info file mapping: %lu",
@@ -227,8 +230,9 @@ static inline void init_dummy_window_thread(void)
 
 static inline bool init_hook(HANDLE thread_handle)
 {
+	DbgOut("[graphics-hook] init_hook");
 	wait_for_dll_main_finish(thread_handle);
-	DbgOut("init_hook - wait_for_dll_main_finish complete");
+	DbgOut("[graphics-hook] init_hook - wait_for_dll_main_finish complete");
 
 	_snwprintf(keepalive_name, sizeof(keepalive_name), L"%s%lu",
 			WINDOW_HOOK_KEEPALIVE, GetCurrentProcessId());
@@ -238,7 +242,7 @@ static inline bool init_hook(HANDLE thread_handle)
 	init_dummy_window_thread();
 	log_current_process();
 
-	DbgOut("init_hook - signal_restart");
+	DbgOut("[graphics_hook] init_hook - signal_restart");
 	SetEvent(signal_restart);
 	return true;
 }
@@ -389,9 +393,9 @@ static inline void capture_loop(void)
 
 static DWORD WINAPI main_capture_thread(HANDLE thread_handle)
 {
-	DbgOut("main_capture_thread\n");
+	DbgOut("[graphics-hook] main_capture_thread");
 	if (!init_hook(thread_handle)) {
-		DbgOut("Failed to init hook\n");
+		DbgOut("[graphics-hook] main_capture_thread - Failed to init hook");
 		free_hook();
 		return 0;
 	}
@@ -788,6 +792,7 @@ void capture_free(void)
 BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 {
 	if (reason == DLL_PROCESS_ATTACH) {
+		DbgOut("[graphics-hook] DllMain - DLL_PROCESS_ATTACH");
 
 		wchar_t name[MAX_PATH];
 
@@ -801,6 +806,8 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 
 		if (!success)
 			DbgOut("Failed to get current thread handle");
+
+		DbgOut("[graphics-hook] DllMain - DuplicateHandle OK");
 
 		if (!init_signals()) {
 			return false;
@@ -827,8 +834,10 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 			CloseHandle(cur_thread);
 			return false;
 		}
+	    DbgOut("[graphics-hook] DllMain - DLL_PROCESS_ATTACH success");
 
 	} else if (reason == DLL_PROCESS_DETACH) {
+		DbgOut("[graphics-hook] DllMain - DLL_PROCESS_DETACH");
 		if (capture_thread) {
 			stop_loop = true;
 			WaitForSingleObject(capture_thread, 300);

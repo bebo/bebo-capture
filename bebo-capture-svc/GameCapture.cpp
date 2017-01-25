@@ -57,22 +57,7 @@ enum capture_mode {
 	CAPTURE_MODE_HOTKEY
 };
 
-struct game_capture_config {
-	char                          *title;
-	char                          *klass;
-	char                          *executable;
-	enum window_priority          priority;
-	enum capture_mode             mode;
-	uint32_t                      scale_cx;
-	uint32_t                      scale_cy;
-	bool                          cursor : 1;
-	bool                          force_shmem : 1;
-	bool                          force_scaling : 1;
-	bool                          allow_transparency : 1;
-	bool                          limit_framerate : 1;
-	bool                          capture_overlays : 1;
-	bool                          anticheat_hook : 1;
-};
+
 
 struct game_capture {
 //	obs_source_t                  *source;
@@ -209,9 +194,27 @@ static inline HANDLE open_hook_info(struct game_capture *gc)
 {
 	return open_map_plus_id(gc, SHMEM_HOOK_INFO, gc->process_id);
 }
-static struct game_capture *game_capture_create()
+static struct game_capture *game_capture_create(game_capture_config *config)
 {
 	struct game_capture *gc = (struct game_capture*) bzalloc(sizeof(*gc));
+
+	// TODO: smart pointers? or free:
+
+	gc->config.title = config->title;
+	gc->config.klass = config->klass;
+	gc->config.executable = config->executable;
+
+	gc->config.priority = config->priority;
+	gc->config.mode = config->mode;
+	gc->config.scale_cx = config->scale_cx;
+	gc->config.scale_cy = config->scale_cy;
+	gc->config.cursor = config->cursor;
+	gc->config.force_shmem = config->force_shmem;
+	gc->config.force_scaling = config->force_scaling;
+	gc->config.allow_transparency = config->allow_transparency;
+	gc->config.limit_framerate = config->limit_framerate;
+	gc->config.capture_overlays = config->capture_overlays;
+	gc->config.anticheat_hook = config->anticheat_hook;
 
 //	wait_for_hook_initialization();
 
@@ -771,8 +774,8 @@ static inline bool init_hook_info(struct game_capture *gc)
 	//gc->global_hook_info->force_shmem = gc->config.force_shmem;
 	gc->global_hook_info->force_shmem = true;
 	gc->global_hook_info->use_scale = gc->config.force_scaling;
-	gc->global_hook_info->cx = 720; // FIXME gc->config.scale_cx;
-	gc->global_hook_info->cy = 1280; // FIXME gc->config.scale_cy;
+	gc->global_hook_info->cx = gc->config.scale_cx;
+	gc->global_hook_info->cy = gc->config.scale_cy;
 	reset_frame_interval(gc);
 
 #if 0 // FIXME
@@ -1007,15 +1010,27 @@ static void try_hook(struct game_capture *gc)
 	}
 }
 
-void * hook(LPCWSTR windowName) 
+boolean isReady(void ** data) {
+	if (*data == NULL) {
+		return false;
+	}
+	struct game_capture *gc = (game_capture *) *data;
+//	debug("isReady - data active: %d && retrying %d - %d", gc->active, gc->retrying, gc->active && gc->capturing);
+	return  gc->active && ! gc->retrying;
+}
+
+void * hook(void **data, LPCWSTR windowName, game_capture_config *config)
 {
-	HWND hwnd = FindWindow(NULL, windowName);
-	LocalOutput("%X", hwnd);
-	struct game_capture *gc = game_capture_create();
-	struct dstr * klass = &gc->klass;
-	get_window_class(klass, hwnd);
+	struct game_capture *gc = (game_capture *) *data;
+	if (gc == NULL) {
+		HWND hwnd = FindWindow(NULL, windowName);
+		LocalOutput("hooking: %X", hwnd);
+		gc = game_capture_create(config);
+		struct dstr * klass = &gc->klass;
+		get_window_class(klass, hwnd);
+	}
 	try_hook(gc);
-	if (gc->active) {
+	if (gc->active || gc->retrying) {
 		return gc;
 	}
 	return NULL;
@@ -1271,6 +1286,7 @@ static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 
 	pitch = gc->pitch;
 
+	//DebugBreak();
 	if (gc->convert_16bit) {
 		/// FIXME LOG ERROR
 		warn("copy_shmem_text 16 bit - not handled");
