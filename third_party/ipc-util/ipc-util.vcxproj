@@ -145,9 +145,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <Text Include="ReadMe.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="ipc-util\pipe-windows.h" />
     <ClInclude Include="ipc-util\pipe.h" />
   </ItemGroup>

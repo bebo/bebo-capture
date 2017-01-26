@@ -33,4 +33,7 @@
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="..\ipc-util\ReadMe.txt" />
+  </ItemGroup>
 </Project>

@@ -1286,7 +1286,6 @@ static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 
 	pitch = gc->pitch;
 
-	//DebugBreak();
 	if (gc->convert_16bit) {
 		/// FIXME LOG ERROR
 		warn("copy_shmem_text 16 bit - not handled");
@@ -1332,17 +1331,34 @@ static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 		uint8* dst_v = dst_u + ((width * height) >> 2);
 		int dst_stride_v = dst_stride_u;
 
-		//int err = libyuv::RGBAToI420(src_frame,
-		int err = libyuv::ABGRToI420(src_frame,
-					   src_stride_frame,
-					   dst_y,
-					   dst_stride_y,
-					   dst_u,
-					   dst_stride_u,
-					   dst_v,
-					   dst_stride_v,
-					   width,
-					   height);
+		// TODO - better to initialize function pointer once ?
+
+		int err;
+		if (gc->global_hook_info->format == DXGI_FORMAT_R8G8B8A8_UNORM) {
+			err = libyuv::ABGRToI420(src_frame,
+				src_stride_frame,
+				dst_y,
+				dst_stride_y,
+				dst_u,
+				dst_stride_u,
+				dst_v,
+				dst_stride_v,
+				width,
+				height);
+		} else if (gc->global_hook_info->format == DXGI_FORMAT_B8G8R8A8_UNORM) {
+			err = libyuv::ARGBToI420(src_frame,
+				src_stride_frame,
+				dst_y,
+				dst_stride_y,
+				dst_u,
+				dst_stride_u,
+				dst_v,
+				dst_stride_v,
+				width,
+				height);
+		} else {
+			warn("Unknown DXGI FORMAT %d", gc->global_hook_info->format);
+		}
 		if (err) {
 			warn("yuv conversion failed");
 		}
