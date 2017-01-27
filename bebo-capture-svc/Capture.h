@@ -108,6 +108,7 @@ protected:
 	bool m_bCaptureMouse;
 	volatile bool active;
 	//int m_iScreenBitDepth;
+	bool m_bCaptureAntiCheat;
 
 	float GetFps();
 

@@ -147,6 +147,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 		wsprintfW(m_pCaptureWindowName, L"%S", data);
 	}
 
+	m_bCaptureAntiCheat = read_config_setting(TEXT("CaptureAntiCheat"), 0, true) == 1;
+
 	m_iStretchToThisConfigWidth = read_config_setting(TEXT("stretch_to_width"), 0, false);
 	m_iStretchToThisConfigHeight = read_config_setting(TEXT("stretch_to_height"), 0, false);
 	m_iStretchMode = read_config_setting(TEXT("stretch_mode_high_quality_if_1"), 0, true); // guess it's either stretch mode 0 or 1
@@ -223,11 +225,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			config->scale_cx = m_iCaptureConfigWidth;
 			config->scale_cy = m_iCaptureConfigHeight;
 			config->force_scaling = 1;
-#if 0
-			config->scale_cx = m_iCaptureConfigHeight;
-			config->scale_cy = m_iCaptureConfigWidth;
-			config->force_scaling = 1;
-#endif
+			config->anticheat_hook = m_bCaptureAntiCheat;
 
 			game_context = hook(&game_context, m_pCaptureWindowName, config);
 			if (!isReady(&game_context)) {
