@@ -247,7 +247,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			starting = false;
 			//LocalOutput("Got Frame");
 		} else {
-			Sleep(1000/120);
+			Sleep(m_rtFrameLength / 20000);
 		}
 	}
 
