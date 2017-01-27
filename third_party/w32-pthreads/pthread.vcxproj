@@ -126,55 +126,55 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IntDir>${ProjectDir)$(Platform)\$(Configuration)\</IntDir>
+    <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\</IntDir>
     <LinkIncremental>true</LinkIncremental>
-    <TargetName>pthreadVC2</TargetName>
+    <TargetName>pthreadVC2$(PlatformArchitecture)</TargetName>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
     <TargetExt>.DLL</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">
-    <IntDir>${ProjectDir)$(Platform)\$(Configuration)\</IntDir>
+    <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\</IntDir>
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
-    <TargetName>pthreadVC2</TargetName>
+    <TargetName>pthreadVC2$(PlatformArchitecture)</TargetName>
     <TargetExt>.DLL</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IntDir>${ProjectDir)$(Platform)\$(Configuration)\</IntDir>
+    <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\</IntDir>
     <LinkIncremental>true</LinkIncremental>
-    <TargetName>pthreadVC2</TargetName>
+    <TargetName>pthreadVC2$(PlatformArchitecture)</TargetName>
     <TargetExt>.DLL</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|x64'">
-    <IntDir>${ProjectDir)$(Platform)\$(Configuration)\</IntDir>
+    <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\</IntDir>
     <LinkIncremental>true</LinkIncremental>
-    <TargetName>pthreadVC2</TargetName>
+    <TargetName>pthreadVC2$(PlatformArchitecture)</TargetName>
     <TargetExt>.DLL</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IntDir>${ProjectDir)$(Platform)\$(Configuration)\</IntDir>
+    <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\</IntDir>
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
-    <TargetName>pthreadVC2</TargetName>
+    <TargetName>pthreadVC2$(PlatformArchitecture)</TargetName>
     <TargetExt>.DLL</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'">
-    <IntDir>${ProjectDir)$(Platform)\$(Configuration)\</IntDir>
+    <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\</IntDir>
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
-    <TargetName>pthreadVC2</TargetName>
+    <TargetName>pthreadVC2$(PlatformArchitecture)</TargetName>
     <TargetExt>.DLL</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IntDir>${ProjectDir)$(Platform)\$(Configuration)\</IntDir>
+    <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\</IntDir>
     <LinkIncremental>true</LinkIncremental>
-    <TargetName>pthreadVC2</TargetName>
+    <TargetName>pthreadVC2$(PlatformArchitecture)</TargetName>
     <TargetExt>.DLL</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Static|x64'">
-    <IntDir>${ProjectDir)$(Platform)\$(Configuration)\</IntDir>
+    <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\</IntDir>
     <LinkIncremental>true</LinkIncremental>
-    <TargetName>pthreadVC2</TargetName>
+    <TargetName>pthreadVC2$(PlatformArchitecture)</TargetName>
     <TargetExt>.DLL</TargetExt>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
