@@ -1024,6 +1024,7 @@ void * hook(void **data, LPCWSTR windowName, game_capture_config *config)
 {
 	struct game_capture *gc = (game_capture *) *data;
 	if (gc == NULL) {
+		// FIXME log out captured game info DebugBreak();
 		HWND hwnd = FindWindow(NULL, windowName);
 		LocalOutput("hooking: %X", hwnd);
 		gc = game_capture_create(config);
@@ -1332,8 +1333,12 @@ static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 		uint8* dst_v = dst_u + ((width * height) >> 2);
 		int dst_stride_v = dst_stride_u;
 
-		// TODO - better to initialize function pointer once ?
+		if (gc->global_hook_info->flip) {
+			height = -height;
+		}
 
+		// TODO - better to initialize function pointer once ?
+		//DebugBreak();
 		int err = NULL;
 		if (gc->global_hook_info->format == DXGI_FORMAT_R8G8B8A8_UNORM) {
 			// Overwatch
@@ -1349,6 +1354,7 @@ static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 				height);
 		} else if (gc->global_hook_info->format == DXGI_FORMAT_B8G8R8A8_UNORM) {
 			// Hearthstone
+			// opengl / minecraft (javaw.exe)
 			err = libyuv::ARGBToI420(src_frame,
 				src_stride_frame,
 				dst_y,
