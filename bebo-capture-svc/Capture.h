@@ -89,6 +89,7 @@ protected:
 	int m_iCaptureConfigWidth;
 	int m_iCaptureConfigHeight;
 	LPWSTR m_pCaptureWindowName;
+	LPWSTR m_pCaptureWindowClassName;
 
 	HANDLE init_hooks_thread;
 

@@ -1020,13 +1020,25 @@ boolean isReady(void ** data) {
 	return  gc->active && ! gc->retrying;
 }
 
-void * hook(void **data, LPCWSTR windowName, game_capture_config *config)
+void * hook(void **data, LPCWSTR windowClassName, LPCWSTR windowName, game_capture_config *config)
 {
 	struct game_capture *gc = (game_capture *) *data;
 	if (gc == NULL) {
 		// FIXME log out captured game info DebugBreak();
-		HWND hwnd = FindWindow(NULL, windowName);
-		LocalOutput("hooking: %X", hwnd);
+//		DebugBreak();
+		HWND hwnd = NULL;
+		if (windowClassName != NULL && lstrlenW(windowClassName) > 0) {
+			hwnd = FindWindowW(windowClassName, windowName);
+		}
+		if (hwnd == NULL && windowClassName != NULL && lstrlenW(windowClassName) > 0) {
+			char asciiName[1024];
+			wsprintfA(asciiName, "%S", windowClassName);
+			hwnd = FindWindowA(asciiName, NULL);
+		}
+		if (hwnd == NULL) {
+			hwnd = FindWindow(NULL, windowName);
+		}
+		info("hooking: %X, %S, %S", hwnd, windowClassName, windowName);
 		gc = game_capture_create(config);
 		struct dstr * klass = &gc->klass;
 		get_window_class(klass, hwnd);

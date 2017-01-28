@@ -52,7 +52,9 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 		hRawBitmap(NULL),
 		m_bUseCaptureBlt(false),
 		previousFrameEndTime(0),
-		active(false)
+		active(false),
+		m_pCaptureWindowName(NULL),
+		m_pCaptureWindowClassName(NULL)
 {
 	// Get the device context of the main display, just to get some metrics for it...
 	globalStart = GetTickCount();
@@ -141,10 +143,11 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	if (RegGetBeboSZ(TEXT("CaptureWindowName"), data, &size) == S_OK) {
 		m_pCaptureWindowName = (WCHAR *) malloc(size*2);
 		wsprintfW(m_pCaptureWindowName, L"%s", data);
-	} else {
-		WCHAR * default = L"Overwatch";
-		m_pCaptureWindowName = (WCHAR *) malloc((wcslen(default)+1)*2);
-		wsprintfW(m_pCaptureWindowName, L"%S", data);
+	}
+	size = 1024;
+	if (RegGetBeboSZ(TEXT("CaptureWindowClassName"), data, &size) == S_OK) {
+		m_pCaptureWindowClassName = (WCHAR *)malloc(size * 2);
+		wsprintfW(m_pCaptureWindowClassName, L"%s", data);
 	}
 
 	m_bCaptureAntiCheat = read_config_setting(TEXT("CaptureAntiCheat"), 0, true) == 1;
@@ -227,7 +230,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			config->force_scaling = 1;
 			config->anticheat_hook = m_bCaptureAntiCheat;
 
-			game_context = hook(&game_context, m_pCaptureWindowName, config);
+			game_context = hook(&game_context, m_pCaptureWindowClassName, m_pCaptureWindowName, config);
 			if (!isReady(&game_context)) {
 				Sleep(100);
 			}

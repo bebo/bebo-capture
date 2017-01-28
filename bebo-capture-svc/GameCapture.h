@@ -24,6 +24,6 @@ struct game_capture_config {
 
 
 boolean isReady(void ** data);
-void * hook(void ** data, LPCWSTR windowName, game_capture_config *config);
+void * hook(void **data, LPCWSTR windowClassName, LPCWSTR windowName, game_capture_config *config);
 boolean get_game_frame(void ** data, float seconds, IMediaSample *pSample);
 boolean stop_game_capture(void ** data);
