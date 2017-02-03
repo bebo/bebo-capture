@@ -1506,6 +1506,7 @@ boolean get_game_frame(void **data, float seconds, IMediaSample *pSample) {
 
 	if (gc->hook_ready && object_signalled(gc->hook_ready)) {
 		debug("capture initializing!");
+		gc->copy_texture = NULL;  // Don't copy textures if hook has been freed
 		enum capture_result result = init_capture_data(gc);
 
 		if (result == CAPTURE_SUCCESS)
@@ -1513,6 +1514,7 @@ boolean get_game_frame(void **data, float seconds, IMediaSample *pSample) {
 		else
 			debug("init_capture_data failed");
 
+// FIXME: this is odd that we commented this out:
 //		if (result != CAPTURE_RETRY && !gc->capturing) {
 //			gc->retry_interval = ERROR_RETRY_INTERVAL;
 //			stop_capture(gc);
@@ -1528,7 +1530,10 @@ boolean get_game_frame(void **data, float seconds, IMediaSample *pSample) {
 			     "terminating capture");
 			stop_capture(gc);
 		} else {
-			//		debug("Ready To Capture");
+			if (gc->shmem_data == NULL) {
+				debug("shmem_data == NULL");
+				return false;
+			}
 			if (gc->copy_texture) {
 				gc->copy_texture(gc, pSample);
 				return true;
