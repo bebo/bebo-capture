@@ -26,7 +26,8 @@ void crashHandler(int signal_number)
     fatal_stream << "\n\n***** FATAL TRIGGER RECEIVED ******* " << std::endl;
     fatal_stream << "\n***** RETHROWING SIGNAL " << signalName(signal_number) << "(" << signal_number << ")" << std::endl;
 
-    FatalMessage fatal_message(fatal_stream.str(),FatalMessage::kReasonOS_FATAL_SIGNAL, signal_number);
+    LogEntry entry = {fatal_stream.str(), systemtime_now()};
+    FatalMessage fatal_message(entry, FatalMessage::kReasonOS_FATAL_SIGNAL, signal_number);
     FatalTrigger trigger(fatal_message);  std::ostringstream oss;
     std::cerr << fatal_message.message_.msg_ << std::endl << std::flush;
 } // scope exit - message sent to LogWorker, wait to die...
