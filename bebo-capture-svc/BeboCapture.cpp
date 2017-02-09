@@ -4,12 +4,7 @@
 #include "combase.h"
 
 
-#include "DibHelper.h"
-#define do_log(level, format, ...) \
-	LocalOutput("[game-capture: '%s'] " format, "test", ##__VA_ARGS__)
-#define warn(format, ...)  do_log(LOG_WARNING, format, ##__VA_ARGS__)
-#define info(format, ...)  do_log(LOG_INFO,    format, ##__VA_ARGS__)
-#define debug(format, ...) do_log(LOG_DEBUG,   format, ##__VA_ARGS__)
+#include "Logging.h"
 
 HRESULT CBeboCapture::SetTarget(long size, unsigned char * targetName) {
 	info("setTargetName %s", targetName);

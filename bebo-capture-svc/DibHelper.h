@@ -7,10 +7,7 @@
 //------------------------------------------------------------------------------
 
 
-#define HDIB HANDLE
-
-void LocalOutput(const char *str, ...);
-void LocalOutput(const wchar_t *str, ...);
+#define HDIB HANDLE	
 
 /* DIB macros */
 #define IS_WIN30_DIB(lpbi)  ((*(LPDWORD)(lpbi)) == sizeof(BITMAPINFOHEADER))

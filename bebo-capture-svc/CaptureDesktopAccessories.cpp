@@ -3,14 +3,9 @@
 #include "Capture.h"
 #include "CaptureGuids.h"
 #include "DibHelper.h"
+#include "Logging.h"
 
 #include <wmsdkidl.h>
-
-#define do_log(level, format, ...) \
-	LocalOutput("[game-capture: '%s'] " format, "test", ##__VA_ARGS__)
-#define warn(format, ...)  do_log(LOG_WARNING, format, ##__VA_ARGS__)
-#define info(format, ...)  do_log(LOG_INFO,    format, ##__VA_ARGS__)
-#define debug(format, ...) do_log(LOG_DEBUG,   format, ##__VA_ARGS__)
 
 //
 // CheckMediaType
@@ -141,7 +136,7 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 				     //ASSERT_RAISE(!m_bDeDupe); // not compatible with this yet // can't assert here or skype tries this, and, if m_bDeDupe is on, it raises, and kills skype :(
 					//return E_INVALIDARG;
 					m_bDeDupe = false; // just do this working around for now <sigh> so that skype will still work instead of silently fail while others work...
-					LocalOutput("warning: ignoring m_bDeDupe since it doesn't work with i420 type input, which was requested..."); 
+					warn("warning: ignoring m_bDeDupe since it doesn't work with i420 type input, which was requested..."); 
 				}
                 hr = S_OK;
 			    m_bConvertToI420 = true;
@@ -160,7 +155,7 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
                 hr = E_INVALIDARG;
                 break;
         }
-		LocalOutput("bitcount requested/negotiated: %d\n", pvi->bmiHeader.biBitCount);
+		info("bitcount requested/negotiated: %d\n", pvi->bmiHeader.biBitCount);
     
       // The frame rate at which your filter should produce data is determined by the AvgTimePerFrame field of VIDEOINFOHEADER
 	  if(pvi->AvgTimePerFrame) // or should Set Format accept this? hmm...
@@ -583,7 +578,7 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
       pmt->SetSubtype(&SubTypeGUID);
 	}
 
-	LocalOutput("getMedia"); // FIXME - add meaningful output
+	info("getMedia"); // FIXME - add meaningful output
 
     return NOERROR;
 

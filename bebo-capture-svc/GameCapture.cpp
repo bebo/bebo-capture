@@ -1,5 +1,6 @@
 #include "GameCapture.h"
 
+#include "Logging.h"
 #include <dshow.h>
 #include <strsafe.h>
 #include <tchar.h>
@@ -19,15 +20,11 @@
 #include "ipc-util/pipe.h"
 #include "libyuv/convert.h"
 
-#define do_log(level, format, ...) \
-	LocalOutput("[game-capture: '%s'] " format, "test", ##__VA_ARGS__)
-#define warn(format, ...)  do_log(LOG_WARNING, format, ##__VA_ARGS__)
-#define info(format, ...)  do_log(LOG_INFO,    format, ##__VA_ARGS__)
-#define debug(format, ...) do_log(LOG_DEBUG,   format, ##__VA_ARGS__)
+
 
 #define STOP_BEING_BAD \
-	"  This is most likely due to security software. Please make sure " \
-        "that the Bebo Capture installation folder is excluded/ignored in the "      \
+	    "This is most likely due to security software" \
+        "that the Bebo Capture installation folder is excluded/ignored in the " \
         "settings of the security software you are using."
 
 extern "C" {

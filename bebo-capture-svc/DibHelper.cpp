@@ -10,6 +10,7 @@
 #include <windows.h>
 
 #include "dibhelper.h"
+#include "Logging.h"
 
 #include <stdio.h>
 #include <assert.h>
@@ -18,49 +19,8 @@
 #include <dwmapi.h>
 
 
-#define _DEBUG = 1;
 
 extern int show_performance;
-
-void logToFile(char *log_this) {
-    FILE *f;
-	fopen_s(&f, "c:\\temp\\bebo-capture.log", "a"); // this call fails if using the filter within flash player...
-	fprintf(f, log_this);
-	fclose(f);
-}
-
-// my very own debug output method...
-void LocalOutput(const char *str, ...)
-{
-#ifdef _DEBUG  // avoid all in release mode...
-  char buf[2048];
-  va_list ptr;
-  va_start(ptr, str);
-  vsprintf_s(buf,str,ptr);
-  OutputDebugStringA(buf);
-  OutputDebugStringA("\n");
-  //logToFile(buf); 
-  //logToFile("\n");
-  //printf("%s\n", buf);
-  va_end(ptr);
-#endif
-}
-
-void LocalOutput(const wchar_t *str, ...) 
-{
-#ifdef _DEBUG  // avoid in release mode...takes like 1ms each message!
-  wchar_t buf[2048];
-  va_list ptr;
-  va_start(ptr, str);
-  vswprintf_s(buf,str,ptr);
-  OutputDebugString(buf);
-  OutputDebugString(L"\n");
-  va_end(ptr);
-  // also works: OutputDebugString(L"yo ho2");
-  //logToFile(buf); 
-  //logToFile("\n");
-#endif
-}
 
 long double PCFreqMillis = 0.0;
 
@@ -130,7 +90,7 @@ void AddMouse(HDC hMemDC, LPRECT lpRect, HDC hScrDC, HWND hwnd) {
 	
 	DrawIcon(hMemDC, p.x-lpRect->left, p.y-lpRect->top, hcur); // 0.042ms
 	if(show_performance)
-	  LocalOutput("add mouse took %.02f ms", GetCounterSinceStartMillis(start)); // sum takes around 0.125 ms
+	  debug("add mouse took %.02f ms", GetCounterSinceStartMillis(start)); // sum takes around 0.125 ms
 }
 
 // partially from http://cboard.cprogramming.com/windows-programming/44278-regqueryvalueex.html
@@ -191,6 +151,7 @@ HRESULT RegGetBeboSZ(LPCTSTR szValueName, LPBYTE data, LPDWORD datasize) {
 		// key doesn't exist in the reg at all...
 		return E_INVALIDARG;
 	}
+	info("Registry key: %S value: %S (REG_SZ)", szValueName, data);
 	return NOERROR;
 }
 
@@ -223,10 +184,10 @@ boolean is_config_set_to_1(LPCTSTR szValueName) {
             writeMessageBox(buffer);
 		    ASSERT_RAISE(false); // non awesome duplication here...
 	  }
+	  info("Registry key: %S value: %d (DWORD)", szValueName, dwVal);
       return dwVal;
 	}
   }
- 
 }
 
 void writeMessageBox(LPCWSTR lpText) {

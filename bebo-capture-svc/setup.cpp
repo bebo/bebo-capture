@@ -6,21 +6,15 @@
 // Copyright (c)  Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------------------------
 
+#include <Windows.h>
 #include <streams.h>
 #include <initguid.h>
-
+#include "Logging.h"
 #include "CaptureGuids.h"
 #include "BeboCaptureGuids.h"
 #include "Capture.h"
 #include "BeboCapture.h"
 #include "DibHelper.h"
-//#include "BeboCaptureFactory.h"
-
-#define do_log(level, format, ...) \
-	LocalOutput("[game-capture: '%s'] " format, "test", ##__VA_ARGS__)
-#define warn(format, ...)  do_log(LOG_WARNING, format, ##__VA_ARGS__)
-#define info(format, ...)  do_log(LOG_INFO,    format, ##__VA_ARGS__)
-#define debug(format, ...) do_log(LOG_DEBUG,   format, ##__VA_ARGS__)
 
 #define     BeboCaptureApiProgId L"Bebo.GameCaptureApi"
 
@@ -111,12 +105,12 @@ int g_cTemplates = sizeof(g_Templates) / sizeof(g_Templates[0]);
 
 #define CreateComObject(clsid, iid, var) CoCreateInstance( clsid, NULL, CLSCTX_INPROC_SERVER, iid, (void **)&var);
 
-STDAPI AMovieSetupRegisterServer( CLSID   clsServer, LPCWSTR szDescription, LPCWSTR szFileName, LPCWSTR szThreadingModel = L"Both", LPCWSTR szServerType     = L"InprocServer32" );
+STDAPI AMovieSetupRegisterServer(CLSID   clsServer, LPCWSTR szDescription, LPCWSTR szFileName, LPCWSTR szThreadingModel = L"Both", LPCWSTR szServerType = L"InprocServer32");
+
 STDAPI AMovieSetupUnregisterServer( CLSID clsServer );
 
 STDAPI RegisterFilters( BOOL bRegister )
 {
-	info("line: %d", __LINE__);
     HRESULT hr = NOERROR;
     WCHAR achFileName[MAX_PATH];
     char achTemp[MAX_PATH];
@@ -124,7 +118,6 @@ STDAPI RegisterFilters( BOOL bRegister )
 
     if( 0 == GetModuleFileNameA(g_hInst, achTemp, sizeof(achTemp))) 
         return AmHresultFromWin32(GetLastError());
-	info("line: %d", __LINE__);
 
     MultiByteToWideChar(CP_ACP, 0L, achTemp, lstrlenA(achTemp) + 1, 
                        achFileName, NUMELMS(achFileName));
@@ -132,19 +125,16 @@ STDAPI RegisterFilters( BOOL bRegister )
     hr = CoInitialize(0);
     if(bRegister)
     { 
-		info("line: %d", __LINE__);
 		info("achFileName: %S", achFileName);
         hr = AMovieSetupRegisterServer(CLSID_PushSourceDesktop, L"bebo-game-capture", achFileName, L"Both", L"InprocServer32");
     }
 
     if( SUCCEEDED(hr) )
     {
-		info("line: %d", __LINE__);
         IFilterMapper2 *fm = 0;
         hr = CreateComObject( CLSID_FilterMapper2, IID_IFilterMapper2, fm );
         if( SUCCEEDED(hr) )
         {
-		info("line: %d", __LINE__);
             if(bRegister)
             {
                 IMoniker *pMoniker = 0;
@@ -380,15 +370,15 @@ STDAPI RegisterApi() {
 
 STDAPI DllRegisterServer()
 {
+	setupLogging();
 	// FIXME until we do COM API:
-	RegisterApi();
-	info("registerApi done");
+	// RegisterApi();
     return RegisterFilters(TRUE); // && AMovieDllRegisterServer2( TRUE );
 }
 
 STDAPI DllUnregisterServer()
 {
-	// TODO unregister API
+	setupLogging();
     return RegisterFilters(FALSE); // && AMovieDllRegisterServer2( FALSE );
 }
 
@@ -398,13 +388,14 @@ STDAPI DllUnregisterServer()
 //
 extern "C" BOOL WINAPI DllEntryPoint(HINSTANCE, ULONG, LPVOID);
 
-BOOL APIENTRY DllMain(HANDLE hModule, 
-                      DWORD  dwReason, 
-                      LPVOID lpReserved)
+
+BOOL APIENTRY DllMain(HANDLE hModule,
+	DWORD  dwReason,
+	LPVOID lpReserved)
 {
-	info("DllEntryPoint %d", dwReason);
 	if (dwReason == DLL_PROCESS_ATTACH) {
 		g_hModule = (HMODULE)hModule;
 	}
+
 	return DllEntryPoint((HINSTANCE)(hModule), dwReason, lpReserved);
 }

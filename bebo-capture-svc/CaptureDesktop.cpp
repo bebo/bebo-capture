@@ -6,12 +6,8 @@
 #include "DibHelper.h"
 #include <wmsdkidl.h>
 #include "GameCapture.h"
+#include "Logging.h"
 
-#define do_log(level, format, ...) \
-	LocalOutput("[game-capture: '%s'] " format, "test", ##__VA_ARGS__)
-#define warn(format, ...)  do_log(LOG_WARNING, format, ##__VA_ARGS__)
-#define info(format, ...)  do_log(LOG_INFO,    format, ##__VA_ARGS__)
-#define debug(format, ...) do_log(LOG_DEBUG,   format, ##__VA_ARGS__)
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
 
 extern "C" {
@@ -63,23 +59,21 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 
     init_hooks_thread = CreateThread(NULL, 0, init_hooks, NULL, 0, NULL);
 
-	//DebugBreak();
-
 	m_iHwndToTrack = (HWND) read_config_setting(TEXT("hwnd_to_track"), NULL, false);
 	if(m_iHwndToTrack) {
-	  LocalOutput("using specified hwnd no decoration: %d", m_iHwndToTrack);
+	  info("using specified hwnd no decoration: %d", m_iHwndToTrack);
 	  hScrDc = GetDC(m_iHwndToTrack); // using GetDC here seemingly allows you to capture "just a window" without decoration
 	  m_bHwndTrackDecoration = false;
 	} else {
       m_iHwndToTrack = (HWND) read_config_setting(TEXT("hwnd_to_track_with_window_decoration"), NULL, false);
 	  if(m_iHwndToTrack) {
-	    LocalOutput("using specified hwnd with decoration: %d", m_iHwndToTrack);
+	    info("using specified hwnd with decoration: %d", m_iHwndToTrack);
 	    hScrDc = GetWindowDC(m_iHwndToTrack); 
 	    m_bHwndTrackDecoration = true;
 	  } else {
 		int useForeGroundWindow = read_config_setting(TEXT("capture_foreground_window_if_1"), 0, true);
 	    if(useForeGroundWindow) {
-		  LocalOutput("using foreground window %d", GetForegroundWindow());
+		  info("using foreground window %d", GetForegroundWindow());
           hScrDc = GetDC(GetForegroundWindow());
 	    } else {
 		  // the default, just capture desktop
@@ -103,7 +97,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	if(!m_iHwndToTrack) {
       reReadCurrentStartXY(0);
 	} else {
-	  LocalOutput("ignoring startx, starty since hwnd was specified");
+	  info("ignoring startx, starty since hwnd was specified");
 	}
 
 	int config_width = read_config_setting(TEXT("CaptureWidth"), 1280, true);
@@ -181,8 +175,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 
 	// warmup the debugging message system
 	__int64 measureDebugOutputSpeed = StartCounter();
-	LocalOutput(out);
-	LocalOutput("writing a large-ish debug itself took: %.02Lf ms", GetCounterSinceStartMillis(measureDebugOutputSpeed));
+	LOG(INFO) << out;
+	info("writing a large-ish debug itself took: %.02Lf ms", GetCounterSinceStartMillis(measureDebugOutputSpeed));
 	set_config_string_setting(L"last_init_config_was", out);
 }
 
@@ -242,7 +236,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 		if (!game_context) {
 			gotFrame = false;
 			starting = false;
-			LocalOutput("Capture Ended");
+			info("Capture Ended");
 		}
 		if (gotFrame) {
 			starting = false;
@@ -263,7 +257,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	CSourceStream::m_pFilter->StreamTime(now);
 	if((now > 0) && (now < previousFrameEndTime)) { // now > 0 to accomodate for if there is no reference graph clock at all...also at boot strap time to ignore it XXXX can negatives even ever happen anymore though?
 		while(now < previousFrameEndTime) { // guarantees monotonicity too :P
-		  LocalOutput("sleeping because %llu < %llu", now, previousFrameEndTime);
+		  info("sleeping because %llu < %llu", now, previousFrameEndTime);
 		  Sleep(1);
           CSourceStream::m_pFilter->StreamTime(now);
 		}
@@ -274,10 +268,11 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	} else {
 		// if there's no reference clock, it will "always" think it missed a frame
 	  if(show_performance) {
-		  if(now == 0) 
-			  LocalOutput("probable none reference clock, streaming fastly");
-		  else
-	          LocalOutput("it missed a frame--can't keep up %d %llu %llu", countMissed++, now, previousFrameEndTime); // we don't miss time typically I don't think, unless de-dupe is turned on, or aero, or slow computer, buffering problems downstream, etc.
+		  if (now == 0) {
+			  info("probable none reference clock, streaming fastly");
+		  } else {
+			  info("it missed a frame--can't keep up %d %llu %llu", countMissed++, now, previousFrameEndTime); // we don't miss time typically I don't think, unless de-dupe is turned on, or aero, or slow computer, buffering problems downstream, etc.
+		  }
 	  }
 	  // have to add a bit here, or it will always be "it missed a frame" for the next round...forever!
 	  endFrame = now + m_rtFrameLength;
@@ -313,7 +308,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 		swprintf(out, L"done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed %d", 
 			m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0*1000/millisThisRoundTook,
 			/* average */ 1.0*1000*m_iFrameNumber/sumMillisTook, 1.0*1000/fastestRoundMillis, GetFps(), countMissed);
-		LocalOutput(out);
+		LOG(INFO) << out;
 		set_config_string_setting(L"frame_stats", out);
 	#endif
 	return S_OK;
@@ -475,8 +470,8 @@ void CPushPinDesktop::reReadCurrentStartXY(int isReRead) {
 	if(show_performance) {
       wchar_t out[1000];
 	  swprintf(out, 1000, L"new screen pos from reg: %d %d\n", config_start_x, config_start_y);
-	  LocalOutput("[re]readCurrentPosition (including swprintf call) took %.02fms", GetCounterSinceStartMillis(start)); // takes 0.42ms (2000 fps)
-	  LocalOutput(out);
+	  info("[re]readCurrentPosition (including swprintf call) took %.02fms", GetCounterSinceStartMillis(start)); // takes 0.42ms (2000 fps)
+	  LOG(INFO) << out;
 	}
 }
 
@@ -633,7 +628,7 @@ void CPushPinDesktop::doJustBitBltOrScaling(HDC hMemDC, int nWidth, int nHeight,
 	}
 
 	if(show_performance)
-	  LocalOutput("%s took %.02f ms", notNeedStretching ? "bitblt" : "stretchblt", GetCounterSinceStartMillis(start));
+	  info("%s took %.02f ms", notNeedStretching ? "bitblt" : "stretchblt", GetCounterSinceStartMillis(start));
 
 }
 
@@ -673,7 +668,7 @@ void CPushPinDesktop::doDIBits(HDC hScrDC, HBITMAP hRawBitmap, int nHeightScanLi
     GetDIBits(hScrDC, hRawBitmap, 0, nHeightScanLines, pData, pHeader, DIB_RGB_COLORS);  // just copies raw bits to pData, I guess, from an HBITMAP handle. "like" GetObject, but also does conversions [?]
 	
 	if(show_performance)
-	  LocalOutput("doDiBits took %.02fms", GetCounterSinceStartMillis(start)); // took 1.1/3.8ms total, so this brings us down to 80fps compared to max 251...but for larger things might make more difference...
+	  info("doDiBits took %.02fms", GetCounterSinceStartMillis(start)); // took 1.1/3.8ms total, so this brings us down to 80fps compared to max 251...but for larger things might make more difference...
 }
 
 
@@ -785,7 +780,7 @@ HRESULT CPushPinDesktop::DecideBufferSize(IMemAllocator *pAlloc,
 
 
 HRESULT CPushPinDesktop::OnThreadCreate() {
-	LocalOutput("CPushPinDesktop OnThreadCreate");
+	info("CPushPinDesktop OnThreadCreate");
 	previousFrameEndTime = 0; // reset <sigh> dunno if this helps FME which sometimes had inconsistencies, or not
 	m_iFrameNumber = 0;
 	return S_OK;

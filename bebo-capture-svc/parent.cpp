@@ -2,6 +2,7 @@
 #include "Capture.h"
 #include "CaptureGuids.h"
 #include "DibHelper.h"
+#include "Logging.h"
 
 /**********************************************
  *
@@ -37,6 +38,7 @@ CGameCapture::~CGameCapture() // parent destructor
 CUnknown * WINAPI CGameCapture::CreateInstance(IUnknown *pUnk, HRESULT *phr)
 {
 	// the first entry point
+	setupLogging();
     CGameCapture *pNewFilter = new CGameCapture(pUnk, phr);
 
 	if (phr)
