@@ -1,6 +1,10 @@
 #include "Logging.h"
 #include "windows.h"
 
+#ifndef RELEASE
+#define RELEASE "v0.1.0"
+#endif
+
 extern HRESULT RegGetBeboSZ(LPCTSTR szValueName, LPBYTE data, LPDWORD datasize);
 
 std::unique_ptr<g2LogWorker> logworker = NULL;
@@ -17,5 +21,6 @@ void setupLogging() {
 		std::unique_ptr<g2LogWorker> g2log(new g2LogWorker("sarlacc", c_filename));
 		logworker = std::move(g2log);
 		g2::initializeLogging(&*logworker);
+		info("Version: %s", RELEASE);
 	}
 }
