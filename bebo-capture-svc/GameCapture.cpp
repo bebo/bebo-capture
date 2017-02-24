@@ -983,6 +983,7 @@ static void try_hook(struct game_capture *gc)
 	}
 
 	if (gc->next_window) {
+		info("hooking: %X, %S, %S", gc->next_window, gc->config.title, gc->config.klass);
 		gc->thread_id = GetWindowThreadProcessId(gc->next_window,
 				&gc->process_id);
 

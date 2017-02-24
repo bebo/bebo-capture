@@ -3,7 +3,6 @@
 #include "IBeboCapture_i.c"
 #include "combase.h"
 
-
 #include "Logging.h"
 
 HRESULT CBeboCapture::SetTarget(long size, unsigned char * targetName) {

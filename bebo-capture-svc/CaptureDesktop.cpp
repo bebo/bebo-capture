@@ -16,7 +16,7 @@ extern "C" {
 
 
 DWORD globalStart; // for some debug performance benchmarking
-int countMissed = 0;
+long countMissed = 0;
 long fastestRoundMillis = 1000000; // random big number
 long sumMillisTook = 0;
 
@@ -51,6 +51,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 		active(false),
 		m_pCaptureWindowName(NULL),
 		m_pCaptureWindowClassName(NULL)
+	info("CPushPinDesktop");
 {
 	// Get the device context of the main display, just to get some metrics for it...
 	globalStart = GetTickCount();
@@ -169,21 +170,14 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	}
 	m_millisToSleepBeforePollForChanges = read_config_setting(TEXT("millis_to_sleep_between_poll_for_dedupe_changes"), 10, true);
 
-    wchar_t out[10000];
-	swprintf(out, 10000, L"default/from reg read config as: %dx%d -> %dx%d (%d top %d bottom %d l %d r) %dfps, dedupe? %d, millis between dedupe polling %d, m_bReReadRegistry? %d hwnd:%d \n", 
+	LOGF(INFO, "default/from reg read config as: %dx%d -> %dx%d (%d top %d bottom %d l %d r) %dfps, dedupe? %d, millis between dedupe polling %d, m_bReReadRegistry? %d hwnd:%d \n", 
 	  m_iCaptureConfigHeight, m_iCaptureConfigWidth, getCaptureDesiredFinalHeight(), getCaptureDesiredFinalWidth(), m_rScreen.top, m_rScreen.bottom, m_rScreen.left, m_rScreen.right, config_max_fps, m_bDeDupe, m_millisToSleepBeforePollForChanges, m_bReReadRegistry, m_iHwndToTrack);
-
-	// warmup the debugging message system
-	__int64 measureDebugOutputSpeed = StartCounter();
-	LOG(INFO) << out;
-	info("writing a large-ish debug itself took: %.02Lf ms", GetCounterSinceStartMillis(measureDebugOutputSpeed));
-	set_config_string_setting(L"last_init_config_was", out);
 }
 
-wchar_t out[1000];
+char out[1000];
+// FIXME :  move these
 bool ever_started = false;
 bool starting = false;
-void * game_context;
 
 
 HRESULT CPushPinDesktop::Inactive(void) {
@@ -240,7 +234,6 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 		}
 		if (gotFrame) {
 			starting = false;
-			//LocalOutput("Got Frame");
 		} else {
 			Sleep(m_rtFrameLength / 20000);
 		}
@@ -271,16 +264,22 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 		  if (now == 0) {
 			  info("probable none reference clock, streaming fastly");
 		  } else {
-			  info("it missed a frame--can't keep up %d %llu %llu", countMissed++, now, previousFrameEndTime); // we don't miss time typically I don't think, unless de-dupe is turned on, or aero, or slow computer, buffering problems downstream, etc.
+			  info("missed a frame can't keep up %d %d %.02f %llu %llu",
+				    m_iFrameNumber, countMissed++, (100.0L*countMissed / m_iFrameNumber),
+				    now, previousFrameEndTime); // we don't miss time typically I don't think, unless de-dupe is turned on, or aero, or slow computer, buffering problems downstream, etc.
 		  }
 	  }
 	  // have to add a bit here, or it will always be "it missed a frame" for the next round...forever!
 	  endFrame = now + m_rtFrameLength;
 	  // most of this stuff I just made up because it "sounded right"
 	  //LocalOutput("checking to see if I can catch up again now: %llu previous end: %llu subtr: %llu %i", now, previousFrameEndTime, previousFrameEndTime - m_rtFrameLength, previousFrameEndTime - m_rtFrameLength);
-	  if(now > (previousFrameEndTime - (long long) m_rtFrameLength)) { // do I even need a long long cast?
-		// let it pretend and try to catch up, it's not quite a frame behind
-        previousFrameEndTime = previousFrameEndTime + m_rtFrameLength;
+	  info("checking to see if I can catch up again now: %llu previous end: %llu subtr: %llu %i", now, previousFrameEndTime, previousFrameEndTime - m_rtFrameLength, previousFrameEndTime - m_rtFrameLength);
+	  if (((REFERENCE_TIME)now) < (previousFrameEndTime - m_rtFrameLength)) {
+		  // let it pretend and try to catch up, it's not quite a frame behind
+		  previousFrameEndTime = previousFrameEndTime + m_rtFrameLength;
+	  } else if ((REFERENCE_TIME)now > (previousFrameEndTime + m_rtFrameLength)) {
+		  info("resetting previousFrameEndTime %d, %d => %d", now, previousFrameEndTime, endFrame);
+		  previousFrameEndTime = endFrame;
 	  } else {
 		endFrame = now + m_rtFrameLength/2; // ?? seems to not hurt, at least...I guess
 		previousFrameEndTime = endFrame;
@@ -292,7 +291,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
     pSample->SetTime((REFERENCE_TIME *) &now, (REFERENCE_TIME *) &endFrame);
 	//pSample->SetMediaTime((REFERENCE_TIME *)&now, (REFERENCE_TIME *) &endFrame); 
-    //LocalOutput("timestamping video packet as %lld -> %lld", now, endFrame);
+    debug("timestamping video packet as %lld -> %lld", now, endFrame);
 
     m_iFrameNumber++;
 
@@ -302,15 +301,10 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	// only set discontinuous for the first...I think...
 	pSample->SetDiscontinuity(m_iFrameNumber <= 1);
 		
-	#ifdef _DEBUG
-		// the swprintf costs like 0.04ms (25000 fps LOL)
-		double m_fFpsSinceBeginningOfTime = ((double) m_iFrameNumber)/(GetTickCount() - globalStart)*1000;
-		swprintf(out, L"done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed %d", 
-			m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0*1000/millisThisRoundTook,
-			/* average */ 1.0*1000*m_iFrameNumber/sumMillisTook, 1.0*1000/fastestRoundMillis, GetFps(), countMissed);
-		LOG(INFO) << out;
-		set_config_string_setting(L"frame_stats", out);
-	#endif
+	double m_fFpsSinceBeginningOfTime = ((double) m_iFrameNumber)/(GetTickCount() - globalStart)*1000;
+	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed %d", 
+		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0*1000/millisThisRoundTook,
+		/* average */ 1.0*1000*m_iFrameNumber/sumMillisTook, 1.0*1000/fastestRoundMillis, GetFps(), countMissed);
 	return S_OK;
 }
 
@@ -468,10 +462,8 @@ void CPushPinDesktop::reReadCurrentStartXY(int isReRead) {
 	}
 
 	if(show_performance) {
-      wchar_t out[1000];
-	  swprintf(out, 1000, L"new screen pos from reg: %d %d\n", config_start_x, config_start_y);
+	  //swprintf(out, 1000, L"new screen pos from reg: %d %d\n", config_start_x, config_start_y);
 	  info("[re]readCurrentPosition (including swprintf call) took %.02fms", GetCounterSinceStartMillis(start)); // takes 0.42ms (2000 fps)
-	  LOG(INFO) << out;
 	}
 }
 
@@ -482,8 +474,7 @@ CPushPinDesktop::~CPushPinDesktop()
     // Release the device context stuff
 	::ReleaseDC(NULL, hScrDc);
     ::DeleteDC(hScrDc);
-    DbgLog((LOG_TRACE, 3, TEXT("Total no. Frames written %d"), m_iFrameNumber));
-	set_config_string_setting(L"last_run_performance", out);
+	LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out;
 
     if (hRawBitmap)
       DeleteObject(hRawBitmap); // don't need those bytes anymore -- I think we are supposed to delete just this and not hOldBitmap
