@@ -20,8 +20,6 @@
 HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 {
 	CAutoLock cAutoLock(m_pFilter->pStateLock());
-	info("CheckMediaType");
-
 	CheckPointer(pMediaType, E_POINTER);
 
 	const GUID Type = *(pMediaType->Type());
@@ -60,7 +58,6 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
         return E_INVALIDARG;
 	}
 
-
     if(    (SubType2 != MEDIASUBTYPE_RGB8) // these are all the same value? But maybe the pointers are different. Hmm.
         && (SubType2 != MEDIASUBTYPE_RGB565)
         && (SubType2 != MEDIASUBTYPE_RGB555)
@@ -95,23 +92,29 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 	if(m_bFormatAlreadySet) {
 		// then it must be the same as our current...see SetFormat msdn
 	    if(m_mt == *pMediaType) {
+			info("CheckMediaType - S_OK - format already set to th same type");
 			return S_OK;
 		} else {
-  		   return VFW_E_TYPE_NOT_ACCEPTED;
+			warn("CheckMediaType - VFW_E_TYPE_NOT_ACCEPTED format already set to different type");
+  		    return VFW_E_TYPE_NOT_ACCEPTED;
 		}
 	}
-
 
     // Don't accept formats with negative height, which would cause the desktop
     // image to be displayed upside down.
 	// also reject 0's, that would be weird.
-    if (pvi->bmiHeader.biHeight <= 0)
-        return E_INVALIDARG;
+	if (pvi->bmiHeader.biHeight <= 0) {
+		warn("CheckMediaType - E_INVALIDARG (height: %d)", pvi->bmiHeader.biHeight);
+		return E_INVALIDARG;
+	}
 
-    if (pvi->bmiHeader.biWidth <= 0)
-        return E_INVALIDARG;
+	if (pvi->bmiHeader.biWidth <= 0) {
+		warn("CheckMediaType - E_INVALIDARG (height: %d)", pvi->bmiHeader.biHeight);
+		return E_INVALIDARG;
+	}
 
-    return S_OK;  // This format is acceptable.
+	info("CheckMediaType - S_OK - This format is acceptable.");
+    return S_OK;
 
 } // CheckMediaType
 
