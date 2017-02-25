@@ -447,6 +447,93 @@ HRESULT CPushPinDesktop::Get(
     return S_OK;
 }
 
+void info_pmt(char* label, const AM_MEDIA_TYPE *pmtIn)
+{
+	char * temporalCompression = (pmtIn->bTemporalCompression) ? "Temporally compressed" : "Not temporally compressed";
+	char * fixedSampleSize = (pmtIn->bFixedSizeSamples) ? "Sample size" : "Variable size samples";
+	WCHAR * subtypeName = GetSubtypeName(&pmtIn->subtype);
+
+#if 0
+	char buffer[4096];
+	snprintf(buffer, 4096,
+		"%s - [%s] [%s]",
+		label,
+		temporalCompression,
+		fixedSampleSize);
+#endif
+
+//	char subTypeName[1024];
+//	snprintf(GetSubtypeName(&pmtIn->subtype)
+
+
+	info("%s - [%s] [%s:%d] [M:%s] [S:%s/%s]",
+		label,
+		temporalCompression,
+		fixedSampleSize,
+		pmtIn->lSampleSize,
+		GuidNames[pmtIn->majortype],
+		GuidNames[pmtIn->subtype],
+		"unknown"
+	);
+	return;
+#if 0
+
+    /* Dump the generic media types */
+
+
+    if (pmtIn->formattype == FORMAT_VideoInfo) {
+
+        VIDEOINFOHEADER *pVideoInfo = (VIDEOINFOHEADER *)pmtIn->pbFormat;
+
+        DisplayRECT(TEXT("Source rectangle"),pVideoInfo->rcSource);
+        DisplayRECT(TEXT("Target rectangle"),pVideoInfo->rcTarget);
+        DisplayBITMAPINFO(HEADER(pmtIn->pbFormat));
+
+    } if (pmtIn->formattype == FORMAT_VideoInfo2) {
+
+        VIDEOINFOHEADER2 *pVideoInfo2 = (VIDEOINFOHEADER2 *)pmtIn->pbFormat;
+
+        DisplayRECT(TEXT("Source rectangle"),pVideoInfo2->rcSource);
+        DisplayRECT(TEXT("Target rectangle"),pVideoInfo2->rcTarget);
+        DbgLog((LOG_TRACE, 5, TEXT("Aspect Ratio: %d:%d"),
+            pVideoInfo2->dwPictAspectRatioX,
+            pVideoInfo2->dwPictAspectRatioY));
+        DisplayBITMAPINFO(&pVideoInfo2->bmiHeader);
+
+    } else if (pmtIn->majortype == MEDIATYPE_Audio) {
+        DbgLog((LOG_TRACE,2,TEXT("     Format type %hs"),
+            GuidNames[pmtIn->formattype]));
+        DbgLog((LOG_TRACE,2,TEXT("     Subtype %hs"),
+            GuidNames[pmtIn->subtype]));
+
+        if ((pmtIn->subtype != MEDIASUBTYPE_MPEG1Packet)
+          && (pmtIn->cbFormat >= sizeof(PCMWAVEFORMAT)))
+        {
+            /* Dump the contents of the WAVEFORMATEX type-specific format structure */
+
+            WAVEFORMATEX *pwfx = (WAVEFORMATEX *) pmtIn->pbFormat;
+            DbgLog((LOG_TRACE,2,TEXT("wFormatTag %u"), pwfx->wFormatTag));
+            DbgLog((LOG_TRACE,2,TEXT("nChannels %u"), pwfx->nChannels));
+            DbgLog((LOG_TRACE,2,TEXT("nSamplesPerSec %lu"), pwfx->nSamplesPerSec));
+            DbgLog((LOG_TRACE,2,TEXT("nAvgBytesPerSec %lu"), pwfx->nAvgBytesPerSec));
+            DbgLog((LOG_TRACE,2,TEXT("nBlockAlign %u"), pwfx->nBlockAlign));
+            DbgLog((LOG_TRACE,2,TEXT("wBitsPerSample %u"), pwfx->wBitsPerSample));
+
+            /* PCM uses a WAVEFORMAT and does not have the extra size field */
+
+            if (pmtIn->cbFormat >= sizeof(WAVEFORMATEX)) {
+                DbgLog((LOG_TRACE,2,TEXT("cbSize %u"), pwfx->cbSize));
+            }
+        } else {
+        }
+
+    } else {
+        DbgLog((LOG_TRACE,2,TEXT("     Format type %hs"),
+            GuidNames[pmtIn->formattype]));
+    }
+#endif
+
+}
 
 enum FourCC { FOURCC_NONE = 0, FOURCC_I420 = 100, FOURCC_YUY2 = 101, FOURCC_RGB32 = 102 };// from http://www.conaito.com/docus/voip-video-evo-sdk-capi/group__videocapture.html
 //
@@ -608,7 +695,7 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
       pmt->SetSubtype(&SubTypeGUID);
 	}
 
-	info("getMedia"); // FIXME - add meaningful output
+	info_pmt("getMedia", pmt);
 
     return NOERROR;
 
