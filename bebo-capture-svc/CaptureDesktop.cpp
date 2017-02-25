@@ -50,9 +50,10 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 		previousFrameEndTime(0),
 		active(false),
 		m_pCaptureWindowName(NULL),
-		m_pCaptureWindowClassName(NULL)
-	info("CPushPinDesktop");
+		m_pCaptureWindowClassName(NULL),
+	    game_context(NULL)
 {
+	info("CPushPinDesktop");
 	// Get the device context of the main display, just to get some metrics for it...
 	globalStart = GetTickCount();
 	config = (struct game_capture_config*) malloc(sizeof game_capture_config);
@@ -250,7 +251,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	CSourceStream::m_pFilter->StreamTime(now);
 	if((now > 0) && (now < previousFrameEndTime)) { // now > 0 to accomodate for if there is no reference graph clock at all...also at boot strap time to ignore it XXXX can negatives even ever happen anymore though?
 		while(now < previousFrameEndTime) { // guarantees monotonicity too :P
-		  info("sleeping because %llu < %llu", now, previousFrameEndTime);
+		  debug("sleeping because %llu < %llu", now, previousFrameEndTime);
 		  Sleep(1);
           CSourceStream::m_pFilter->StreamTime(now);
 		}
@@ -273,7 +274,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	  endFrame = now + m_rtFrameLength;
 	  // most of this stuff I just made up because it "sounded right"
 	  //LocalOutput("checking to see if I can catch up again now: %llu previous end: %llu subtr: %llu %i", now, previousFrameEndTime, previousFrameEndTime - m_rtFrameLength, previousFrameEndTime - m_rtFrameLength);
-	  info("checking to see if I can catch up again now: %llu previous end: %llu subtr: %llu %i", now, previousFrameEndTime, previousFrameEndTime - m_rtFrameLength, previousFrameEndTime - m_rtFrameLength);
+	  debug("checking to see if I can catch up again now: %llu previous end: %llu subtr: %llu %i", now, previousFrameEndTime, previousFrameEndTime - m_rtFrameLength, previousFrameEndTime - m_rtFrameLength);
 	  if (((REFERENCE_TIME)now) < (previousFrameEndTime - m_rtFrameLength)) {
 		  // let it pretend and try to catch up, it's not quite a frame behind
 		  previousFrameEndTime = previousFrameEndTime + m_rtFrameLength;

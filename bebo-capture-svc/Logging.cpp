@@ -2,7 +2,7 @@
 #include "windows.h"
 
 #ifndef RELEASE
-#define RELEASE "v0.1.0"
+#define RELEASE "v0.1.1"
 #endif
 
 extern HRESULT RegGetBeboSZ(LPCTSTR szValueName, LPBYTE data, LPDWORD datasize);

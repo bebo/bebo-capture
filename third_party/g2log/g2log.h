@@ -52,6 +52,7 @@ static const std::string k_fatal_log_expression = ""; // using LogContractMessag
 #define G2_LOG_DEBUG  g2::internal::LogMessage(__FILE__,__LINE__,__PRETTY_FUNCTION__,"DEBUG")
 #define G2_LOG_INFO  g2::internal::LogMessage(__FILE__,__LINE__,__PRETTY_FUNCTION__,"INFO")
 #define G2_LOG_WARNING  g2::internal::LogMessage(__FILE__,__LINE__,__PRETTY_FUNCTION__,"WARNING")
+#define G2_LOG_WARN  g2::internal::LogMessage(__FILE__,__LINE__,__PRETTY_FUNCTION__,"WARNING")
 #define G2_LOG_FATAL  g2::internal::LogContractMessage(__FILE__,__LINE__,__PRETTY_FUNCTION__,k_fatal_log_expression)
 
 // LOG(level) is the API for the stream log

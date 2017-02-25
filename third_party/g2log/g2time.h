@@ -6,7 +6,7 @@
 * strings attached and no restrictions or obligations.
 * ============================================================================
 * Filename:g2time.h cross-platform, thread-safe replacement for C++11 non-thread-safe
-*                   localtime (and similar)
+*                   gmtime (and similar)
 * Created: 2012 by Kjell Hedström
 *
 * PUBLIC DOMAIN and Not under copywrite protection. First published for g2log at KjellKod.cc
@@ -31,15 +31,15 @@ namespace g2
   std::time_t systemtime_now();
 
   /** return time representing POD struct (ref ctime + wchar) that is normally
-  * retrieved with std::localtime. g2::localtime is threadsafe which std::localtime is not.
-  * g2::localtime is probably used together with @ref g2::systemtime_now */
-  tm localtime(const std::time_t& time);
+  * retrieved with std::gmtime. g2::gmtime is threadsafe which std::gmtime is not.
+  * g2::gmtime is probably used together with @ref g2::systemtime_now */
+  tm gmtime(const std::time_t& time);
 
   /** format string must conform to std::put_time's demands.
   * WARNING: At time of writing there is only so-so compiler support for
   * std::put_time. A possible fix if your c++11 library is not updated is to
   * modify this to use std::strftime instead */
-  std::string localtime_formatted(const std::time_t& time_snapshot, const std::string& time_format) ;
+  std::string gmtime_formatted(const std::time_t& time_snapshot, const std::string& time_format) ;
 }
 
 #endif

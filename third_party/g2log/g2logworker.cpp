@@ -19,6 +19,7 @@
 #include <chrono>
 #include <functional>
 #include <future>
+#include <iomanip>
 
 #include "active.h"
 #include "g2log.h"
@@ -30,7 +31,7 @@ using namespace g2;
 using namespace g2::internal;
 
 namespace {
-static const std::string date_formatted =  "%Y/%m/%d";
+static const std::string date_formatted = "%Y-%m-%d";
 static const std::string time_formatted = "%H:%M:%S";
 static const std::string file_name_time_formatted =  "%Y%m%d-%H%M%S";
 
@@ -92,7 +93,7 @@ std::string createLogFileName(const std::string& verified_prefix) {
    std::stringstream oss_name;
    oss_name.fill('0');
    oss_name << verified_prefix << ".g2log.";
-   oss_name << g2::localtime_formatted(g2::systemtime_now(), file_name_time_formatted);
+   oss_name << g2::gmtime_formatted(g2::systemtime_now(), file_name_time_formatted);
    oss_name << ".log";
    return oss_name.str();
 }
@@ -111,9 +112,8 @@ bool openLogFile(const std::string& complete_file_with_path, std::ofstream& outs
       return false;
    }
    std::ostringstream ss_entry;
-   //  Day Month Date Time Year: is written as "%a %b %d %H:%M:%S %Y" and formatted output as : Wed Sep 19 08:28:16 2012
-   ss_entry << "\t\tg2log created log file at: " << g2::localtime_formatted(g2::systemtime_now(), "%a %b %d %H:%M:%S %Y") << "\n";
-   ss_entry << "\t\tLOG format: [YYYY/MM/DD hh:mm:ss uuu* LEVEL FILE:LINE] message\t\t (uuu*: microsecond counter since initialization of log worker)\n\n"; 
+   ss_entry << "\t\tg2log created log file at: " << g2::gmtime_formatted(g2::systemtime_now(), "%Y-%m-%dT%H:%M:%S") << "\n";
+   ss_entry << "\t\tLOG format: [%Y-%m-%dT%H:%M:%S.mmm  LEVEL FILE:LINE] message\n\n"; 
    outstream << ss_entry.str() << std::flush;
    outstream.fill('0');
    return true;
@@ -188,7 +188,7 @@ g2LogWorkerImpl::g2LogWorkerImpl(const std::string& log_prefix, const std::strin
 g2LogWorkerImpl::~g2LogWorkerImpl() {
    std::ostringstream ss_exit;
    bg_.reset(); // flush the log queue
-   ss_exit << "\n\t\tg2log file shutdown at: " << g2::localtime_formatted(g2::systemtime_now(), time_formatted);
+   ss_exit << "\n\t\tg2log file shutdown at: " << g2::gmtime_formatted(g2::systemtime_now(), time_formatted);
    filestream() << ss_exit.str() << std::flush;
 }
 
@@ -197,11 +197,11 @@ void g2LogWorkerImpl::backgroundFileWrite(LogEntry message) {
    using namespace std;
    std::ofstream& out(filestream());
    auto log_time = message.timestamp_;
-   auto steady_time = std::chrono::steady_clock::now();
-   out << "\n" << g2::localtime_formatted(log_time, date_formatted);
-   out << " " << g2::localtime_formatted(log_time, time_formatted);
-   out << " " << chrono::duration_cast<std::chrono::microseconds>(steady_time - steady_start_time_).count();
-   out << "\t" << message.msg_ << std::flush;
+   auto clock_time = std::chrono::system_clock::now();
+   out << "\n" << g2::gmtime_formatted(log_time, date_formatted);
+   out << "T" << g2::gmtime_formatted(log_time, time_formatted);
+   out << "." << std::setw(3) << std::setfill('0') << clock_time.time_since_epoch().count() % 1000;
+   out << "Z\t" << message.msg_ << std::flush;
 }
 
 

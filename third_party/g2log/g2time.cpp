@@ -55,13 +55,13 @@ std::time_t systemtime_now()
 }
 
 
-tm localtime(const std::time_t& time)
+tm gmtime(const std::time_t& time)
 {
   struct tm tm_snapshot;
 #if !(defined(WIN32) || defined(_WIN32) || defined(__WIN32__))
-  localtime_r(&time, &tm_snapshot); // POSIX
+  gmtime_r(&time, &tm_snapshot); // POSIX
 #else
-  localtime_s(&tm_snapshot, &time); // windsows
+  gmtime_s(&tm_snapshot, &time); // windows
 #endif
   return tm_snapshot;
 }
@@ -69,9 +69,9 @@ tm localtime(const std::time_t& time)
 /// returns a std::string with content of time_t as localtime formatted by input format string
 /// * format string must conform to std::put_time
 /// This is similar to std::put_time(std::localtime(std::time_t*), time_format.c_str());
-std::string localtime_formatted(const std::time_t& time_snapshot, const std::string& time_format)
+std::string gmtime_formatted(const std::time_t& time_snapshot, const std::string& time_format)
 {
-  std::tm t = localtime(time_snapshot); // could be const, but cannot due to VS2012 is non conformant for C++11's std::put_time (see above)
+  std::tm t = gmtime(time_snapshot); // could be const, but cannot due to VS2012 is non conformant for C++11's std::put_time (see above)
   std::stringstream buffer;
   buffer << g2::internal::put_time(&t, time_format.c_str());  // format example: //"%Y/%m/%d %H:%M:%S");
   return buffer.str();

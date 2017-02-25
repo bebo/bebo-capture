@@ -340,6 +340,7 @@
     <ClInclude Include="..\third_party\g2log\crashhandler.h" />
     <ClInclude Include="..\third_party\g2log\g2log.h" />
     <ClInclude Include="..\third_party\g2log\g2logworker.h" />
+    <ClInclude Include="..\third_party\g2log\g2time.h" />
     <ClInclude Include="..\third_party\g2log\shared_queue.h" />
     <ClInclude Include="BeboCapture.h" />
     <ClInclude Include="BeboCaptureGuids.h" />

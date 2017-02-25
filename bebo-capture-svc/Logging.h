@@ -25,10 +25,18 @@ extern "C" {
 #undef info
 #undef debug
 
+#ifdef NDEBUG
+#define debug(format, ...)
+#else
 #define debug(format, ...)  LOGF(DEBUG, format,  ##__VA_ARGS__ )
+#endif 
+
 #define info(format, ...)  LOGF(INFO, format,  ##__VA_ARGS__ )
 #define warn(format, ...)  LOGF(WARNING, format,  ##__VA_ARGS__ )
 #define error(format, ...)  LOGF(WARNING, format,  ##__VA_ARGS__ )
+
+
+
 
 void setupLogging();
 

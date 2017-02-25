@@ -19,7 +19,6 @@
 //
 HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 {
-	//DebugBreak();
 	CAutoLock cAutoLock(m_pFilter->pStateLock());
 	info("CheckMediaType");
 
@@ -45,12 +44,19 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 	
     // Get the format area of the media type
     VIDEOINFO *pvi = (VIDEOINFO *) pMediaType->Format();
-    if(pvi == NULL)
-        return E_INVALIDARG; // usually never this...
+	if (pvi == NULL) {
+	  warn("CheckMediaType - E_INVALIDARG - pvi == NULL");
+	  return E_INVALIDARG; // usually never this...
+	}
 
 
 	// graphedit comes in with a really large one and then we set it (no good)
 	if (pvi->bmiHeader.biHeight > m_iCaptureConfigHeight || pvi->bmiHeader.biWidth > m_iCaptureConfigWidth) {
+		warn("CheckMediaType - E_INVALIDARG %d > %d || %d > %d",
+			pvi->bmiHeader.biHeight,
+			m_iCaptureConfigHeight,
+			pvi->bmiHeader.biWidth,
+			m_iCaptureConfigWidth);
         return E_INVALIDARG;
 	}
 
@@ -67,10 +73,16 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 			if(pvi->bmiHeader.biBitCount == 12) { // biCompression 808596553 == 0x30323449
 				// 12 is correct for i420 -- WFMLE uses this, VLC *can* also use it, too
 			}else {
+			  warn("CheckMediaType - E_INVALIDARG invalid bit count: %d", pvi->bmiHeader.biBitCount);
 			  return E_INVALIDARG;
 			}
 		} else {
-          return E_INVALIDARG; // sometimes FLME asks for YV12 {32315659-0000-0010-8000-00AA00389B71}, or  
+		  OLECHAR* bstrGuid;
+		  StringFromCLSID(SubType2, &bstrGuid);
+		  LOG(WARN) << "CheckMediaType - E_INVALIDARG - Invalid SubType2: " << bstrGuid;
+		  ::CoTaskMemFree(bstrGuid);
+          return E_INVALIDARG;
+		  // sometimes FLME asks for YV12 {32315659-0000-0010-8000-00AA00389B71}, or  
 		  // 32595559-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_YUY2, which is apparently "identical format" to I420
 		  // 43594448-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_HDYC
 		  // 59565955-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_UYVY
@@ -355,7 +367,7 @@ STDMETHODIMP CGameCapture::Stop(){
 HRESULT CGameCapture::GetState(DWORD dw, FILTER_STATE *pState)
 {
     CheckPointer(pState, E_POINTER);
-	info("GameCapture::GetState");
+	info("GameCapture::GetState: %d", m_State);
     *pState = m_State;
     if (m_State == State_Paused)
         return VFW_S_CANT_CUE;
@@ -403,17 +415,32 @@ HRESULT CPushPinDesktop::Get(
     DWORD *pcbReturned     // Return the size of the property.
 )
 {
-	info("GameCapture::Get");
-	//DebugBreak();
-    if (guidPropSet != AMPROPSETID_Pin)             return E_PROP_SET_UNSUPPORTED;
-    if (dwPropID != AMPROPERTY_PIN_CATEGORY)        return E_PROP_ID_UNSUPPORTED;
-    if (pPropData == NULL && pcbReturned == NULL)   return E_POINTER;
+	if (guidPropSet != AMPROPSETID_Pin) {
+		error("GameCapture::Get - E_PROP_SET_UNSUPPORTED %x != AMPROPSETID_Pin", guidPropSet);
+		return E_PROP_SET_UNSUPPORTED;
+	}
+	if (dwPropID != AMPROPERTY_PIN_CATEGORY) {
+		error("GameCapture::Get - %d != AMPROPERTY_PIN_CATEGORY", dwPropID);
+		return E_PROP_ID_UNSUPPORTED;
+	}
+	if (pPropData == NULL && pcbReturned == NULL) {
+		error("GameCapture::Get - E_POINTER");
+		return E_POINTER;
+	}
     
     if (pcbReturned) *pcbReturned = sizeof(GUID);
-    if (pPropData == NULL)          return S_OK; // Caller just wants to know the size. 
-    if (cbPropData < sizeof(GUID))  return E_UNEXPECTED;// The buffer is too small.
+	if (pPropData == NULL) {
+		info("GameCapture::Get - S_OK (%d)", *pcbReturned);
+		return S_OK; // Caller just wants to know the size. 
+	}
+	if (cbPropData < sizeof(GUID)) {
+		error("GameCapture::Get - E_UNEXPECTED (%d)", cbPropData);
+		return E_UNEXPECTED;// The buffer is too small.
+	}
         
     *(GUID *)pPropData = PIN_CATEGORY_CAPTURE; // PIN_CATEGORY_PREVIEW ?
+
+	info("GameCapture::Get - S_OK (PIN_CATEGORY_CAPTURE)");
     return S_OK;
 }
 

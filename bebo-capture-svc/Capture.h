@@ -70,7 +70,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
 {
 
 public:
-    int m_iFrameNumber;
+    long m_iFrameNumber;
 
 protected:
 
@@ -85,6 +85,7 @@ protected:
     int getNegotiatedFinalHeight();                   
 
 	game_capture_config * config;
+	void * game_context;
 
 	int m_iCaptureConfigWidth;
 	int m_iCaptureConfigHeight;

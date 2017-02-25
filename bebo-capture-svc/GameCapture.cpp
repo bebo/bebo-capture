@@ -872,8 +872,9 @@ static bool init_hook(struct game_capture *gc)
 	}
 
 	blacklisted_process = is_blacklisted_exe(exe.array);
-	if (blacklisted_process)
+	if (blacklisted_process) {
 		info("cannot capture %s due to being blacklisted", exe.array);
+	}
 	dstr_free(&exe);
 
 	if (blacklisted_process) {
@@ -983,9 +984,8 @@ static void try_hook(struct game_capture *gc)
 	}
 
 	if (gc->next_window) {
-		info("hooking: %X, %S, %S", gc->next_window, gc->config.title, gc->config.klass);
-		gc->thread_id = GetWindowThreadProcessId(gc->next_window,
-				&gc->process_id);
+		info("hooking next window: %X, %S, %S", gc->next_window, gc->config.title, gc->config.klass);
+		gc->thread_id = GetWindowThreadProcessId(gc->next_window, &gc->process_id);
 
 		// Make sure we never try to hook ourselves (projector)
 		if (gc->process_id == GetCurrentProcessId())
@@ -994,9 +994,8 @@ static void try_hook(struct game_capture *gc)
 		if (!gc->thread_id && gc->process_id)
 			return;
 		if (!gc->process_id) {
-			warn("error acquiring, failed to get window "
-					"thread/process ids: %lu",
-					GetLastError());
+			warn("error acquiring, failed to get window thread/process ids: %lu",
+				 GetLastError());
 			gc->error_acquiring = true;
 			return;
 		}
