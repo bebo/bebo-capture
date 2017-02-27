@@ -22,5 +22,8 @@ void setupLogging() {
 		logworker = std::move(g2log);
 		g2::initializeLogging(&*logworker);
 		info("Version: %s", RELEASE);
+		char filename[4096];
+		GetModuleFileNameA(NULL, filename, 4096);
+		info("Executable: %s", filename);
 	}
 }
