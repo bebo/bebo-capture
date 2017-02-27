@@ -5,6 +5,8 @@
 #include "DibHelper.h"
 #include "Logging.h"
 
+#include <dvdmedia.h>
+
 #include <wmsdkidl.h>
 
 //
@@ -447,10 +449,44 @@ HRESULT CPushPinDesktop::Get(
     return S_OK;
 }
 
+int DisplayRECT(char *buffer, size_t count, const RECT& rc)
+{
+	return snprintf(buffer, count, "%dx%d[%d:%d]",
+            rc.right - rc.left,
+            rc.top - rc.bottom,
+            rc.right,
+            rc.bottom);
+}
+
+int DisplayBITMAPINFO(char *buffer, size_t count, const BITMAPINFOHEADER* pbmi)
+{
+    if (pbmi->biCompression < 256) {
+		return snprintf(buffer, count, "[bitmap: %dx%dx%d bit  (%d)] size:%d (%d/%d)",
+			pbmi->biWidth,
+			pbmi->biHeight,
+            pbmi->biBitCount,
+			pbmi->biCompression,
+			pbmi->biSizeImage,
+			pbmi->biPlanes,
+			pbmi->biClrUsed);
+    } else {
+		return snprintf(buffer, count, "[bitmap: %dx%dx%d bit '%4.4hs' size:%d",
+            pbmi->biWidth,
+			pbmi->biHeight,
+            pbmi->biBitCount,
+			&pbmi->biCompression,
+			pbmi->biSizeImage,
+			pbmi->biPlanes,
+			pbmi->biClrUsed);
+    }
+}
+
 void info_pmt(char* label, const AM_MEDIA_TYPE *pmtIn)
 {
-	char * temporalCompression = (pmtIn->bTemporalCompression) ? "Temporally compressed" : "Not temporally compressed";
-	char * fixedSampleSize = (pmtIn->bFixedSizeSamples) ? "Sample size" : "Variable size samples";
+
+	const int SIZE = 10 * 4096;
+	char buffer[SIZE];
+	int cnt = 0;
 	WCHAR * subtypeName = GetSubtypeName(&pmtIn->subtype);
 
 #if 0
@@ -463,76 +499,82 @@ void info_pmt(char* label, const AM_MEDIA_TYPE *pmtIn)
 #endif
 
 //	char subTypeName[1024];
-//	snprintf(GetSubtypeName(&pmtIn->subtype)
+	cnt += snprintf(&buffer[cnt], SIZE - cnt, "%s -", label);
 
+	char * temporalCompression = (pmtIn->bTemporalCompression) ? "Temporally compressed" : "Not temporally compressed";
+	cnt += snprintf(&buffer[cnt], SIZE - cnt, " [%s]", temporalCompression);
 
-	info("%s - [%s] [%s:%d] [M:%s] [S:%s/%s]",
-		label,
-		temporalCompression,
-		fixedSampleSize,
-		pmtIn->lSampleSize,
-		GuidNames[pmtIn->majortype],
-		GuidNames[pmtIn->subtype],
-		"unknown"
-	);
+	if (pmtIn->bFixedSizeSamples) {
+		cnt += snprintf(&buffer[cnt], SIZE - cnt, " [Sample Size %d]", pmtIn->lSampleSize);
+	} else {
+		cnt += snprintf(&buffer[cnt], SIZE - cnt, " [Variable size samples]");
+	}
+
+	WCHAR major_uuid[64];
+	WCHAR sub_uuid[64];
+	StringFromGUID2(pmtIn->majortype, major_uuid, 64);
+	StringFromGUID2(pmtIn->subtype, sub_uuid, 64);
+
+	cnt += snprintf(&buffer[cnt], SIZE - cnt, " [%S/%S]",
+		major_uuid,
+		sub_uuid);
+
+	if (pmtIn->formattype == FORMAT_VideoInfo) {
+
+		VIDEOINFOHEADER *pVideoInfo = (VIDEOINFOHEADER *)pmtIn->pbFormat;
+
+		cnt += snprintf(&buffer[cnt], SIZE - cnt, " srcRect:");
+		cnt += DisplayRECT(&buffer[cnt], SIZE - cnt, pVideoInfo->rcSource);
+		cnt += snprintf(&buffer[cnt], SIZE - cnt, " dstRect:");
+		cnt += DisplayRECT(&buffer[cnt], SIZE - cnt, pVideoInfo->rcTarget);
+        cnt += DisplayBITMAPINFO(&buffer[cnt], SIZE - cnt, HEADER(pmtIn->pbFormat));
+
+	} else if (pmtIn->formattype == FORMAT_VideoInfo2) {
+
+		VIDEOINFOHEADER2 *pVideoInfo2 = (VIDEOINFOHEADER2 *)pmtIn->pbFormat;
+
+		cnt += snprintf(&buffer[cnt], SIZE - cnt, " srcRect:");
+		cnt += DisplayRECT(&buffer[cnt], SIZE - cnt, pVideoInfo2->rcSource);
+		cnt += snprintf(&buffer[cnt], SIZE - cnt, " dstRect:");
+		cnt += DisplayRECT(&buffer[cnt], SIZE - cnt, pVideoInfo2->rcTarget);
+		cnt += DisplayBITMAPINFO(&buffer[cnt], SIZE - cnt, &pVideoInfo2->bmiHeader);
+	} else if (pmtIn->majortype == MEDIATYPE_Audio) {
+		WCHAR format_uuid[64];
+		WCHAR subtype_uuid[64];
+		StringFromGUID2(pmtIn->formattype, format_uuid, 64);
+		StringFromGUID2(pmtIn->subtype, subtype_uuid, 64);
+		cnt += snprintf(&buffer[cnt], SIZE - cnt, " audio format type %hs subType %hs",
+			format_uuid, subtype_uuid);
+
+		if ((pmtIn->subtype != MEDIASUBTYPE_MPEG1Packet) && (pmtIn->cbFormat >= sizeof(PCMWAVEFORMAT)))
+		{
+			/* Dump the contents of the WAVEFORMATEX type-specific format structure */
+
+			WAVEFORMATEX *pwfx = (WAVEFORMATEX *)pmtIn->pbFormat;
+			cnt += snprintf(&buffer[cnt], SIZE - cnt,
+				"wFormatTag %u, nChannels %u, nSamplesPerSec %lu, nAvgBytesPerSec %lu, nBlockAlign %u, wBitsPerSample %u",
+				pwfx->wFormatTag,
+				pwfx->nChannels,
+				pwfx->nSamplesPerSec,
+				pwfx->nAvgBytesPerSec,
+				pwfx->nBlockAlign,
+				pwfx->wBitsPerSample);
+
+			/* PCM uses a WAVEFORMAT and does not have the extra size field */
+
+			if (pmtIn->cbFormat >= sizeof(WAVEFORMATEX)) {
+				cnt += snprintf(&buffer[cnt], SIZE - cnt, " cbSize %u", pwfx->cbSize);
+			}
+		}
+
+	} else {
+		WCHAR format_uuid[64];
+		StringFromGUID2(pmtIn->formattype, format_uuid, 64);
+		cnt += snprintf(&buffer[cnt], SIZE - cnt, " Format type %hs", format_uuid);
+	}
+
+	info(buffer);
 	return;
-#if 0
-
-    /* Dump the generic media types */
-
-
-    if (pmtIn->formattype == FORMAT_VideoInfo) {
-
-        VIDEOINFOHEADER *pVideoInfo = (VIDEOINFOHEADER *)pmtIn->pbFormat;
-
-        DisplayRECT(TEXT("Source rectangle"),pVideoInfo->rcSource);
-        DisplayRECT(TEXT("Target rectangle"),pVideoInfo->rcTarget);
-        DisplayBITMAPINFO(HEADER(pmtIn->pbFormat));
-
-    } if (pmtIn->formattype == FORMAT_VideoInfo2) {
-
-        VIDEOINFOHEADER2 *pVideoInfo2 = (VIDEOINFOHEADER2 *)pmtIn->pbFormat;
-
-        DisplayRECT(TEXT("Source rectangle"),pVideoInfo2->rcSource);
-        DisplayRECT(TEXT("Target rectangle"),pVideoInfo2->rcTarget);
-        DbgLog((LOG_TRACE, 5, TEXT("Aspect Ratio: %d:%d"),
-            pVideoInfo2->dwPictAspectRatioX,
-            pVideoInfo2->dwPictAspectRatioY));
-        DisplayBITMAPINFO(&pVideoInfo2->bmiHeader);
-
-    } else if (pmtIn->majortype == MEDIATYPE_Audio) {
-        DbgLog((LOG_TRACE,2,TEXT("     Format type %hs"),
-            GuidNames[pmtIn->formattype]));
-        DbgLog((LOG_TRACE,2,TEXT("     Subtype %hs"),
-            GuidNames[pmtIn->subtype]));
-
-        if ((pmtIn->subtype != MEDIASUBTYPE_MPEG1Packet)
-          && (pmtIn->cbFormat >= sizeof(PCMWAVEFORMAT)))
-        {
-            /* Dump the contents of the WAVEFORMATEX type-specific format structure */
-
-            WAVEFORMATEX *pwfx = (WAVEFORMATEX *) pmtIn->pbFormat;
-            DbgLog((LOG_TRACE,2,TEXT("wFormatTag %u"), pwfx->wFormatTag));
-            DbgLog((LOG_TRACE,2,TEXT("nChannels %u"), pwfx->nChannels));
-            DbgLog((LOG_TRACE,2,TEXT("nSamplesPerSec %lu"), pwfx->nSamplesPerSec));
-            DbgLog((LOG_TRACE,2,TEXT("nAvgBytesPerSec %lu"), pwfx->nAvgBytesPerSec));
-            DbgLog((LOG_TRACE,2,TEXT("nBlockAlign %u"), pwfx->nBlockAlign));
-            DbgLog((LOG_TRACE,2,TEXT("wBitsPerSample %u"), pwfx->wBitsPerSample));
-
-            /* PCM uses a WAVEFORMAT and does not have the extra size field */
-
-            if (pmtIn->cbFormat >= sizeof(WAVEFORMATEX)) {
-                DbgLog((LOG_TRACE,2,TEXT("cbSize %u"), pwfx->cbSize));
-            }
-        } else {
-        }
-
-    } else {
-        DbgLog((LOG_TRACE,2,TEXT("     Format type %hs"),
-            GuidNames[pmtIn->formattype]));
-    }
-#endif
-
 }
 
 enum FourCC { FOURCC_NONE = 0, FOURCC_I420 = 100, FOURCC_YUY2 = 101, FOURCC_RGB32 = 102 };// from http://www.conaito.com/docus/voip-video-evo-sdk-capi/group__videocapture.html
