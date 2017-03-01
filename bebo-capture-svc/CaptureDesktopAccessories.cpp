@@ -9,6 +9,148 @@
 
 #include <wmsdkidl.h>
 
+// logging stuff
+int DisplayRECT(char *buffer, size_t count, const RECT& rc)
+{
+	return snprintf(buffer, count, "%dx%d[%d:%d]",
+            rc.right - rc.left,
+            rc.top - rc.bottom,
+            rc.right,
+            rc.bottom);
+}
+
+int DisplayBITMAPINFO(char *buffer, size_t count, const BITMAPINFOHEADER* pbmi)
+{
+    if (pbmi->biCompression < 256) {
+		return snprintf(buffer, count, "[bitmap: %dx%dx%d bit  (%d)] size:%d (%d/%d)",
+			pbmi->biWidth,
+			pbmi->biHeight,
+            pbmi->biBitCount,
+			pbmi->biCompression,
+			pbmi->biSizeImage,
+			pbmi->biPlanes,
+			pbmi->biClrUsed);
+    } else {
+		// TOOD cant test the biCompression oddity and compiler complains
+		//return snprintf(buffer, count, "[bitmap: %dx%dx%d bit '%4.4hx' size:%d (%d/%d)",
+		return snprintf(buffer, count, "[bitmap: %dx%dx%d bit '?' size:%d (%d/%d)",
+            pbmi->biWidth,
+			pbmi->biHeight,
+            pbmi->biBitCount,
+			//&pbmi->biCompression,
+			pbmi->biSizeImage,
+			pbmi->biPlanes,
+			pbmi->biClrUsed);
+    }
+}
+
+int sprintf_pmt(char *buffer, size_t count, char *label, const AM_MEDIA_TYPE *pmtIn) 
+{
+	int cnt = 0;
+
+	cnt += snprintf(&buffer[cnt], count - cnt, "%s -", label);
+
+	char * temporalCompression = (pmtIn->bTemporalCompression) ? "Temporally compressed" : "Not temporally compressed";
+	cnt += snprintf(&buffer[cnt], count - cnt, " [%s]", temporalCompression);
+
+	if (pmtIn->bFixedSizeSamples) {
+		cnt += snprintf(&buffer[cnt], count - cnt, " [Sample Size %d]", pmtIn->lSampleSize);
+	} else {
+		cnt += snprintf(&buffer[cnt], count - cnt, " [Variable size samples]");
+	}
+
+	WCHAR major_uuid[64];
+	WCHAR sub_uuid[64];
+	StringFromGUID2(pmtIn->majortype, major_uuid, 64);
+	StringFromGUID2(pmtIn->subtype, sub_uuid, 64);
+
+	cnt += snprintf(&buffer[cnt], count - cnt, " [%S/%S]",
+		major_uuid,
+		sub_uuid);
+
+	if (pmtIn->formattype == FORMAT_VideoInfo) {
+
+		VIDEOINFOHEADER *pVideoInfo = (VIDEOINFOHEADER *)pmtIn->pbFormat;
+
+		cnt += snprintf(&buffer[cnt], count - cnt, " srcRect:");
+		cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo->rcSource);
+		cnt += snprintf(&buffer[cnt], count - cnt, " dstRect:");
+		cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo->rcTarget);
+        cnt += DisplayBITMAPINFO(&buffer[cnt], count - cnt, HEADER(pmtIn->pbFormat));
+
+	} else if (pmtIn->formattype == FORMAT_VideoInfo2) {
+
+		VIDEOINFOHEADER2 *pVideoInfo2 = (VIDEOINFOHEADER2 *)pmtIn->pbFormat;
+
+		cnt += snprintf(&buffer[cnt], count - cnt, " srcRect:");
+		cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo2->rcSource);
+		cnt += snprintf(&buffer[cnt], count - cnt, " dstRect:");
+		cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo2->rcTarget);
+		cnt += DisplayBITMAPINFO(&buffer[cnt], count - cnt, &pVideoInfo2->bmiHeader);
+	} else if (pmtIn->majortype == MEDIATYPE_Audio) {
+		WCHAR format_uuid[64];
+		WCHAR subtype_uuid[64];
+		StringFromGUID2(pmtIn->formattype, format_uuid, 64);
+		StringFromGUID2(pmtIn->subtype, subtype_uuid, 64);
+		cnt += snprintf(&buffer[cnt], count - cnt, " audio format type %S subType %S",
+			format_uuid, subtype_uuid);
+
+		if ((pmtIn->subtype != MEDIASUBTYPE_MPEG1Packet) && (pmtIn->cbFormat >= sizeof(PCMWAVEFORMAT)))
+		{
+			/* Dump the contents of the WAVEFORMATEX type-specific format structure */
+
+			WAVEFORMATEX *pwfx = (WAVEFORMATEX *)pmtIn->pbFormat;
+			cnt += snprintf(&buffer[cnt], count - cnt,
+				"wFormatTag %u, nChannels %u, nSamplesPerSec %lu, nAvgBytesPerSec %lu, nBlockAlign %u, wBitsPerSample %u",
+				pwfx->wFormatTag,
+				pwfx->nChannels,
+				pwfx->nSamplesPerSec,
+				pwfx->nAvgBytesPerSec,
+				pwfx->nBlockAlign,
+				pwfx->wBitsPerSample);
+
+			/* PCM uses a WAVEFORMAT and does not have the extra size field */
+
+			if (pmtIn->cbFormat >= sizeof(WAVEFORMATEX)) {
+				cnt += snprintf(&buffer[cnt], count - cnt, " cbSize %u", pwfx->cbSize);
+			}
+		}
+
+	} else {
+		WCHAR format_uuid[64];
+		StringFromGUID2(pmtIn->formattype, format_uuid, 64);
+		cnt += snprintf(&buffer[cnt], count - cnt, " Format type %S", format_uuid);
+	}
+	return cnt;
+}
+
+void info_pmt(char* label, const AM_MEDIA_TYPE *pmtIn)
+{
+
+	const int SIZE = 10 * 4096;
+	char buffer[SIZE];
+	sprintf_pmt(buffer, SIZE, label, pmtIn);
+	info(buffer);
+}
+
+void error_pmt(char* label, const AM_MEDIA_TYPE *pmtIn)
+{
+
+	const int SIZE = 10 * 4096;
+	char buffer[SIZE];
+	sprintf_pmt(buffer, SIZE, label, pmtIn);
+	error(buffer);
+}
+
+void warn_pmt(char* label, const AM_MEDIA_TYPE *pmtIn)
+{
+
+	const int SIZE = 10 * 4096;
+	char buffer[SIZE];
+	sprintf_pmt(buffer, SIZE, label, pmtIn);
+	warn(buffer);
+}
+
 //
 // CheckMediaType
 // I think VLC calls this once per each enumerated media type that it likes (3 times)
@@ -130,57 +272,66 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 // except WFMLE sends us a junk type, so we check it anyway LODO do we? Or is it the other method Set Format that they call in vain? Or it first?
 HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 {
-	//DebugBreak();
-    CAutoLock cAutoLock(m_pFilter->pStateLock());
-	info("SetMediaType");
+	CAutoLock cAutoLock(m_pFilter->pStateLock());
 
-    // Pass the call up to my base class
-    HRESULT hr = CSourceStream::SetMediaType(pMediaType); // assigns our local m_mt via m_mt.Set(*pmt) ... 
-    m_bConvertToI420 = false; // in case we are re-negotiating the type and it was set to i420 before...
+	// Pass the call up to my base class
+	HRESULT hr = CSourceStream::SetMediaType(pMediaType); // assigns our local m_mt via m_mt.Set(*pmt) ... 
+	m_bConvertToI420 = false; // in case we are re-negotiating the type and it was set to i420 before...
 
-	info("SetMediaType - hr: %d", SUCCEEDED(hr));
 
-    if(SUCCEEDED(hr))
-    {
-        VIDEOINFO *pvi = (VIDEOINFO *) m_mt.Format();
-        if (pvi == NULL)
-            return E_UNEXPECTED;
+	if (!SUCCEEDED(hr)) {
+		error_pmt("SetMediaType - SetMediaType failed", pMediaType);
+		return hr;
+	}
 
-        switch(pvi->bmiHeader.biBitCount)
-        {
-		    case 12:     // i420
-				if(m_bDeDupe) {
-				     //ASSERT_RAISE(!m_bDeDupe); // not compatible with this yet // can't assert here or skype tries this, and, if m_bDeDupe is on, it raises, and kills skype :(
-					//return E_INVALIDARG;
-					m_bDeDupe = false; // just do this working around for now <sigh> so that skype will still work instead of silently fail while others work...
-					warn("warning: ignoring m_bDeDupe since it doesn't work with i420 type input, which was requested..."); 
-				}
-                hr = S_OK;
-			    m_bConvertToI420 = true;
-			    break;
-            case 8:     // 8-bit palettized
-            case 16:    // RGB565, RGB555
-            case 24:    // RGB24
-            case 32:    // RGB32
-                // Save the current media type and bit depth
-                //m_MediaType = *pMediaType; // use SetMediaType above instead
-                hr = S_OK;
-                break;
+	VIDEOINFO *pvi = (VIDEOINFO *)m_mt.Format();
+	if (pvi == NULL) {
+		error_pmt("SetMediaType - E_UNEXPECTED", pMediaType);
+		return E_UNEXPECTED;
+	}
 
-            default:
-                // We should never agree any other media types
-                hr = E_INVALIDARG;
-                break;
-        }
-		info("bitcount requested/negotiated: %d\n", pvi->bmiHeader.biBitCount);
-    
-      // The frame rate at which your filter should produce data is determined by the AvgTimePerFrame field of VIDEOINFOHEADER
-	  if(pvi->AvgTimePerFrame) // or should Set Format accept this? hmm...
-	    m_rtFrameLength = pvi->AvgTimePerFrame; // allow them to set whatever fps they request, i.e. if it's less than the max default.  VLC command line can specify this, for instance...
-	  // also setup scaling here, as WFMLE and ffplay and VLC all get here...
-	  m_rScreen.right = m_rScreen.left + pvi->bmiHeader.biWidth; // allow them to set whatever "scaling size" they want [set m_rScreen is negotiated right here]
-	  m_rScreen.bottom = m_rScreen.top + pvi->bmiHeader.biHeight;
-    }
+	switch(pvi->bmiHeader.biBitCount)
+	{
+		case 12:     // i420
+			if(m_bDeDupe) {
+				 //ASSERT_RAISE(!m_bDeDupe); // not compatible with this yet // can't assert here or skype tries this, and, if m_bDeDupe is on, it raises, and kills skype :(
+				//return E_INVALIDARG;
+				m_bDeDupe = false; // just do this working around for now <sigh> so that skype will still work instead of silently fail while others work...
+				warn("warning: ignoring m_bDeDupe since it doesn't work with i420 type input, which was requested..."); 
+			}
+			hr = S_OK;
+			m_bConvertToI420 = true;
+			break;
+		case 8:     // 8-bit palettized
+		case 16:    // RGB565, RGB555
+		case 24:    // RGB24
+		case 32:    // RGB32
+			// Save the current media type and bit depth
+			//m_MediaType = *pMediaType; // use SetMediaType above instead
+			hr = S_OK;
+			break;
+
+		default:
+			// We should never agree any other media types
+			hr = E_INVALIDARG;
+			break;
+	}
+
+	// The frame rate at which your filter should produce data is determined by the AvgTimePerFrame field of VIDEOINFOHEADER
+	if(pvi->AvgTimePerFrame) // or should Set Format accept this? hmm...
+	m_rtFrameLength = pvi->AvgTimePerFrame; // allow them to set whatever fps they request, i.e. if it's less than the max default.  VLC command line can specify this, for instance...
+	// also setup scaling here, as WFMLE and ffplay and VLC all get here...
+	m_rScreen.right = m_rScreen.left + pvi->bmiHeader.biWidth; // allow them to set whatever "scaling size" they want [set m_rScreen is negotiated right here]
+	m_rScreen.bottom = m_rScreen.top + pvi->bmiHeader.biHeight;
+
+	char debug_buffer[1024];
+	if (hr == S_OK) {
+		snprintf(debug_buffer, 1024, "SetMediaType - S_OK [bitcount requested/negotiated: %d]", pvi->bmiHeader.biBitCount);
+		info_pmt(debug_buffer, pMediaType);
+	} else {
+		snprintf(debug_buffer, 1024, "SetMediaType - E_INVALIDARG [bitcount requested/negotiated: %d]", pvi->bmiHeader.biBitCount);
+		error_pmt(debug_buffer, pMediaType);
+	}
 	
     return hr;
 
@@ -191,8 +342,6 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 // sets fps, size, (etc.) maybe, or maybe just saves it away for later use...
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::SetFormat(AM_MEDIA_TYPE *pmt)
 {
-	//DebugBreak();
-	info("SetFormat");
     CAutoLock cAutoLock(m_pFilter->pStateLock());
 
 	// I *think* it can go back and forth, then.  You can call GetStreamCaps to enumerate, then call
@@ -206,8 +355,10 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::SetFormat(AM_MEDIA_TYPE *pmt)
 	// NULL means reset to default type...
 	if(pmt != NULL)
 	{
-		if(pmt->formattype != FORMAT_VideoInfo)  // FORMAT_VideoInfo == {CLSID_KsDataTypeHandlerVideo} 
+		if (pmt->formattype != FORMAT_VideoInfo) {  // FORMAT_VideoInfo == {CLSID_KsDataTypeHandlerVideo} 
+			//error()
 			return E_FAIL;
+		}
 	
 		// LODO I should do more here...http://msdn.microsoft.com/en-us/library/dd319788.aspx I guess [meh]
 	    // LODO should fail if we're already streaming... [?]
@@ -263,40 +414,39 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::SetFormat(AM_MEDIA_TYPE *pmt)
 // TODO the default, which probably we don't do yet...unless they've already called GetStreamCaps then it'll be the last index they used LOL.
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetFormat(AM_MEDIA_TYPE **ppmt)
 {
-	//DebugBreak();
-	info("GetFormat");
     CAutoLock cAutoLock(m_pFilter->pStateLock());
 
     *ppmt = CreateMediaType(&m_mt); // windows internal method, also does copy
+	info_pmt("GetFormat - S_OK", *ppmt);
     return S_OK;
 }
 
 
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetNumberOfCapabilities(int *piCount, int *piSize)
 {
-	//DebugBreak();
-	info("GetNumberOfCapabilities");
     *piCount = 1; // FPN
     *piSize = sizeof(VIDEO_STREAM_CONFIG_CAPS); // VIDEO_STREAM_CONFIG_CAPS is an MS struct
+	info("GetNumberOfCapabilities - %d size:%d", *piCount, *piSize);
     return S_OK;
 }
 
 // returns the "range" of fps, etc. for this index
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TYPE **pmt, BYTE *pSCC)
 {
-	info("GetStreamCaps");
-	//DebugBreak();
     CAutoLock cAutoLock(m_pFilter->pStateLock());
 	HRESULT hr = GetMediaType(iIndex, &m_mt); // ensure setup/re-use m_mt ...
 	// some are indeed shared, apparently.
     if(FAILED(hr))
     {
+		error("GetStreamCaps p: %d - FAILED: %x", iIndex, hr);
         return hr;
     }
 
     *pmt = CreateMediaType(&m_mt); // a windows lib method, also does a copy for us
-	if (*pmt == NULL) return E_OUTOFMEMORY;
-
+	if (*pmt == NULL) {
+		error("GetStreamCaps p: %d - E_OUTOFMEMORY", iIndex);
+		return E_OUTOFMEMORY;
+	}
 	
     DECLARE_PTR(VIDEO_STREAM_CONFIG_CAPS, pvscc, pSCC);
 	
@@ -338,6 +488,9 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TY
     pvscc->MinBitsPerSecond = (LONG) 1*1*8*GetFps(); // if in 8 bit mode 1x1. I guess.
     pvscc->MaxBitsPerSecond = (LONG) getCaptureDesiredFinalWidth()*getCaptureDesiredFinalHeight()*32*GetFps() + 44; // + 44 header size? + the palette?
 
+	char debug_buffer[1024];
+	snprintf(debug_buffer, 1024, "GetStreamCaps S_OK p:%d", iIndex);
+	info_pmt(debug_buffer, *pmt);
 	return hr;
 }
 
@@ -372,8 +525,8 @@ STDMETHODIMP CGameCapture::Stop(){
 HRESULT CGameCapture::GetState(DWORD dw, FILTER_STATE *pState)
 {
     CheckPointer(pState, E_POINTER);
-	info("GameCapture::GetState: %d", m_State);
     *pState = m_State;
+	info("GetState: %d %s", m_State, m_State == State_Paused ? "VFS_S_CANT_CUE" : "S_OK");
     if (m_State == State_Paused)
         return VFW_S_CANT_CUE;
     else
@@ -421,161 +574,34 @@ HRESULT CPushPinDesktop::Get(
 )
 {
 	if (guidPropSet != AMPROPSETID_Pin) {
-		error("GameCapture::Get - E_PROP_SET_UNSUPPORTED %x != AMPROPSETID_Pin", guidPropSet);
+		error("Get - E_PROP_SET_UNSUPPORTED %x != AMPROPSETID_Pin", guidPropSet);
 		return E_PROP_SET_UNSUPPORTED;
 	}
 	if (dwPropID != AMPROPERTY_PIN_CATEGORY) {
-		error("GameCapture::Get - %d != AMPROPERTY_PIN_CATEGORY", dwPropID);
+		error("Get - %d != AMPROPERTY_PIN_CATEGORY", dwPropID);
 		return E_PROP_ID_UNSUPPORTED;
 	}
 	if (pPropData == NULL && pcbReturned == NULL) {
-		error("GameCapture::Get - E_POINTER");
+		error("Get - E_POINTER");
 		return E_POINTER;
 	}
     
     if (pcbReturned) *pcbReturned = sizeof(GUID);
 	if (pPropData == NULL) {
-		info("GameCapture::Get - S_OK (%d)", *pcbReturned);
+		info("Get - S_OK (%d)", *pcbReturned);
 		return S_OK; // Caller just wants to know the size. 
 	}
 	if (cbPropData < sizeof(GUID)) {
-		error("GameCapture::Get - E_UNEXPECTED (%d)", cbPropData);
+		error("Get - E_UNEXPECTED (%d)", cbPropData);
 		return E_UNEXPECTED;// The buffer is too small.
 	}
         
     *(GUID *)pPropData = PIN_CATEGORY_CAPTURE; // PIN_CATEGORY_PREVIEW ?
 
-	info("GameCapture::Get - S_OK (PIN_CATEGORY_CAPTURE)");
+	info("Get - S_OK (PIN_CATEGORY_CAPTURE)");
     return S_OK;
 }
 
-int DisplayRECT(char *buffer, size_t count, const RECT& rc)
-{
-	return snprintf(buffer, count, "%dx%d[%d:%d]",
-            rc.right - rc.left,
-            rc.top - rc.bottom,
-            rc.right,
-            rc.bottom);
-}
-
-int DisplayBITMAPINFO(char *buffer, size_t count, const BITMAPINFOHEADER* pbmi)
-{
-    if (pbmi->biCompression < 256) {
-		return snprintf(buffer, count, "[bitmap: %dx%dx%d bit  (%d)] size:%d (%d/%d)",
-			pbmi->biWidth,
-			pbmi->biHeight,
-            pbmi->biBitCount,
-			pbmi->biCompression,
-			pbmi->biSizeImage,
-			pbmi->biPlanes,
-			pbmi->biClrUsed);
-    } else {
-		return snprintf(buffer, count, "[bitmap: %dx%dx%d bit '%4.4hs' size:%d",
-            pbmi->biWidth,
-			pbmi->biHeight,
-            pbmi->biBitCount,
-			&pbmi->biCompression,
-			pbmi->biSizeImage,
-			pbmi->biPlanes,
-			pbmi->biClrUsed);
-    }
-}
-
-void info_pmt(char* label, const AM_MEDIA_TYPE *pmtIn)
-{
-
-	const int SIZE = 10 * 4096;
-	char buffer[SIZE];
-	int cnt = 0;
-	WCHAR * subtypeName = GetSubtypeName(&pmtIn->subtype);
-
-#if 0
-	char buffer[4096];
-	snprintf(buffer, 4096,
-		"%s - [%s] [%s]",
-		label,
-		temporalCompression,
-		fixedSampleSize);
-#endif
-
-//	char subTypeName[1024];
-	cnt += snprintf(&buffer[cnt], SIZE - cnt, "%s -", label);
-
-	char * temporalCompression = (pmtIn->bTemporalCompression) ? "Temporally compressed" : "Not temporally compressed";
-	cnt += snprintf(&buffer[cnt], SIZE - cnt, " [%s]", temporalCompression);
-
-	if (pmtIn->bFixedSizeSamples) {
-		cnt += snprintf(&buffer[cnt], SIZE - cnt, " [Sample Size %d]", pmtIn->lSampleSize);
-	} else {
-		cnt += snprintf(&buffer[cnt], SIZE - cnt, " [Variable size samples]");
-	}
-
-	WCHAR major_uuid[64];
-	WCHAR sub_uuid[64];
-	StringFromGUID2(pmtIn->majortype, major_uuid, 64);
-	StringFromGUID2(pmtIn->subtype, sub_uuid, 64);
-
-	cnt += snprintf(&buffer[cnt], SIZE - cnt, " [%S/%S]",
-		major_uuid,
-		sub_uuid);
-
-	if (pmtIn->formattype == FORMAT_VideoInfo) {
-
-		VIDEOINFOHEADER *pVideoInfo = (VIDEOINFOHEADER *)pmtIn->pbFormat;
-
-		cnt += snprintf(&buffer[cnt], SIZE - cnt, " srcRect:");
-		cnt += DisplayRECT(&buffer[cnt], SIZE - cnt, pVideoInfo->rcSource);
-		cnt += snprintf(&buffer[cnt], SIZE - cnt, " dstRect:");
-		cnt += DisplayRECT(&buffer[cnt], SIZE - cnt, pVideoInfo->rcTarget);
-        cnt += DisplayBITMAPINFO(&buffer[cnt], SIZE - cnt, HEADER(pmtIn->pbFormat));
-
-	} else if (pmtIn->formattype == FORMAT_VideoInfo2) {
-
-		VIDEOINFOHEADER2 *pVideoInfo2 = (VIDEOINFOHEADER2 *)pmtIn->pbFormat;
-
-		cnt += snprintf(&buffer[cnt], SIZE - cnt, " srcRect:");
-		cnt += DisplayRECT(&buffer[cnt], SIZE - cnt, pVideoInfo2->rcSource);
-		cnt += snprintf(&buffer[cnt], SIZE - cnt, " dstRect:");
-		cnt += DisplayRECT(&buffer[cnt], SIZE - cnt, pVideoInfo2->rcTarget);
-		cnt += DisplayBITMAPINFO(&buffer[cnt], SIZE - cnt, &pVideoInfo2->bmiHeader);
-	} else if (pmtIn->majortype == MEDIATYPE_Audio) {
-		WCHAR format_uuid[64];
-		WCHAR subtype_uuid[64];
-		StringFromGUID2(pmtIn->formattype, format_uuid, 64);
-		StringFromGUID2(pmtIn->subtype, subtype_uuid, 64);
-		cnt += snprintf(&buffer[cnt], SIZE - cnt, " audio format type %hs subType %hs",
-			format_uuid, subtype_uuid);
-
-		if ((pmtIn->subtype != MEDIASUBTYPE_MPEG1Packet) && (pmtIn->cbFormat >= sizeof(PCMWAVEFORMAT)))
-		{
-			/* Dump the contents of the WAVEFORMATEX type-specific format structure */
-
-			WAVEFORMATEX *pwfx = (WAVEFORMATEX *)pmtIn->pbFormat;
-			cnt += snprintf(&buffer[cnt], SIZE - cnt,
-				"wFormatTag %u, nChannels %u, nSamplesPerSec %lu, nAvgBytesPerSec %lu, nBlockAlign %u, wBitsPerSample %u",
-				pwfx->wFormatTag,
-				pwfx->nChannels,
-				pwfx->nSamplesPerSec,
-				pwfx->nAvgBytesPerSec,
-				pwfx->nBlockAlign,
-				pwfx->wBitsPerSample);
-
-			/* PCM uses a WAVEFORMAT and does not have the extra size field */
-
-			if (pmtIn->cbFormat >= sizeof(WAVEFORMATEX)) {
-				cnt += snprintf(&buffer[cnt], SIZE - cnt, " cbSize %u", pwfx->cbSize);
-			}
-		}
-
-	} else {
-		WCHAR format_uuid[64];
-		StringFromGUID2(pmtIn->formattype, format_uuid, 64);
-		cnt += snprintf(&buffer[cnt], SIZE - cnt, " Format type %hs", format_uuid);
-	}
-
-	info(buffer);
-	return;
-}
 
 enum FourCC { FOURCC_NONE = 0, FOURCC_I420 = 100, FOURCC_YUY2 = 101, FOURCC_RGB32 = 102 };// from http://www.conaito.com/docus/voip-video-evo-sdk-capi/group__videocapture.html
 //
@@ -596,41 +622,54 @@ enum FourCC { FOURCC_NONE = 0, FOURCC_I420 = 100, FOURCC_YUY2 = 101, FOURCC_RGB3
 HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDIA_TYPE basically == CMediaType
 {
 	//DebugBreak();
-    CheckPointer(pmt, E_POINTER);
-    CAutoLock cAutoLock(m_pFilter->pStateLock());
-	info("GameCapture::GetMediaType position:%d", iPosition);
-	if(m_bFormatAlreadySet) {
+	CheckPointer(pmt, E_POINTER);
+	CAutoLock cAutoLock(m_pFilter->pStateLock());
+	char debug_buffer[1024];
+	//info("GameCapture::GetMediaType position:%d", iPosition);
+	if (m_bFormatAlreadySet) {
 		// you can only have one option, buddy, if setFormat already called. (see SetFormat's msdn)
-		if(iPosition != 0)
-          return E_INVALIDARG;
-		VIDEOINFO *pvi = (VIDEOINFO *) m_mt.Format();
+		if (iPosition != 0) {
+			error("GetMediaType - E_INVALIDARG p: %d format already set", iPosition);
+			return E_INVALIDARG;
+		}
+		VIDEOINFO *pvi = (VIDEOINFO *)m_mt.Format();
 
 		// Set() copies these in for us pvi->bmiHeader.biSizeImage  = GetBitmapSize(&pvi->bmiHeader); // calculates the size for us, after we gave it the width and everything else we already chucked into it
-        // pmt->SetSampleSize(pvi->bmiHeader.biSizeImage);
+		// pmt->SetSampleSize(pvi->bmiHeader.biSizeImage);
 		// nobody uses sample size anyway :P
 
 		pmt->Set(m_mt);
-		VIDEOINFOHEADER *pVih1 = (VIDEOINFOHEADER*) m_mt.pbFormat;
-		VIDEOINFO *pviHere = (VIDEOINFO  *) pmt->pbFormat;
+		VIDEOINFOHEADER *pVih1 = (VIDEOINFOHEADER*)m_mt.pbFormat;
+		VIDEOINFO *pviHere = (VIDEOINFO  *)pmt->pbFormat;
+		snprintf(debug_buffer, 1024, "GetMediaType (already set) p:%d - %s", iPosition, "S_OK");
+		info_pmt(debug_buffer, pmt);
 		return S_OK;
 	}
 
 	// do we ever even get past here? hmm
 
-    if(iPosition < 0)
-        return E_INVALIDARG;
+	if (iPosition < 0) {
+		error("GetMediaType - E_INVALIDARG p: %d", iPosition);
+		return E_INVALIDARG;
+	}
 
-    // Have we run out of types?
-    if(iPosition > 6)
-        return VFW_S_NO_MORE_ITEMS;
+	// Have we run out of types?
+	if (iPosition > 6) {
+		warn("GetMediaType - VFW_S_NO_MORE_ITEMS p:%d", iPosition);
+		return VFW_S_NO_MORE_ITEMS;
+	}
 
-    // force I420 for now
-    if(iPosition > 1)
-        return VFW_S_NO_MORE_ITEMS;
+	// force I420 for now
+	if (iPosition > 1) {
+		warn("GetMediaType - VFW_S_NO_MORE_ITEMS - forcing I420 p:%d", iPosition);
+		return VFW_S_NO_MORE_ITEMS;
+	}
 
-    VIDEOINFO *pvi = (VIDEOINFO *) pmt->AllocFormatBuffer(sizeof(VIDEOINFO));
-    if(NULL == pvi)
-        return(E_OUTOFMEMORY);
+	VIDEOINFO *pvi = (VIDEOINFO *)pmt->AllocFormatBuffer(sizeof(VIDEOINFO));
+	if (NULL == pvi) {
+		error("GetMediaType - E_OUTOFMEMORY");
+		return(E_OUTOFMEMORY);
+	}
 
     // Initialize the VideoInfo structure before configuring its members
     ZeroMemory(pvi, sizeof(VIDEOINFO));
@@ -737,8 +776,7 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
       pmt->SetSubtype(&SubTypeGUID);
 	}
 
-	info_pmt("getMedia", pmt);
-
+	info_pmt("GetMediaType", pmt);
     return NOERROR;
 
 } // GetMediaType

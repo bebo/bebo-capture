@@ -2,7 +2,7 @@
 #include "windows.h"
 
 #ifndef RELEASE
-#define RELEASE "v0.1.1"
+#define RELEASE "v0.1.2"
 #endif
 
 extern HRESULT RegGetBeboSZ(LPCTSTR szValueName, LPBYTE data, LPDWORD datasize);
@@ -12,9 +12,12 @@ std::unique_ptr<g2LogWorker> logworker = NULL;
 void setupLogging() {
 
 	if (logworker == NULL || &*logworker == NULL) {
-		DWORD size = 2048;
-		BYTE data[2048];
-		CHAR c_filename[2048];
+		const DWORD SIZE = 2048;
+		DWORD size = SIZE;
+		BYTE data[SIZE];
+		CHAR c_filename[SIZE];
+		memset(data, 0, size);
+		memset(c_filename, 0, size);
 		if (RegGetBeboSZ(TEXT("Logs"), data, &size) == S_OK) {
 			wsprintfA(c_filename, "%S\\", data);
 		}
