@@ -194,7 +194,6 @@ HRESULT CPushPinDesktop::Active(void) {
 #if 1
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 {
-	//LocalOutput("video frame requested");
 
 	__int64 startThisRound = StartCounter();
 

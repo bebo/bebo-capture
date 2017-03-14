@@ -583,6 +583,8 @@ static inline bool inject_hook(struct game_capture *gc)
 
 	hook_path = bebo_find_file(hook_dll);
 
+	info("injecting %s with %s", hook_dll, inject_path);
+
 	if (!check_file_integrity(gc, inject_path, "inject helper")) {
 		goto cleanup;
 	}
@@ -845,8 +847,8 @@ static inline bool attempt_existing_hook(struct game_capture *gc)
 {
 	gc->hook_restart = open_event_gc(gc, EVENT_CAPTURE_RESTART);
 	if (gc->hook_restart) {
-		debug("existing hook found, signaling process: %s",
-				gc->config.executable);
+		info("existing hook found, signaling process: %s",
+			gc->config.executable);
 		SetEvent(gc->hook_restart);
 		return true;
 	}
@@ -881,6 +883,7 @@ static bool init_hook(struct game_capture *gc)
 		return false;
 	}
 	if (target_suspended(gc)) {
+		info("target is suspended");
 		return false;
 	}
 	if (!open_target_process(gc)) {
@@ -1509,7 +1512,7 @@ boolean get_game_frame(void **data, float seconds, IMediaSample *pSample) {
 		if (result == CAPTURE_SUCCESS)
 			gc->capturing = start_capture(gc);
 		else
-			debug("init_capture_data failed");
+			info("init_capture_data failed");
 
 // FIXME: this is odd that we commented this out:
 //		if (result != CAPTURE_RETRY && !gc->capturing) {
