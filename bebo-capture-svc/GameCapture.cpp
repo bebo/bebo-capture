@@ -1350,7 +1350,6 @@ static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 		}
 
 		// TODO - better to initialize function pointer once ?
-		//DebugBreak();
 		int err = NULL;
 		if (gc->global_hook_info->format == DXGI_FORMAT_R8G8B8A8_UNORM) {
 			// Overwatch

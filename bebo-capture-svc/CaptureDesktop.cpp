@@ -61,6 +61,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 
     init_hooks_thread = CreateThread(NULL, 0, init_hooks, NULL, 0, NULL);
 
+#if 0
 	m_iHwndToTrack = (HWND) read_config_setting(TEXT("hwnd_to_track"), NULL, false);
 	if(m_iHwndToTrack) {
 	  info("using specified hwnd no decoration: %d", m_iHwndToTrack);
@@ -88,6 +89,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	}
 	//m_iScreenBitDepth = GetTrueScreenDepth(hScrDc);
 	ASSERT_RAISE(hScrDc != 0); // 0 implies failure... [if using hwnd, can mean the window is gone!]
+#endif
 	
     // Get the dimensions of the main desktop window as the default
     m_rScreen.left   = m_rScreen.top = 0;
@@ -134,20 +136,6 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_iCaptureConfigHeight = m_rScreen.bottom - m_rScreen.top;
 	ASSERT_RAISE(m_iCaptureConfigHeight > 0);
 
-	DWORD size = 1024;
-	BYTE data[1024];
-	if (RegGetBeboSZ(TEXT("CaptureWindowName"), data, &size) == S_OK) {
-		m_pCaptureWindowName = (WCHAR *) malloc(size*2);
-		wsprintfW(m_pCaptureWindowName, L"%s", data);
-	}
-	size = 1024;
-	if (RegGetBeboSZ(TEXT("CaptureWindowClassName"), data, &size) == S_OK) {
-		m_pCaptureWindowClassName = (WCHAR *)malloc(size * 2);
-		wsprintfW(m_pCaptureWindowClassName, L"%s", data);
-	}
-
-	m_bCaptureAntiCheat = read_config_setting(TEXT("CaptureAntiCheat"), 0, true) == 1;
-
 	m_iStretchToThisConfigWidth = read_config_setting(TEXT("stretch_to_width"), 0, false);
 	m_iStretchToThisConfigHeight = read_config_setting(TEXT("stretch_to_height"), 0, false);
 	m_iStretchMode = read_config_setting(TEXT("stretch_mode_high_quality_if_1"), 0, true); // guess it's either stretch mode 0 or 1
@@ -170,6 +158,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 		m_bDeDupe = 1; // takes 10 or 20ms...but useful to me! :)
 	}
 	m_millisToSleepBeforePollForChanges = read_config_setting(TEXT("millis_to_sleep_between_poll_for_dedupe_changes"), 10, true);
+	GetGameFromRegistry();
 
 	LOGF(INFO, "default/from reg read config as: %dx%d -> %dx%d (%d top %d bottom %d l %d r) %dfps, dedupe? %d, millis between dedupe polling %d, m_bReReadRegistry? %d hwnd:%d \n", 
 	  m_iCaptureConfigHeight, m_iCaptureConfigWidth, getCaptureDesiredFinalHeight(), getCaptureDesiredFinalWidth(), m_rScreen.top, m_rScreen.bottom, m_rScreen.left, m_rScreen.right, config_max_fps, m_bDeDupe, m_millisToSleepBeforePollForChanges, m_bReReadRegistry, m_iHwndToTrack);
@@ -179,6 +168,23 @@ char out[1000];
 // FIXME :  move these
 bool ever_started = false;
 bool starting = false;
+
+void CPushPinDesktop::GetGameFromRegistry(void) {
+	DWORD size = 1024;
+	BYTE data[1024];
+	if (RegGetBeboSZ(TEXT("CaptureWindowName"), data, &size) == S_OK) {
+		m_pCaptureWindowName = (WCHAR *) malloc(size*2);
+		wsprintfW(m_pCaptureWindowName, L"%s", data);
+	}
+	size = 1024;
+	if (RegGetBeboSZ(TEXT("CaptureWindowClassName"), data, &size) == S_OK) {
+		m_pCaptureWindowClassName = (WCHAR *)malloc(size * 2);
+		wsprintfW(m_pCaptureWindowClassName, L"%s", data);
+	}
+
+	m_bCaptureAntiCheat = read_config_setting(TEXT("CaptureAntiCheat"), 0, true) == 1;
+	return;
+}
 
 
 HRESULT CPushPinDesktop::Inactive(void) {
@@ -220,7 +226,8 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 			game_context = hook(&game_context, m_pCaptureWindowClassName, m_pCaptureWindowName, config);
 			if (!isReady(&game_context)) {
-				Sleep(100);
+				Sleep(50);
+				GetGameFromRegistry();
 			}
 
 			continue;

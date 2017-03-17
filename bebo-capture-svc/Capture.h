@@ -138,6 +138,7 @@ public:
 	HRESULT OnThreadCreate(void);
 	HRESULT OnThreadDestroy(void);
 	HRESULT OnThreadStartPlay(void);
+	void GetGameFromRegistry(void);
 	HRESULT Inactive(void);
 	HRESULT Active(void);
 
