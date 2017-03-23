@@ -1,8 +1,8 @@
-# Bebo Game Capture Direct Show Filter
+# Bebo Game Capture Direct Show Filter Service
 
 https://github.com/bebo/bebo-capture
 
-This projects provides a Direct Show Capture Filter for capturing:
+This projects provides a Direct Show Capture Filter Service for capturing:
 * Direct X and OpenGL games (Direct X, OpenGL)
 * desktop capture (Using the Desktop Duplication API) - TODO
 * windowed applications (GDI) - TODO (commented out at the moment)
@@ -14,7 +14,7 @@ Currently tested on Windows 10 64 bit
 ## Build Dependencies
 * Visual Studio 2015 (C++)
 
-## To register the capture DLL
+## To register the capture DLL as a Direct Show Capture Service
 
 run cmd as __Administrator__:
 ```
