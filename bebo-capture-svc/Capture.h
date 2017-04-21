@@ -85,7 +85,7 @@ protected:
     int getNegotiatedFinalHeight();                   
 
 	game_capture_config * config;
-	void * game_context;
+    void * game_context;
 
 	int m_iCaptureConfigWidth;
 	int m_iCaptureConfigHeight;
