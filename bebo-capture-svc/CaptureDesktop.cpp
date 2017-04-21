@@ -286,18 +286,17 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	previousFrameEndTime = max(0, previousFrameEndTime); 
 	if ((now> 0) && now < (previousFrameEndTime + m_rtFrameLength)) {
 		endFrame = previousFrameEndTime + m_rtFrameLength;
-		previousFrameEndTime = endFrame ;
 	} else {
 		//endFrame = now + m_rtFrameLength;
 		//previousFrameEndTime = endFrame;
 		endFrame = now + m_rtFrameLength;
-		previousFrameEndTime = endFrame  ;
 	}
 	info("captured frame %d", now - last_start);
 	last_start = now;
 
-    pSample->SetTime((REFERENCE_TIME *) &now, (REFERENCE_TIME *) &endFrame);
+    pSample->SetTime((REFERENCE_TIME *) &previousFrameEndTime, (REFERENCE_TIME *) &endFrame);
 	//pSample->SetMediaTime((REFERENCE_TIME *)&now, (REFERENCE_TIME *) &endFrame); 
+	previousFrameEndTime = endFrame  ;
     debug("timestamping video packet as %lld -> %lld", now, endFrame);
 
     m_iFrameNumber++;
