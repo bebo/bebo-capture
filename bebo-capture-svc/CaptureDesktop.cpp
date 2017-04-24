@@ -210,7 +210,6 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	CRefTime endFrame;
 	CRefTime now;
 	now = 0;
-	static REFERENCE_TIME last_start = 0;
 
 	boolean gotFrame = false ;
 	while (!gotFrame) {
@@ -249,21 +248,24 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 		CSourceStream::m_pFilter->StreamTime(now);
 
 		if (now <= 0) {
-			DWORD dwMilliseconds =  (DWORD)(m_rtFrameLength / 20000L);
+			DWORD dwMilliseconds =  (DWORD)( m_rtFrameLength / 20000L);
 			debug("no reference graph clock - sleeping %d", dwMilliseconds);
 			Sleep(dwMilliseconds);
 		} else if (now < (previousFrameEndTime + (m_rtFrameLength / 2))) {
-			DWORD dwMilliseconds =  (DWORD)((previousFrameEndTime + (m_rtFrameLength / 2) - now) / 10000L);
+			DWORD dwMilliseconds =  (DWORD)(1 + (previousFrameEndTime + (m_rtFrameLength / 2) - now) / 10000L);
 			debug("sleeping A - %d", dwMilliseconds);
 			Sleep(dwMilliseconds);
 		} else if (now < (previousFrameEndTime + m_rtFrameLength)) {
-			DWORD dwMilliseconds =  (DWORD)((previousFrameEndTime + m_rtFrameLength - now) / 10000L);
+			DWORD dwMilliseconds =  (DWORD)(1 + (previousFrameEndTime + m_rtFrameLength - now) / 10000L);
 			debug("sleeping B - %d", dwMilliseconds);
 			Sleep(dwMilliseconds);
 		} else if (missed) {
-			DWORD dwMilliseconds =  (DWORD)(m_rtFrameLength / 20000L);
+			DWORD dwMilliseconds =  (DWORD)(m_rtFrameLength / 10000L);
 			debug("starting/missed - sleeping %d", dwMilliseconds);
 			Sleep(dwMilliseconds);
+		} else if (missed == false && m_iFrameNumber == 0) {
+			info("getting second frame");
+			missed = true;
 		} else {
 			info("missed a frame can't keep up %d %d %.02f %llu %llu",
 				m_iFrameNumber, countMissed++, (100.0L*countMissed / m_iFrameNumber), now, previousFrameEndTime);
@@ -276,28 +278,54 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			gotFrame = false;
 			info("Capture Ended");
 		}
+
+		if (gotFrame && previousFrameEndTime <= 0) {
+			gotFrame = false;
+			previousFrameEndTime = now;
+			missed = false;
+			debug("skip first frame");
+		}
 	}
 	missed = false;
 	millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
 	fastestRoundMillis = min(millisThisRoundTook, fastestRoundMillis);
 	sumMillisTook += millisThisRoundTook;
+	CSourceStream::m_pFilter->StreamTime(now); // update time after we got frame
+
+	if (now < (previousFrameEndTime + m_rtFrameLength)) {
+		DWORD dwMilliseconds = (DWORD)(1 + ((previousFrameEndTime + m_rtFrameLength) - now) / 10000L);
+		REFERENCE_TIME past = now;
+	    Sleep(dwMilliseconds);
+	    CSourceStream::m_pFilter->StreamTime(now); // update time after we got frame
+		info("early frame change (%11d -> %11d) - post frame sleep - %d", past, now, dwMilliseconds);
+	}
 
 	// accomodate for 0 to avoid startup negatives, which would kill our math on the next loop...
 	previousFrameEndTime = max(0, previousFrameEndTime); 
-	if ((now> 0) && now < (previousFrameEndTime + m_rtFrameLength)) {
+	if (now <= 0) {
+		debug("no reference clock");
+		previousFrameEndTime = now - m_rtFrameLength;
+		endFrame = now;
+	} else if (now <= (previousFrameEndTime + 2 * m_rtFrameLength) && now >= (previousFrameEndTime + m_rtFrameLength)) {
+		// auto-correct drift
 		endFrame = previousFrameEndTime + m_rtFrameLength;
-	} else {
+	} else if (now > previousFrameEndTime + 2 * m_rtFrameLength) {
+		warn("too slow skip some frames");
+		previousFrameEndTime = now - m_rtFrameLength;
+		endFrame = now;
+	} else if (now < (previousFrameEndTime + m_rtFrameLength)) {
+		warn("too fast ???");
 		//endFrame = now + m_rtFrameLength;
 		//previousFrameEndTime = endFrame;
-		endFrame = now + m_rtFrameLength;
-	}
-	info("captured frame %d", now - last_start);
-	last_start = now;
+		previousFrameEndTime = now - m_rtFrameLength;
+		endFrame = now;
+	} 
 
     pSample->SetTime((REFERENCE_TIME *) &previousFrameEndTime, (REFERENCE_TIME *) &endFrame);
+    debug("timestamping video packet (%11d) as %lld -> %lld", now, previousFrameEndTime, endFrame);
+
 	//pSample->SetMediaTime((REFERENCE_TIME *)&now, (REFERENCE_TIME *) &endFrame); 
 	previousFrameEndTime = endFrame  ;
-    debug("timestamping video packet as %lld -> %lld", now, endFrame);
 
     m_iFrameNumber++;
 

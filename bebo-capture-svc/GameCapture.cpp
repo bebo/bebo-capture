@@ -1407,7 +1407,6 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 				dst_stride_v,
 				width,
 				height);
-
 		} else {
 			warn("Unknown DXGI FORMAT %d", gc->global_hook_info->format);
 		}
@@ -1422,6 +1421,7 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 			pitch < gc->pitch ? pitch : gc->pitch;
 
 		for (uint32_t y = 0; y < gc->cy; y++) {
+
 			uint8_t *line_in = input + gc->pitch * y;
 			uint8_t *line_out = pData + pitch * y;
 			memcpy(line_out, line_in, best_pitch);
