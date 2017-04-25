@@ -329,7 +329,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	// startFrame must be "now" as this seems to be taken as the rtp timestampe in chrome and everything goes to hell if it isn't
 	if (now > 0) {
 		pSample->SetTime((REFERENCE_TIME *) &startFrame, (REFERENCE_TIME *) &endFrame);
-		info("timestamping (%11f) video packet %llf -> %llf length:(%11f) drift:(%llf)", 0.0001 * now, 0.0001 * startFrame, 0.0001 * endFrame, 0.0001 * (endFrame - startFrame), 0.0001 *(now - previousFrameEndTime));
+		debug("timestamping (%11f) video packet %llf -> %llf length:(%11f) drift:(%llf)", 0.0001 * now, 0.0001 * startFrame, 0.0001 * endFrame, 0.0001 * (endFrame - startFrame), 0.0001 *(now - previousFrameEndTime));
 	} else {
 		info("no reference time - not setting time on stream :-(");
 	}
