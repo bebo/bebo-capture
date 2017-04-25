@@ -251,12 +251,12 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			DWORD dwMilliseconds =  (DWORD)( m_rtFrameLength / 20000L);
 			debug("no reference graph clock - sleeping %d", dwMilliseconds);
 			Sleep(dwMilliseconds);
-		} else if (now < (previousFrameEndTime + (m_rtFrameLength / 2))) {
-			DWORD dwMilliseconds =  (DWORD)(1 + (previousFrameEndTime + (m_rtFrameLength / 2) - now) / 10000L);
+		} else if (now < (previousFrameEndTime - (m_rtFrameLength / 2))) {
+			DWORD dwMilliseconds =  (DWORD)(1 + (previousFrameEndTime - (m_rtFrameLength / 2) - now) / 10000L);
 			debug("sleeping A - %d", dwMilliseconds);
 			Sleep(dwMilliseconds);
-		} else if (now < (previousFrameEndTime + m_rtFrameLength)) {
-			DWORD dwMilliseconds =  (DWORD)(1 + (previousFrameEndTime + m_rtFrameLength - now) / 10000L);
+		} else if (now < (previousFrameEndTime )) {
+			DWORD dwMilliseconds =  (DWORD)(1 + (previousFrameEndTime - now) / 10000L);
 			debug("sleeping B - %d", dwMilliseconds);
 			Sleep(dwMilliseconds);
 		} else if (missed) {
@@ -281,7 +281,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 		if (gotFrame && previousFrameEndTime <= 0) {
 			gotFrame = false;
-			previousFrameEndTime = now;
+			previousFrameEndTime = now + m_rtFrameLength;
 			missed = false;
 			debug("skip first frame");
 		}
@@ -292,8 +292,8 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	sumMillisTook += millisThisRoundTook;
 	CSourceStream::m_pFilter->StreamTime(now); // update time after we got frame
 
-	if (now < (previousFrameEndTime + m_rtFrameLength)) {
-		DWORD dwMilliseconds = (DWORD)(1 + ((previousFrameEndTime + m_rtFrameLength) - now) / 10000L);
+	while(now < (previousFrameEndTime)) {
+		DWORD dwMilliseconds = (DWORD)(1 + (previousFrameEndTime  - now) / 10000L);
 		REFERENCE_TIME past = now;
 	    Sleep(dwMilliseconds);
 	    CSourceStream::m_pFilter->StreamTime(now); // update time after we got frame
@@ -303,28 +303,26 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	// accomodate for 0 to avoid startup negatives, which would kill our math on the next loop...
 	previousFrameEndTime = max(0, previousFrameEndTime); 
 	if (now <= 0) {
-		debug("no reference clock");
-		previousFrameEndTime = now - m_rtFrameLength;
-		endFrame = now;
-	} else if (now <= (previousFrameEndTime + 2 * m_rtFrameLength) && now >= (previousFrameEndTime + m_rtFrameLength)) {
+		info("no reference clock");
+		previousFrameEndTime = previousFrameEndTime + m_rtFrameLength;
+		endFrame = previousFrameEndTime;
+	} else if (now <= (previousFrameEndTime + m_rtFrameLength) && now >= previousFrameEndTime) {
 		// auto-correct drift
 		endFrame = previousFrameEndTime + m_rtFrameLength;
-	} else if (now > previousFrameEndTime + 2 * m_rtFrameLength) {
+	} else if (now > previousFrameEndTime + m_rtFrameLength) {
 		warn("too slow skip some frames");
-		previousFrameEndTime = now - m_rtFrameLength;
-		endFrame = now;
-	} else if (now < (previousFrameEndTime + m_rtFrameLength)) {
+		endFrame = now + m_rtFrameLength;
+	} else if (now < (previousFrameEndTime)) {
 		warn("too fast ???");
-		//endFrame = now + m_rtFrameLength;
-		//previousFrameEndTime = endFrame;
-		previousFrameEndTime = now - m_rtFrameLength;
-		endFrame = now;
+		endFrame = now + m_rtFrameLength;
 	} 
+	if (now > 0) {
+		pSample->SetTime((REFERENCE_TIME *) &now, (REFERENCE_TIME *) &endFrame);
+		info("timestamping video packet %lld -> %lld length:(%11d) jitter:(%lld)", now, endFrame, endFrame - now, endFrame - now - m_rtFrameLength );
+	} else {
+		info("no reference time - not setting time on stream :-(");
+	}
 
-    pSample->SetTime((REFERENCE_TIME *) &previousFrameEndTime, (REFERENCE_TIME *) &endFrame);
-    debug("timestamping video packet (%11d) as %lld -> %lld", now, previousFrameEndTime, endFrame);
-
-	//pSample->SetMediaTime((REFERENCE_TIME *)&now, (REFERENCE_TIME *) &endFrame); 
 	previousFrameEndTime = endFrame  ;
 
     m_iFrameNumber++;
