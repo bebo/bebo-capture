@@ -292,9 +292,12 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	sumMillisTook += millisThisRoundTook;
 	CSourceStream::m_pFilter->StreamTime(now); // update time after we got frame
 
-	while(now < (previousFrameEndTime)) {
-		DWORD dwMilliseconds = (DWORD)(1 + (previousFrameEndTime  - now) / 10000L);
-		REFERENCE_TIME past = now;
+    REFERENCE_TIME past = now;
+	while(now < previousFrameEndTime) {
+		DWORD dwMilliseconds = (DWORD)((previousFrameEndTime  - now) / 10000L);
+		if (dwMilliseconds == 0) {
+			dwMilliseconds = 1;
+		}
 	    Sleep(dwMilliseconds);
 	    CSourceStream::m_pFilter->StreamTime(now); // update time after we got frame
 		info("early frame change (%11d -> %11d) - post frame sleep - %d", past, now, dwMilliseconds);
@@ -302,23 +305,31 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 	// accomodate for 0 to avoid startup negatives, which would kill our math on the next loop...
 	previousFrameEndTime = max(0, previousFrameEndTime); 
+	REFERENCE_TIME startFrame;
 	if (now <= 0) {
 		info("no reference clock");
 		previousFrameEndTime = previousFrameEndTime + m_rtFrameLength;
 		endFrame = previousFrameEndTime;
+	    startFrame = previousFrameEndTime;
 	} else if (now <= (previousFrameEndTime + m_rtFrameLength) && now >= previousFrameEndTime) {
 		// auto-correct drift
 		endFrame = previousFrameEndTime + m_rtFrameLength;
+	    //startFrame = previousFrameEndTime;
+	    startFrame = now;
 	} else if (now > previousFrameEndTime + m_rtFrameLength) {
 		warn("too slow skip some frames");
 		endFrame = now + m_rtFrameLength;
+		startFrame = now;
 	} else if (now < (previousFrameEndTime)) {
 		warn("too fast ???");
 		endFrame = now + m_rtFrameLength;
+		startFrame = now;
 	} 
+
+	// startFrame must be "now" as this seems to be taken as the rtp timestampe in chrome and everything goes to hell if it isn't
 	if (now > 0) {
-		pSample->SetTime((REFERENCE_TIME *) &now, (REFERENCE_TIME *) &endFrame);
-		info("timestamping video packet %lld -> %lld length:(%11d) jitter:(%lld)", now, endFrame, endFrame - now, endFrame - now - m_rtFrameLength );
+		pSample->SetTime((REFERENCE_TIME *) &startFrame, (REFERENCE_TIME *) &endFrame);
+		info("timestamping (%11f) video packet %llf -> %llf length:(%11f) drift:(%llf)", 0.0001 * now, 0.0001 * startFrame, 0.0001 * endFrame, 0.0001 * (endFrame - startFrame), 0.0001 *(now - previousFrameEndTime));
 	} else {
 		info("no reference time - not setting time on stream :-(");
 	}
