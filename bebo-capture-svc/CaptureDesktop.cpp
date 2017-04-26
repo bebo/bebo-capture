@@ -103,9 +103,9 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	  info("ignoring startx, starty since hwnd was specified");
 	}
 
-	int config_width = read_config_setting(TEXT("CaptureWidth"), 1280, true);
+	int config_width = read_config_setting(TEXT("MaxCaptureWidth"), 1920, true);
 	ASSERT_RAISE(config_width >= 0); // negatives not allowed...
-	int config_height = read_config_setting(TEXT("CaptureHeight"), 720, true);
+	int config_height = read_config_setting(TEXT("MaxCaptureHeight"), 1080, true);
 	ASSERT_RAISE(config_height >= 0); // negatives not allowed, if it's set :)
 
 	if(config_width > 0) {
@@ -144,7 +144,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_bCaptureMouse = read_config_setting(TEXT("capture_mouse_default_1"), 1, true) == 1;
 
 	// default 30 fps...hmm...
-	int config_max_fps = read_config_setting(TEXT("CaptureFPS"), 60, false);
+	int config_max_fps = read_config_setting(TEXT("MaxCaptureFPS"), 60, false);
 	ASSERT_RAISE(config_max_fps > 0);	
 
 	// m_rtFrameLength is also re-negotiated later...
