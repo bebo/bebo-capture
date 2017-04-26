@@ -272,7 +272,7 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 // except WFMLE sends us a junk type, so we check it anyway LODO do we? Or is it the other method Set Format that they call in vain? Or it first?
 HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 {
-	CAutoLock cAutoLock(m_pFilter->pStateLock());
+    CAutoLock cAutoLock(m_pFilter->pStateLock());
 
 	// Pass the call up to my base class
 	HRESULT hr = CSourceStream::SetMediaType(pMediaType); // assigns our local m_mt via m_mt.Set(*pmt) ... 
@@ -290,8 +290,8 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 		return E_UNEXPECTED;
 	}
 
-	switch(pvi->bmiHeader.biBitCount)
-	{
+	switch(pvi->bmiHeader.biBitCount) {
+
 		case 12:     // i420
 			if(m_bDeDupe) {
 				 //ASSERT_RAISE(!m_bDeDupe); // not compatible with this yet // can't assert here or skype tries this, and, if m_bDeDupe is on, it raises, and kills skype :(
@@ -316,23 +316,26 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 			hr = E_INVALIDARG;
 			break;
 	}
+    
+    // The frame rate at which your filter should produce data is determined by the AvgTimePerFrame field of VIDEOINFOHEADER
+    if (pvi->AvgTimePerFrame) { // or should Set Format accept this? hmm...
+        m_rtFrameLength = pvi->AvgTimePerFrame; // allow them to set whatever fps they request, i.e. if it's less than the max default.  VLC command line can specify this, for instance...
+        set_fps(&game_context, m_rtFrameLength * 100);
+    }
+    // also setup scaling here, as WFMLE and ffplay and VLC all get here...
+    m_rScreen.right = m_rScreen.left + pvi->bmiHeader.biWidth; // allow them to set whatever "scaling size" they want [set m_rScreen is negotiated right here]
+    m_rScreen.bottom = m_rScreen.top + pvi->bmiHeader.biHeight;
 
-	// The frame rate at which your filter should produce data is determined by the AvgTimePerFrame field of VIDEOINFOHEADER
-	if(pvi->AvgTimePerFrame) // or should Set Format accept this? hmm...
-	m_rtFrameLength = pvi->AvgTimePerFrame; // allow them to set whatever fps they request, i.e. if it's less than the max default.  VLC command line can specify this, for instance...
-	// also setup scaling here, as WFMLE and ffplay and VLC all get here...
-	m_rScreen.right = m_rScreen.left + pvi->bmiHeader.biWidth; // allow them to set whatever "scaling size" they want [set m_rScreen is negotiated right here]
-	m_rScreen.bottom = m_rScreen.top + pvi->bmiHeader.biHeight;
+    char debug_buffer[1024];
+    if (hr == S_OK) {
+        snprintf(debug_buffer, 1024, "SetMediaType - S_OK requested/negotiated[fps:%.02f x:%d y:%d bitcount:%d]",
+        GetFps(), pvi->bmiHeader.biWidth, pvi->bmiHeader.biHeight, pvi->bmiHeader.biBitCount);
+        info_pmt(debug_buffer, pMediaType);
+    } else {
+        snprintf(debug_buffer, 1024, "SetMediaType - E_INVALIDARG [bitcount requested/negotiated: %d]", pvi->bmiHeader.biBitCount);
+        error_pmt(debug_buffer, pMediaType);
+    }
 
-	char debug_buffer[1024];
-	if (hr == S_OK) {
-		snprintf(debug_buffer, 1024, "SetMediaType - S_OK [bitcount requested/negotiated: %d]", pvi->bmiHeader.biBitCount);
-		info_pmt(debug_buffer, pMediaType);
-	} else {
-		snprintf(debug_buffer, 1024, "SetMediaType - E_INVALIDARG [bitcount requested/negotiated: %d]", pvi->bmiHeader.biBitCount);
-		error_pmt(debug_buffer, pMediaType);
-	}
-	
     return hr;
 
 } // SetMediaType

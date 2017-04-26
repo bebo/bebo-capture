@@ -47,7 +47,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 		m_bFormatAlreadySet(false),
 		hRawBitmap(NULL),
 		m_bUseCaptureBlt(false),
-		previousFrameEndTime(0),
+		previousFrame(0),
 		active(false),
 		m_pCaptureWindowName(NULL),
 		m_pCaptureWindowClassName(NULL),
@@ -55,7 +55,6 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 {
 	info("CPushPinDesktop");
 	// Get the device context of the main display, just to get some metrics for it...
-	globalStart = GetTickCount();
 	config = (struct game_capture_config*) malloc(sizeof game_capture_config);
 	memset(config, 0, sizeof game_capture_config);
 
@@ -167,7 +166,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 char out[1000];
 // FIXME :  move these
 bool ever_started = false;
-bool starting = false;
+boolean missed = false;
 
 void CPushPinDesktop::GetGameFromRegistry(void) {
 	DWORD size = 1024;
@@ -207,6 +206,9 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	if (m_bReReadRegistry) {
 		reReadCurrentStartXY(1);
 	}
+	long double millisThisRoundTook = 0;
+	CRefTime now;
+	now = 0;
 
 	boolean gotFrame = false ;
 	while (!gotFrame) {
@@ -224,81 +226,88 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			config->force_scaling = 1;
 			config->anticheat_hook = m_bCaptureAntiCheat;
 
-			game_context = hook(&game_context, m_pCaptureWindowClassName, m_pCaptureWindowName, config);
+			game_context = hook(&game_context, m_pCaptureWindowClassName, m_pCaptureWindowName, config, m_rtFrameLength * 100);
 			if (!isReady(&game_context)) {
 				Sleep(50);
 				GetGameFromRegistry();
-			}
+			    continue;
+			} 
 
-			continue;
+			// reset stats - stream really starts here
+			globalStart = GetTickCount();
+			countMissed = 0;
+			sumMillisTook = 0;
+			fastestRoundMillis = LONG_MAX;
+			m_iFrameNumber = 0;
+			missed = true;
+			previousFrame= 0;
+			debug("frame_length: %d", m_rtFrameLength);
+
 		}
+		CSourceStream::m_pFilter->StreamTime(now);
 
-		gotFrame = get_game_frame(&game_context, 0.0, pSample);
+		if (now <= 0) {
+			DWORD dwMilliseconds =  (DWORD)( m_rtFrameLength / 20000L);
+			debug("no reference graph clock - sleeping %d", dwMilliseconds);
+			Sleep(dwMilliseconds);
+		} else if (now < (previousFrame + (m_rtFrameLength / 2))) {
+			DWORD dwMilliseconds =  (DWORD) max(1, min(10000 + previousFrame + (m_rtFrameLength / 2) - now, (m_rtFrameLength/2)) / 10000L);
+			debug("sleeping A - %d", dwMilliseconds);
+			Sleep(dwMilliseconds);
+		} else if (now < (previousFrame + m_rtFrameLength )) {
+			DWORD dwMilliseconds = (DWORD) max(1, min((previousFrame + m_rtFrameLength - now), (m_rtFrameLength/2)) / 10000L);
+			debug("sleeping B - %d", dwMilliseconds);
+			Sleep(dwMilliseconds);
+		} else if (missed) {
+			DWORD dwMilliseconds =  (DWORD)(m_rtFrameLength / 10000L);
+			debug("starting/missed - sleeping %d", dwMilliseconds);
+			Sleep(dwMilliseconds);
+		    CSourceStream::m_pFilter->StreamTime(now);
+		} else if (missed == false && m_iFrameNumber == 0) {
+			info("getting second frame");
+			missed = true;
+		} else if (now > (previousFrame + 2 * m_rtFrameLength)) {
+			int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
+			m_iFrameNumber += missed_nr;
+			countMissed += missed_nr;
+			warn("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
+				missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
+			previousFrame = previousFrame + missed_nr * m_rtFrameLength;
+			missed = true;
+		} else {
+			info("late need to catch up");
+			missed = true;
+		} 
+
+	    startThisRound = StartCounter();
+		gotFrame = get_game_frame(&game_context, missed, pSample);
 		if (!game_context) {
 			gotFrame = false;
-			starting = false;
 			info("Capture Ended");
 		}
-		if (gotFrame) {
-			starting = false;
-		} else {
-			Sleep(m_rtFrameLength / 20000);
+
+		if (gotFrame && previousFrame <= 0) {
+			gotFrame = false;
+			previousFrame = now;
+			missed = false;
+			debug("skip first frame");
 		}
 	}
-
-	// capture some debug stats (how long it took) before we add in our own arbitrary delay to enforce fps...
-	long double millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
-	fastestRoundMillis = min(millisThisRoundTook, fastestRoundMillis); // keep stats :)
+	missed = false;
+	millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
+	fastestRoundMillis = min(millisThisRoundTook, fastestRoundMillis);
 	sumMillisTook += millisThisRoundTook;
 
-	CRefTime now;
-	CRefTime endFrame;
-	now = 0;
-	CSourceStream::m_pFilter->StreamTime(now);
-	if((now > 0) && (now < previousFrameEndTime)) { // now > 0 to accomodate for if there is no reference graph clock at all...also at boot strap time to ignore it XXXX can negatives even ever happen anymore though?
-		while(now < previousFrameEndTime) { // guarantees monotonicity too :P
-		  debug("sleeping because %llu < %llu", now, previousFrameEndTime);
-		  Sleep(1);
-          CSourceStream::m_pFilter->StreamTime(now);
-		}
-		// avoid a tidge of creep since we sleep until [typically] just past the previous end.
-		endFrame = previousFrameEndTime + m_rtFrameLength;
-	    previousFrameEndTime = endFrame;
-	    
-	} else {
-		// if there's no reference clock, it will "always" think it missed a frame
-	  if(show_performance) {
-		  if (now == 0) {
-			  info("probable none reference clock, streaming fastly");
-		  } else {
-			  info("missed a frame can't keep up %d %d %.02f %llu %llu",
-				    m_iFrameNumber, countMissed++, (100.0L*countMissed / m_iFrameNumber),
-				    now, previousFrameEndTime); // we don't miss time typically I don't think, unless de-dupe is turned on, or aero, or slow computer, buffering problems downstream, etc.
-		  }
-	  }
-	  // have to add a bit here, or it will always be "it missed a frame" for the next round...forever!
-	  endFrame = now + m_rtFrameLength;
-	  // most of this stuff I just made up because it "sounded right"
-	  //LocalOutput("checking to see if I can catch up again now: %llu previous end: %llu subtr: %llu %i", now, previousFrameEndTime, previousFrameEndTime - m_rtFrameLength, previousFrameEndTime - m_rtFrameLength);
-	  debug("checking to see if I can catch up again now: %llu previous end: %llu subtr: %llu %i", now, previousFrameEndTime, previousFrameEndTime - m_rtFrameLength, previousFrameEndTime - m_rtFrameLength);
-	  if (((REFERENCE_TIME)now) < (previousFrameEndTime - m_rtFrameLength)) {
-		  // let it pretend and try to catch up, it's not quite a frame behind
-		  previousFrameEndTime = previousFrameEndTime + m_rtFrameLength;
-	  } else if ((REFERENCE_TIME)now > (previousFrameEndTime + m_rtFrameLength)) {
-		  debug("resetting previousFrameEndTime %d, %d => %d", now, previousFrameEndTime, endFrame);
-		  previousFrameEndTime = endFrame;
-	  } else {
-		endFrame = now + m_rtFrameLength/2; // ?? seems to not hurt, at least...I guess
-		previousFrameEndTime = endFrame;
-	  }
-	}
-
 	// accomodate for 0 to avoid startup negatives, which would kill our math on the next loop...
-	previousFrameEndTime = max(0, previousFrameEndTime); 
+	previousFrame = max(0, previousFrame); 
+	// auto-correct drift
+	previousFrame = previousFrame + m_rtFrameLength;
 
-    pSample->SetTime((REFERENCE_TIME *) &now, (REFERENCE_TIME *) &endFrame);
-	//pSample->SetMediaTime((REFERENCE_TIME *)&now, (REFERENCE_TIME *) &endFrame); 
-    debug("timestamping video packet as %lld -> %lld", now, endFrame);
+	REFERENCE_TIME startFrame = m_iFrameNumber * m_rtFrameLength;
+	REFERENCE_TIME endFrame = startFrame + m_rtFrameLength;
+	pSample->SetTime((REFERENCE_TIME *) &startFrame, (REFERENCE_TIME *) &endFrame);
+	CSourceStream::m_pFilter->StreamTime(now);
+	debug("timestamping (%11f) video packet %llf -> %llf length:(%11f) drift:(%llf)", 0.0001 * now, 0.0001 * startFrame, 0.0001 * endFrame, 0.0001 * (endFrame - startFrame), 0.0001 * (now - previousFrame));
 
     m_iFrameNumber++;
 
@@ -312,6 +321,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed %d", 
 		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0*1000/millisThisRoundTook,
 		/* average */ 1.0*1000*m_iFrameNumber/sumMillisTook, 1.0*1000/fastestRoundMillis, GetFps(), countMissed);
+	debug(out);
 	return S_OK;
 }
 
@@ -770,7 +780,7 @@ HRESULT CPushPinDesktop::DecideBufferSize(IMemAllocator *pAlloc,
 		DeleteObject (hRawBitmap); // delete the old one in case it exists...
 	hRawBitmap = CreateCompatibleBitmap(hScrDc, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
 	
-	previousFrameEndTime = 0; // reset
+	previousFrame = 0; // reset
 	m_iFrameNumber = 0;
 
     return NOERROR;
@@ -779,7 +789,7 @@ HRESULT CPushPinDesktop::DecideBufferSize(IMemAllocator *pAlloc,
 
 HRESULT CPushPinDesktop::OnThreadCreate() {
 	info("CPushPinDesktop OnThreadCreate");
-	previousFrameEndTime = 0; // reset <sigh> dunno if this helps FME which sometimes had inconsistencies, or not
+	previousFrame = 0; // reset <sigh> dunno if this helps FME which sometimes had inconsistencies, or not
 	m_iFrameNumber = 0;
 	return S_OK;
 }

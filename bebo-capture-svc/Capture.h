@@ -77,7 +77,7 @@ protected:
     //int m_FramesWritten;				// To track where we are
     REFERENCE_TIME m_rtFrameLength; // also used to get the fps
 	// float m_fFps; use the method to get this now
-	REFERENCE_TIME previousFrameEndTime;
+	REFERENCE_TIME previousFrame;
 
     RECT m_rScreen;                     // Rect containing screen coordinates we are currently "capturing"
 
@@ -85,7 +85,7 @@ protected:
     int getNegotiatedFinalHeight();                   
 
 	game_capture_config * config;
-	void * game_context;
+    void * game_context;
 
 	int m_iCaptureConfigWidth;
 	int m_iCaptureConfigHeight;

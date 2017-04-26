@@ -21,7 +21,6 @@
 #include "libyuv/convert.h"
 
 
-
 #define STOP_BEING_BAD \
 	    "This is most likely due to security software" \
         "that the Bebo Capture installation folder is excluded/ignored in the " \
@@ -57,6 +56,7 @@ enum capture_mode {
 
 
 struct game_capture {
+	int                           last_tex;
 //	obs_source_t                  *source;
 
 //	struct cursor_data            cursor_data;
@@ -79,6 +79,7 @@ struct game_capture {
 	volatile long                 hotkey_window;
 	volatile bool                 deactivate_hook;
 	volatile bool                 activate_hook_now;
+	LONG64						  frame_interval;
 	bool                          wait_for_target_startup : 1;
 	bool                          showing : 1;
 	bool                          active : 1;
@@ -120,7 +121,7 @@ struct game_capture {
 		void *data;
 	};
 
-	void(*copy_texture)(struct game_capture*, IMediaSample *pSample);
+	boolean (*copy_texture)(struct game_capture*, IMediaSample *pSample);
 };
 
 
@@ -191,7 +192,7 @@ static inline HANDLE open_hook_info(struct game_capture *gc)
 {
 	return open_map_plus_id(gc, SHMEM_HOOK_INFO, gc->process_id);
 }
-static struct game_capture *game_capture_create(game_capture_config *config)
+static struct game_capture *game_capture_create(game_capture_config *config, uint64_t frame_interval)
 {
 	struct game_capture *gc = (struct game_capture*) bzalloc(sizeof(*gc));
 
@@ -212,6 +213,8 @@ static struct game_capture *game_capture_create(game_capture_config *config)
 	gc->config.limit_framerate = config->limit_framerate;
 	gc->config.capture_overlays = config->capture_overlays;
 	gc->config.anticheat_hook = config->anticheat_hook;
+	gc->frame_interval = frame_interval;
+	gc->last_tex = -1;
 
 //	wait_for_hook_initialization();
 
@@ -731,24 +734,7 @@ static inline bool init_pipe(struct game_capture *gc)
 
 static inline void reset_frame_interval(struct game_capture *gc)
 {
-	// FIXME
-#if 0
-	struct obs_video_info ovi;
-	uint64_t interval = 0;
-
-	if (obs_get_video_info(&ovi)) {
-		interval = ovi.fps_den * 1000000000ULL / ovi.fps_num;
-
-		/* Always limit capture framerate to some extent.  If a game
-		 * running at 900 FPS is being captured without some sort of
-		 * limited capture interval, it will dramatically reduce
-		 * performance. */
-		if (!gc->config.limit_framerate)
-			interval /= 2;
-	}
-
-	gc->global_hook_info->frame_interval = interval;
-#endif 
+	gc->global_hook_info->frame_interval = gc->frame_interval;
 }
 
 static inline bool init_hook_info(struct game_capture *gc)
@@ -1020,7 +1006,18 @@ boolean isReady(void ** data) {
 	return  gc->active && ! gc->retrying;
 }
 
-void * hook(void **data, LPCWSTR windowClassName, LPCWSTR windowName, game_capture_config *config)
+void set_fps(void **data, uint64_t frame_interval) {
+
+	struct game_capture *gc = (game_capture *) *data;
+	if (gc == NULL) {
+		debug("set_fps: gc==NULL");
+		return;
+	}
+	debug("set_fps: %d", frame_interval);
+	gc->global_hook_info->frame_interval = frame_interval;
+}
+
+void * hook(void **data, LPCWSTR windowClassName, LPCWSTR windowName, game_capture_config *config, uint64_t frame_interval)
 {
 	struct game_capture *gc = (game_capture *) *data;
 	if (gc == NULL) {
@@ -1038,8 +1035,7 @@ void * hook(void **data, LPCWSTR windowClassName, LPCWSTR windowName, game_captu
 		if (hwnd == NULL) {
 			hwnd = FindWindow(NULL, windowName);
 		}
-		info("hooking: %X, %S, %S", hwnd, windowClassName, windowName);
-		gc = game_capture_create(config);
+		gc = game_capture_create(config, frame_interval);
 		struct dstr * klass = &gc->klass;
 		get_window_class(klass, hwnd);
 	}
@@ -1272,28 +1268,36 @@ static inline void copy_16bit_tex(struct game_capture *gc, int cur_texture,
 	}
 }
 
-static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
+static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 {
 	int cur_texture = gc->shmem_data->last_tex;
+
+	if (cur_texture == gc->last_tex) {
+		debug("last_tex didn't change - try again later");
+		return false;
+	}
+
 	HANDLE mutex = NULL;
 	uint32_t pitch;
 	int next_texture;
 
 	if (cur_texture < 0 || cur_texture > 1)
-		return;
+		return false;
 
 	next_texture = cur_texture == 1 ? 0 : 1;
 
+	debug("FRAME - %d", cur_texture);
 	if (object_signalled(gc->texture_mutexes[cur_texture])) {
 		mutex = gc->texture_mutexes[cur_texture];
-
 	} else if (object_signalled(gc->texture_mutexes[next_texture])) {
+		debug("FRAME B - %d", next_texture);
 		mutex = gc->texture_mutexes[next_texture];
 		cur_texture = next_texture;
-
 	} else {
-		return;
+		warn("NO FRAME - try again");
+		return false;
 	}
+	gc->last_tex = cur_texture;
 
 	BYTE *pData;
     pSample->GetPointer(&pData);
@@ -1301,11 +1305,13 @@ static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 	pitch = gc->pitch;
 
 	if (gc->convert_16bit) {
+
 		/// FIXME LOG ERROR
 		warn("copy_shmem_text 16 bit - not handled");
 		copy_16bit_tex(gc, cur_texture, pData, pitch);
 
 	} else if (pitch == gc->pitch) {
+
 		// Convert camera sample to I420 with cropping, rotation and vertical flip.
 		// "src_size" is needed to parse MJPG.
 		// "dst_stride_y" number of bytes in a row of the dst_y plane.
@@ -1388,7 +1394,6 @@ static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 				dst_stride_v,
 				width,
 				height);
-
 		} else {
 			warn("Unknown DXGI FORMAT %d", gc->global_hook_info->format);
 		}
@@ -1397,18 +1402,18 @@ static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 		}
 
 	} else {
+		error("Unexpected state - no pitch");
 		uint8_t *input = gc->texture_buffers[cur_texture];
 		uint32_t best_pitch =
 			pitch < gc->pitch ? pitch : gc->pitch;
 
 		for (uint32_t y = 0; y < gc->cy; y++) {
+
 			uint8_t *line_in = input + gc->pitch * y;
 			uint8_t *line_out = pData + pitch * y;
 			memcpy(line_out, line_in, best_pitch);
 		}
 	}
-	// TODO better time
-
 
 #if 0 // FIXME
 	if (gs_texture_map(gc->texture, &data, &pitch)) {
@@ -1418,6 +1423,7 @@ static void copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 #endif
 
 	ReleaseMutex(mutex);
+	return true;
 }
 
 static inline bool init_shmem_capture(struct game_capture *gc)
@@ -1488,13 +1494,42 @@ static inline bool capture_valid(struct game_capture *gc)
 	return !object_signalled(gc->target_process);
 }
 
-boolean get_game_frame(void **data, float seconds, IMediaSample *pSample) {
+boolean get_game_frame(void **data, boolean missed, IMediaSample *pSample) {
+	/*
+	 * Direct Show and OBS have a different strategy on dealing with frames
+	 * 
+	 * For Direct Show / webrtc we really only want to deliver new frames,
+	 * if we loose a frame, better to loose it here than send (and encode) a duplicate
+	 * on a machine that is probably already overloaded
+	 * 
+	 * There are a couple of rules here:
+	 * 
+	 * We don't want to capture higher than the target fps
+	 *  -> we set the target fps in the graphics hook to keep impact to the graphics pipeline low
+	 * OBS graphics-hook has no semaphore on "new texture" available,
+	 * the only thing we can trigger off is the last_tex id, which is 0 or 1
+	 *
+	 * So we sample at 2 times fps, if last_text_id changes -> we have a new sample
+	 
+	 * If the mutex is locked - we use the other sample
+
+
+	 * 
+	 * If we are late we need to get both frames and check 
+	 * If we are late
+	 * We don't want to return frames d
+	*/
+
+
 	struct game_capture *gc = (game_capture *) *data;
 	if (!gc->active) {
 		*data = NULL;
 		return false;
 	}
-//	DebugBreak();
+
+	if (missed) {
+		gc->last_tex = -1;
+	}
 
 	// TODO there are more interesting cases handled in the obs game_capture_tick - need to re-asses those
 
@@ -1520,7 +1555,7 @@ boolean get_game_frame(void **data, float seconds, IMediaSample *pSample) {
 //		}
 	}
 
-	gc->retry_time += seconds;
+	//gc->retry_time += seconds;
 
 	if (gc->active) {
 
@@ -1530,12 +1565,10 @@ boolean get_game_frame(void **data, float seconds, IMediaSample *pSample) {
 			stop_capture(gc);
 		} else {
 			if (gc->shmem_data == NULL) {
-				debug("shmem_data == NULL");
 				return false;
 			}
 			if (gc->copy_texture) {
-				gc->copy_texture(gc, pSample);
-				return true;
+				return gc->copy_texture(gc, pSample);
 			}
 		}
 //
