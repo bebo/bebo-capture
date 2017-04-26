@@ -21,11 +21,6 @@
 #include "libyuv/convert.h"
 
 
-static const uint64 MAGIC[] = {
-	0xe966a938ff2cfd2d,
-	0xd62095449d53e482,
-	0xcf2afd07a909f0e4};
-
 #define STOP_BEING_BAD \
 	    "This is most likely due to security software" \
         "that the Bebo Capture installation folder is excluded/ignored in the " \
@@ -1304,14 +1299,6 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 	}
 	gc->last_tex = cur_texture;
 
-	uint64* magic = (uint64*) gc->texture_buffers[cur_texture];
-	if (magic[1] == MAGIC[0] &&
-		magic[2] == MAGIC[1] &&
-		magic[3] == MAGIC[2]) {
-		debug("MAGIC NUMBER DETECTED SKIPPING FRAME");
-		return false;
-	}
-
 	BYTE *pData;
     pSample->GetPointer(&pData);
 
@@ -1426,13 +1413,6 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 			uint8_t *line_out = pData + pitch * y;
 			memcpy(line_out, line_in, best_pitch);
 		}
-	}
-	// TODO better time
-
-	if (0) {
-		magic[1] = MAGIC[0];
-		magic[2] = MAGIC[1];
-		magic[3] = MAGIC[2];
 	}
 
 #if 0 // FIXME
