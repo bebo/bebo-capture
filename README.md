@@ -24,10 +24,24 @@ regsvr32 BeboGameCapture.DLL
 
 ## libyuv (notes)
 
+
 You may want to build your own copy of libyuv 
+* last libyuv verion used: 54289f1bb0c78afdab73839c67989527f3237912
 * depot tools (for libyuv) https://www.chromium.org/developers/how-tos/install-depot-tools
-* SET DEPOT_TOOLS_WIN_TOOLCHAIN=0
-* gclient config --name src https://chromium.googlesource.com/libyuv/libyuv
+* also see https://chromium.googlesource.com/libyuv/libyuv/+/master/docs/getting_started.md
+
+```
+SET DEPOT_TOOLS_WIN_TOOLCHAIN=0
+set GYP_DEFINES=clang=1 target_arch=x64
+gclient config --name src https://chromium.googlesource.com/libyuv/libyuv
+gclient sync
+cd src
+call python tools\clang\scripts\update.py
+call gn gen out/Release "--args=is_debug=false is_official_build=true is_clang=true target_cpu=\"x64\""
+ninja -v -C out/Release
+```
+find libyuv_internal.lib and the include directory
+
 
 # Attributions / History
 
