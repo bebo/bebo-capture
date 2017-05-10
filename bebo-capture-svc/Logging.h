@@ -32,6 +32,8 @@ extern "C" {
 
 
 void setupLogging();
+void logRotate();
+
 
 #ifdef __cplusplus
 }  // extern "C"

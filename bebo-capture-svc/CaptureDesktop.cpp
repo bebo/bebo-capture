@@ -515,6 +515,7 @@ CPushPinDesktop::~CPushPinDesktop()
 	::ReleaseDC(NULL, hScrDc);
     ::DeleteDC(hScrDc);
 	LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out;
+    logRotate();
 
     if (hRawBitmap)
       DeleteObject(hRawBitmap); // don't need those bytes anymore -- I think we are supposed to delete just this and not hOldBitmap

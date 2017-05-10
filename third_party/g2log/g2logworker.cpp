@@ -230,8 +230,8 @@ std::string g2LogWorkerImpl::backgroundChangeLogFile(const std::string& director
    }
 
    std::ostringstream ss_change;
-   ss_change << "\n\tChanging log file from : " << log_file_with_path_;
-   ss_change << "\n\tto new location: " << prospect_log << "\n";
+   ss_change << "Changing log file from : " << log_file_with_path_;
+   ss_change << "\tto new location: " << prospect_log << "\n";
    backgroundFileWrite({ss_change.str().c_str(), g2::internal::systemtime_now()});
    ss_change.str("");
 
@@ -239,7 +239,7 @@ std::string g2LogWorkerImpl::backgroundChangeLogFile(const std::string& director
    std::string old_log = log_file_with_path_;
    log_file_with_path_ = prospect_log;
    outptr_ = std::move(log_stream);
-   ss_change << "\n\tNew log file. The previous log file was at: ";
+   ss_change << "New log file. The previous log file was at: ";
    ss_change << old_log;
    backgroundFileWrite({ss_change.str(), g2::internal::systemtime_now()});
    return log_file_with_path_;
