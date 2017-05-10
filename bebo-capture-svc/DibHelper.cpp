@@ -151,7 +151,7 @@ HRESULT RegGetBeboSZ(LPCTSTR szValueName, LPBYTE data, LPDWORD datasize) {
 		// key doesn't exist in the reg at all...
 		return E_INVALIDARG;
 	}
-	info("Registry key: %S value: %S (REG_SZ)", szValueName, data);
+	debug("Registry key: %S value: %S (REG_SZ)", szValueName, data);
 	return NOERROR;
 }
 
@@ -184,7 +184,7 @@ boolean is_config_set_to_1(LPCTSTR szValueName) {
             writeMessageBox(buffer);
 		    ASSERT_RAISE(false); // non awesome duplication here...
 	  }
-	  info("Registry key: %S value: %d (DWORD)", szValueName, dwVal);
+	  debug("Registry key: %S value: %d (DWORD)", szValueName, dwVal);
       return dwVal;
 	}
   }

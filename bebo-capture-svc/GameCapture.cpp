@@ -842,6 +842,8 @@ static inline bool attempt_existing_hook(struct game_capture *gc)
 	return false;
 }
 
+char previousExe[1024];
+char blackListedExe[1024];
 
 static bool init_hook(struct game_capture *gc)
 {
@@ -850,8 +852,13 @@ static bool init_hook(struct game_capture *gc)
 
 	if (gc->config.mode == CAPTURE_MODE_ANY) {
 		if (get_window_exe(&exe, gc->next_window)) {
-			info("attempting to hook fullscreen process: %s",
+			if (strncmp(previousExe, exe.array, exe.len) != 0) {
+				info("attempting to hook fullscreen process: %s",
 					exe.array);
+				if (exe.len < 1024) {
+					strncpy(previousExe, exe.array, exe.len);
+				}
+			}
 		}
 	} else {
 		if (get_window_exe(&exe, gc->next_window)) {
@@ -860,8 +867,11 @@ static bool init_hook(struct game_capture *gc)
 	}
 
 	blacklisted_process = is_blacklisted_exe(exe.array);
-	if (blacklisted_process) {
+	if (blacklisted_process && strncmp(blackListedExe, exe.array, exe.len) != 0) {
 		info("cannot capture %s due to being blacklisted", exe.array);
+		if (exe.len < 1024) {
+			strncpy(blackListedExe, exe.array, exe.len);
+		}
 	}
 	dstr_free(&exe);
 
@@ -964,6 +974,7 @@ static void stop_capture(struct game_capture *gc)
 		gc->retrying--;
 }
 
+HWND dbg_last_window = NULL;
 static void try_hook(struct game_capture *gc)
 {
 	if (0 && gc->config.mode == CAPTURE_MODE_ANY) {
@@ -973,7 +984,10 @@ static void try_hook(struct game_capture *gc)
 	}
 
 	if (gc->next_window) {
-		info("hooking next window: %X, %S, %S", gc->next_window, gc->config.title, gc->config.klass);
+		if (gc->next_window != dbg_last_window) {
+			info("hooking next window: %X, %S, %S", gc->next_window, gc->config.title, gc->config.klass);
+			dbg_last_window = gc->next_window;
+		}
 		gc->thread_id = GetWindowThreadProcessId(gc->next_window, &gc->process_id);
 
 		// Make sure we never try to hook ourselves (projector)

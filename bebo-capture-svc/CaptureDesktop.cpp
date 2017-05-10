@@ -105,8 +105,10 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 
 	int config_width = read_config_setting(TEXT("MaxCaptureWidth"), 1920, true);
 	ASSERT_RAISE(config_width >= 0); // negatives not allowed...
+	info("MaxCaptureWidth: %d", config_width);
 	int config_height = read_config_setting(TEXT("MaxCaptureHeight"), 1080, true);
 	ASSERT_RAISE(config_height >= 0); // negatives not allowed, if it's set :)
+	info("MaxCaptureHeight: %d", config_height);
 
 	if(config_width > 0) {
 		int desired = m_rScreen.left + config_width;
@@ -146,6 +148,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	// default 30 fps...hmm...
 	int config_max_fps = read_config_setting(TEXT("MaxCaptureFPS"), 60, false);
 	ASSERT_RAISE(config_max_fps > 0);	
+	info("MaxCaptureFPS: %d", config_max_fps);
 
 	// m_rtFrameLength is also re-negotiated later...
   	m_rtFrameLength = UNITS / config_max_fps; 
@@ -168,20 +171,40 @@ char out[1000];
 bool ever_started = false;
 boolean missed = false;
 
+
+
 void CPushPinDesktop::GetGameFromRegistry(void) {
 	DWORD size = 1024;
 	BYTE data[1024];
 	if (RegGetBeboSZ(TEXT("CaptureWindowName"), data, &size) == S_OK) {
-		m_pCaptureWindowName = (WCHAR *) malloc(size*2);
+		LPWSTR old = m_pCaptureWindowName;
+		m_pCaptureWindowName = (LPWSTR) malloc(size*2);
 		wsprintfW(m_pCaptureWindowName, L"%s", data);
+		if (old == NULL || wcscmp(old, m_pCaptureWindowName) != 0) {
+			info("CaptureWindowName: %s", m_pCaptureWindowName);
+			if (old != NULL) {
+				free(old);
+			}
+		}
 	}
 	size = 1024;
 	if (RegGetBeboSZ(TEXT("CaptureWindowClassName"), data, &size) == S_OK) {
-		m_pCaptureWindowClassName = (WCHAR *)malloc(size * 2);
+		LPWSTR old = m_pCaptureWindowClassName;
+		m_pCaptureWindowClassName = (LPWSTR) malloc(size * 2);
 		wsprintfW(m_pCaptureWindowClassName, L"%s", data);
+		if (old == NULL || wcscmp(old, m_pCaptureWindowClassName) != 0) {
+			info("CaptureWindowClassName: %s", m_pCaptureWindowClassName);
+			if (old != NULL) {
+				free(old);
+			}
+		}
 	}
 
+	int oldAntiCheat = m_bCaptureAntiCheat;
 	m_bCaptureAntiCheat = read_config_setting(TEXT("CaptureAntiCheat"), 0, true) == 1;
+	if (oldAntiCheat != m_bCaptureAntiCheat) {
+		info("CaptureAntiCheat: %d", m_bCaptureAntiCheat);
+	}
 	return;
 }
 
