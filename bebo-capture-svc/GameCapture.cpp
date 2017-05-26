@@ -1408,6 +1408,38 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 				dst_stride_v,
 				width,
 				height);
+		} else if (gc->global_hook_info->format == DXGI_FORMAT_R10G10B10A2_UNORM) {
+			// unreal engine, pubg
+			uint32 *src = (uint32*)src_frame;
+			uint8 *dst8 = (uint8*)malloc(width * height * 4);
+			uint32 *dst = (uint32*)dst8;
+			int pxl_count = width * height;
+
+			for (int i = 0; i < pxl_count;  i++) {
+				uint32 currentPixel = src[i];
+
+				//AABBBBBB BBBBGGGG GGGGGGRR RRRRRRRR
+				uint32 a = (currentPixel & 0xC0000000);
+				uint32 b = (currentPixel & 0x3FC00000) >> 6;
+				uint32 g = (currentPixel & 0xFF000) >> 4;
+				uint32 r = (currentPixel & 0x3FC) >> 2;
+
+				uint32 rgba = a | b | g | r;
+				dst[i] = rgba;
+			}
+
+			err = libyuv::ABGRToI420(dst8,
+				src_stride_frame,
+				dst_y,
+				dst_stride_y,
+				dst_u,
+				dst_stride_u,
+				dst_v,
+				dst_stride_v,
+				width,
+				height);
+			free(dst8);
+
 		} else {
 			warn("Unknown DXGI FORMAT %d", gc->global_hook_info->format);
 		}
