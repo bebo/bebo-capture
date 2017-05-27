@@ -181,7 +181,7 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		m_pCaptureWindowName = (LPWSTR) malloc(size*2);
 		wsprintfW(m_pCaptureWindowName, L"%s", data);
 		if (old == NULL || wcscmp(old, m_pCaptureWindowName) != 0) {
-			info("CaptureWindowName: %s", m_pCaptureWindowName);
+			info("CaptureWindowName: %S", m_pCaptureWindowName);
 			if (old != NULL) {
 				free(old);
 			}
@@ -193,7 +193,7 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		m_pCaptureWindowClassName = (LPWSTR) malloc(size * 2);
 		wsprintfW(m_pCaptureWindowClassName, L"%s", data);
 		if (old == NULL || wcscmp(old, m_pCaptureWindowClassName) != 0) {
-			info("CaptureWindowClassName: %s", m_pCaptureWindowClassName);
+			info("CaptureWindowClassName: %S", m_pCaptureWindowClassName);
 			if (old != NULL) {
 				free(old);
 			}
