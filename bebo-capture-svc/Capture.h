@@ -28,6 +28,11 @@ const REFERENCE_TIME FPS_1  = UNITS / 1;
 // Filter name strings
 #define g_wszPushDesktop    L"Bebo Game Capture Filter"
 
+const int CAPTURE_INJECT = 0;
+const int CAPTURE_GDI = 1;
+const int CAPTURE_DESKTOP = 2;
+const int CAPTURE_DSHOW = 3;
+
 class CPushPinDesktop;
 
 // parent
@@ -129,7 +134,7 @@ protected:
 	int m_iStretchToThisConfigWidth;
     int m_iStretchToThisConfigHeight;
     int m_iStretchMode;
-
+	int m_iCaptureType;
 	int getCaptureDesiredFinalWidth();
 	int getCaptureDesiredFinalHeight();
 

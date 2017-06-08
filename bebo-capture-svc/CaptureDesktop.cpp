@@ -58,7 +58,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	active(false),
 	m_pCaptureWindowName(NULL),
 	m_pCaptureWindowClassName(NULL),
-	game_context(NULL)
+	game_context(NULL),
+    m_iCaptureType(CAPTURE_INJECT)
 {
 	info("CPushPinDesktop");
 	// Get the device context of the main display, just to get some metrics for it...
@@ -189,6 +190,21 @@ boolean missed = false;
 void CPushPinDesktop::GetGameFromRegistry(void) {
 	DWORD size = 1024;
 	BYTE data[1024];
+
+	if (RegGetBeboSZ(TEXT("CaptureType"), data, &size) == S_OK) {
+		char type[1024];
+		sprintf(type, "%S", data);
+		if (strcmp(type, "desktop") == 0) {
+			m_iCaptureType = CAPTURE_DESKTOP;
+		} else if (strcmp(type, "inject") == 0) {
+			m_iCaptureType = CAPTURE_INJECT;
+		} else if (strcmp(type, "gdi") == 0) {
+			m_iCaptureType = CAPTURE_GDI;
+		} else if (strcmp(type, "dshow") == 0) {
+			m_iCaptureType = CAPTURE_DSHOW;
+		}
+	}
+
 	if (RegGetBeboSZ(TEXT("CaptureWindowName"), data, &size) == S_OK) {
 		LPWSTR old = m_pCaptureWindowName;
 		m_pCaptureWindowName = (LPWSTR) malloc(size*2);
@@ -533,7 +549,6 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 			error("fail desktop attach");
 		}
 
-
 		// New display manager
 		dispMgr.InitD3D(&dxRes);
 
@@ -559,7 +574,6 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 		CopyBufferDesc.BindFlags = 0;
 		CopyBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 		CopyBufferDesc.MiscFlags = 0;
-
 
 		HRESULT hr = dxRes.Device->CreateTexture2D(&CopyBufferDesc, nullptr, &CopyBuffer);
 		if (FAILED(hr))
@@ -609,9 +623,6 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 #if 1
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 {
-	if (1) {
-		return FillBuffer_Desktop(pSample);
-	}
 
 	__int64 startThisRound = StartCounter();
 
@@ -625,7 +636,20 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 	boolean gotFrame = false;
 	while (!gotFrame) {
-
+		switch (m_iCaptureType) {
+			case CAPTURE_DESKTOP: 
+				return FillBuffer_Desktop(pSample);
+			case CAPTURE_INJECT:
+				break;
+			case CAPTURE_GDI:
+				error("GDI CAPTURE IS NOT SUPPRTED YET");
+				break;
+			case CAPTURE_DSHOW:
+				error("LIBDSHOW CAPTURE IS NOT SUPPRTED YET");
+				break;
+			default:
+				error("UNKNOWN CAPTURE TYPE: %d", m_iCaptureType);
+		}
 		// IsStopped() is not set until we have returned, so we need to do a peek to exit or we will never stop
 		if (!active) {
 			info("FillBuffer - inactive");
