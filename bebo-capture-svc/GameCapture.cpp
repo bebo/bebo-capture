@@ -1646,7 +1646,7 @@ int get_i420_buffer_size(int width, int height) {
 	return width * height + half_width * half_height * 2;
 }
 
-boolean get_desktop_frame(void **data, boolean missed, IMediaSample *pSample, D3D11_TEXTURE2D_DESC frameDesc, D3D11_MAPPED_SUBRESOURCE map) {
+boolean get_desktop_frame(void **data, boolean missed, IMediaSample *pSample, D3D11_TEXTURE2D_DESC frameDesc, D3D11_MAPPED_SUBRESOURCE map, int dWidth, int dHeight) {
 	if (!map.pData) return false;
 
 	BYTE *pData;
@@ -1674,8 +1674,8 @@ boolean get_desktop_frame(void **data, boolean missed, IMediaSample *pSample, D3
 		v, stride_v,
 		width, height);
 
-	int dst_width = 1280;
-	int dst_height = 720;
+	int dst_width = dWidth;
+	int dst_height = dHeight;
 	uint8* dst_y = pData;
 	int dst_stride_y = dst_width;
 	uint8* dst_u = pData + (dst_width * dst_height);

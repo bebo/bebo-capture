@@ -590,7 +590,7 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 
 	CurrentData.Frame->GetDesc(&FrameDesc);
 	dxRes.Context->Map(CopyBuffer, subresource, D3D11_MAP_READ, 0, &MappedSubresource);
-	get_desktop_frame(&game_context, false, pSample, FrameDesc, MappedSubresource);
+	get_desktop_frame(&game_context, false, pSample, FrameDesc, MappedSubresource, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
 	dxRes.Context->Unmap(CopyBuffer, subresource);
 	DuplMgr.DoneWithFrame();
 

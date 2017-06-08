@@ -26,6 +26,6 @@ struct game_capture_config {
 boolean isReady(void ** data);
 void * hook(void **data, LPCWSTR windowClassName, LPCWSTR windowName, game_capture_config *config, uint64_t frame_interval);
 boolean get_game_frame(void ** data, boolean missed, IMediaSample *pSample);
-boolean get_desktop_frame(void ** data, boolean missed, IMediaSample *pSample, D3D11_TEXTURE2D_DESC frameDesc, D3D11_MAPPED_SUBRESOURCE dxgiMap);
+boolean get_desktop_frame(void ** data, boolean missed, IMediaSample *pSample, D3D11_TEXTURE2D_DESC frameDesc, D3D11_MAPPED_SUBRESOURCE dxgiMap, int width, int height);
 boolean stop_game_capture(void ** data);
 void set_fps(void **data, uint64_t frame_interval);
