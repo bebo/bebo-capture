@@ -1646,7 +1646,13 @@ int get_i420_buffer_size(int width, int height) {
 	return width * height + half_width * half_height * 2;
 }
 
-boolean get_desktop_frame(void **data, boolean missed, IMediaSample *pSample, D3D11_TEXTURE2D_DESC frameDesc, D3D11_MAPPED_SUBRESOURCE map) { pSample->GetPointer(&pData); const uint8_t* src_frame = static_cast<uint8_t*>(map.pData);
+boolean get_desktop_frame(void **data, boolean missed, IMediaSample *pSample, D3D11_TEXTURE2D_DESC frameDesc, D3D11_MAPPED_SUBRESOURCE map) {
+	if (!map.pData) return false;
+
+	BYTE *pData;
+    pSample->GetPointer(&pData);
+
+	const uint8_t* src_frame = static_cast<uint8_t*>(map.pData);
 	debug("width: %d, height: %d, frames: %d %d", frameDesc.Width, frameDesc.Height, src_frame[0], src_frame[1]);
 	int src_stride_frame = map.RowPitch;
 
