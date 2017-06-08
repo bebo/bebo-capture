@@ -135,6 +135,7 @@ protected:
     int m_iStretchToThisConfigHeight;
     int m_iStretchMode;
 	int m_iCaptureType;
+	int m_iDesktopNumber;
 	int getCaptureDesiredFinalWidth();
 	int getCaptureDesiredFinalHeight();
 

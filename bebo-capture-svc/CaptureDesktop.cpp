@@ -59,7 +59,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_pCaptureWindowName(NULL),
 	m_pCaptureWindowClassName(NULL),
 	game_context(NULL),
-    m_iCaptureType(CAPTURE_INJECT)
+    m_iCaptureType(CAPTURE_INJECT),
+	m_iDesktopNumber(0)
 {
 	info("CPushPinDesktop");
 	// Get the device context of the main display, just to get some metrics for it...
@@ -192,6 +193,7 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 	BYTE data[1024];
 
 	if (RegGetBeboSZ(TEXT("CaptureType"), data, &size) == S_OK) {
+		int old = m_iCaptureType;
 		char type[1024];
 		sprintf(type, "%S", data);
 		if (strcmp(type, "desktop") == 0) {
@@ -203,8 +205,26 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		} else if (strcmp(type, "dshow") == 0) {
 			m_iCaptureType = CAPTURE_DSHOW;
 		}
+		if (old != m_iCaptureType) {
+			info("CaptureType: %s (%d)", type, m_iCaptureType);
+		}
+	}
+    
+	size = sizeof(data);
+	if (RegGetBeboSZ(TEXT("CaptureId"), data, &size) == S_OK) {
+		char text[1024];
+		sprintf(text, "%S", data);
+		char * typeName = strtok(text, ":");
+		char * id = strtok(NULL, ":");
+		debug("CaptureId, %s:%s", typeName, id);
+		if (id != NULL) {
+			if (strcmp(typeName, "desktop") == 0) {
+				m_iDesktopNumber = atoi(id);
+			}
+		}
 	}
 
+	size = sizeof(data);
 	if (RegGetBeboSZ(TEXT("CaptureWindowName"), data, &size) == S_OK) {
 		LPWSTR old = m_pCaptureWindowName;
 		m_pCaptureWindowName = (LPWSTR) malloc(size*2);
@@ -216,7 +236,8 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 			}
 		}
 	}
-	size = 1024;
+
+	size = sizeof(data);
 	if (RegGetBeboSZ(TEXT("CaptureWindowClassName"), data, &size) == S_OK) {
 		LPWSTR old = m_pCaptureWindowClassName;
 		m_pCaptureWindowClassName = (LPWSTR) malloc(size * 2);
@@ -558,7 +579,7 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 
 		CreateSharedSurf(singleOutput, &outCount, &deskBounds);
 
-		DuplMgr.InitDupl(dxRes.Device, 0);
+		DuplMgr.InitDupl(dxRes.Device, m_iDesktopNumber);
 
 		RtlZeroMemory(&DesktopDesc, sizeof(DXGI_OUTPUT_DESC));
 		DuplMgr.GetOutputDesc(&DesktopDesc);
@@ -642,7 +663,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			case CAPTURE_INJECT:
 				break;
 			case CAPTURE_GDI:
-				error("GDI CAPTURE IS NOT SUPPRTED YET");
+				error("GDI CAPTURE IS NOT SUPPORTED YET");
 				break;
 			case CAPTURE_DSHOW:
 				error("LIBDSHOW CAPTURE IS NOT SUPPRTED YET");
