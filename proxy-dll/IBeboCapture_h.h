@@ -4,7 +4,7 @@
 
 
  /* File created by MIDL compiler version 8.00.0603 */
-/* at Tue May 02 01:44:34 2017
+/* at Thu Jun 08 12:29:48 2017
  */
 /* Compiler settings for ..\bebo-capture-svc\IBeboCapture.idl:
     Oicf, W1, Zp8, env=Win64 (32b run), target_arch=AMD64 8.00.0603 
