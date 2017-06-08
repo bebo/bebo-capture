@@ -8,6 +8,7 @@
 
 #include <strsafe.h>
 #include "GameCapture.h"
+#include "CommonTypes.h"
 
 /*
 // UNITS = 10 ^ 7  
@@ -164,6 +165,12 @@ public:
     // Override the version that offers exactly one media type
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
     HRESULT FillBuffer(IMediaSample *pSample);
+
+    HRESULT FillBuffer_Desktop(IMediaSample *pSample);
+	HRESULT CreateSharedSurf(INT SingleOutput, _Out_ UINT* OutCount, _Out_ RECT* DeskBounds);
+
+	HRESULT InitializeDx(DX_RESOURCES* data);
+	void CleanDx(DX_RESOURCES* Data);
     
     // Set the agreed media type and set up the necessary parameters
     HRESULT SetMediaType(const CMediaType *pMediaType);

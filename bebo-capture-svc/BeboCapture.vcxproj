@@ -151,7 +151,7 @@
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(OutDir)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_WINDOWS;_USRDLL;PUSHSOURCE_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -163,7 +163,7 @@
       <CallingConvention>StdCall</CallingConvention>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>libyuv.lib;util.lib;ipc-util.lib;psapi.lib;strmbase.lib;winmm.lib;msvcrtd.lib;legacy_stdio_definitions.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;libyuv.lib;util.lib;ipc-util.lib;psapi.lib;strmbase.lib;winmm.lib;msvcrtd.lib;legacy_stdio_definitions.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ModuleDefinitionFile>BeboGameCapture.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -324,6 +324,8 @@
     <ClCompile Include="..\third_party\g2log\g2time.cpp" />
     <ClCompile Include="BeboCapture.cpp" />
     <ClCompile Include="DibHelper.cpp" />
+    <ClCompile Include="DisplayManager.cpp" />
+    <ClCompile Include="DuplicationManager.cpp" />
     <ClCompile Include="GameCapture.cpp" />
     <ClCompile Include="load-graphics-offsets.c" />
     <ClCompile Include="Logging.cpp" />
@@ -344,9 +346,12 @@
     <ClInclude Include="..\third_party\g2log\shared_queue.h" />
     <ClInclude Include="BeboCapture.h" />
     <ClInclude Include="BeboCaptureGuids.h" />
+    <ClInclude Include="CommonTypes.h" />
     <ClInclude Include="DibHelper.h" />
     <ClInclude Include="CaptureGuids.h" />
     <ClInclude Include="Capture.h" />
+    <ClInclude Include="DisplayManager.h" />
+    <ClInclude Include="DuplicationManager.h" />
     <ClInclude Include="GameCapture.h" />
     <ClInclude Include="IBeboCapture.h" />
     <ClInclude Include="Logging.h" />
@@ -356,6 +361,26 @@
   </ItemGroup>
   <ItemGroup>
     <Midl Include="IBeboCapture.idl" />
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="PixelShader.hlsl">
+      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">PS</EntryPointName>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <HeaderFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)%(Filename).h</HeaderFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <EnableDebuggingInformation Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</EnableDebuggingInformation>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+      </ObjectFileOutput>
+    </FxCompile>
+    <FxCompile Include="VertexShader.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">VS</EntryPointName>
+      <HeaderFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)%(Filename).h</HeaderFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <EnableDebuggingInformation Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</EnableDebuggingInformation>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+      </ObjectFileOutput>
+    </FxCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
