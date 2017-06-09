@@ -139,6 +139,7 @@ DesktopCapture::DesktopCapture() : m_Device(nullptr),
 								   m_MetaDataBuffer(nullptr),
 								   m_MetaDataSize(0),
 								   m_DXResource(new DXResources),
+								   m_MouseInfo(new PtrInfo),
 								   m_Initialized(false),
 								   m_KeyMutex(nullptr)
 {
@@ -151,6 +152,7 @@ DesktopCapture::DesktopCapture() : m_Device(nullptr),
 DesktopCapture::~DesktopCapture()
 {
     CleanRefs();
+	delete m_MouseInfo;
 	delete m_DXResource;
 }
 
@@ -1097,6 +1099,7 @@ DuplReturn DesktopCapture::GetMouse(_Inout_ PtrInfo* PtrInfo, _In_ DXGI_OUTDUPL_
 //
 // Get next frame and write it into Data
 //
+static const unsigned int subresource = D3D11CalcSubresource(0, 0, 0);
 bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int height, bool captureMouse)
 {
 	if (!m_Initialized) {
@@ -1139,77 +1142,12 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int h
 		return false;
 	}
 
-	// Get metadata
-	/*
-	if (FrameInfo.TotalMetadataBufferSize)
-	{
-		// Old buffer too small
-		if (FrameInfo.TotalMetadataBufferSize > m_MetaDataSize)
-		{
-			if (m_MetaDataBuffer)
-			{
-				delete[] m_MetaDataBuffer;
-				m_MetaDataBuffer = nullptr;
-			}
-			m_MetaDataBuffer = new (std::nothrow) BYTE[FrameInfo.TotalMetadataBufferSize];
-			if (!m_MetaDataBuffer)
-			{
-				m_MetaDataSize = 0;
-				Data->MoveCount = 0;
-				Data->DirtyCount = 0;
-				return ProcessFailure(nullptr, L"Failed to allocate memory for metadata in DesktopCapture", L"Error", E_OUTOFMEMORY);
-			}
-			m_MetaDataSize = FrameInfo.TotalMetadataBufferSize;
-		}
-
-		UINT BufSize = FrameInfo.TotalMetadataBufferSize;
-
-		// Get move rectangles
-		hr = m_DeskDupl->GetFrameMoveRects(BufSize, reinterpret_cast<DXGI_OUTDUPL_MOVE_RECT*>(m_MetaDataBuffer), &BufSize);
-		if (FAILED(hr))
-		{
-			Data->MoveCount = 0;
-			Data->DirtyCount = 0;
-			return ProcessFailure(nullptr, L"Failed to get frame move rects in DesktopCapture", L"Error", hr, FrameInfoExpectedErrors);
-		}
-		Data->MoveCount = BufSize / sizeof(DXGI_OUTDUPL_MOVE_RECT);
-
-		BYTE* DirtyRects = m_MetaDataBuffer + BufSize;
-		BufSize = FrameInfo.TotalMetadataBufferSize - BufSize;
-
-		// Get dirty rectangles
-		hr = m_DeskDupl->GetFrameDirtyRects(BufSize, reinterpret_cast<RECT*>(DirtyRects), &BufSize);
-		if (FAILED(hr))
-		{
-			Data->MoveCount = 0;
-			Data->DirtyCount = 0;
-			return ProcessFailure(nullptr, L"Failed to get frame dirty rects in DesktopCapture", L"Error", hr, FrameInfoExpectedErrors);
-		}
-		Data->DirtyCount = BufSize / sizeof(RECT);
-
-		Data->MetaData = m_MetaDataBuffer;
-	}
-	*/
 	Data->Frame = m_AcquiredDesktopImage;
 	Data->FrameInfo = FrameInfo;
-
-	// GetMouse...
-
-	// int offsetX = 0;
-	// int offsetY = 0;
-
-	/*
-	DuplReturn ret = ProcessFrame(Data, m_SharedSurf, offsetX, offsetY, &m_OutputDesc);
-
-	if (ret != DUPL_RETURN_SUCCESS) {
-		DoneWithFrame();
-		return false;
-	}*/
 
 	//m_DXResource->Context->CopySubresourceRegion(m_CopyBuffer, 0, 0, 0, 0, m_SharedSurf, 0, nullptr);
 	m_DXResource->Context->CopyResource(m_CopyBuffer, Data->Frame);
 
-	const unsigned int subresource = D3D11CalcSubresource(0, 0, 0);
 	D3D11_MAPPED_SUBRESOURCE MappedSubresource;
 	D3D11_TEXTURE2D_DESC FrameDesc;
 

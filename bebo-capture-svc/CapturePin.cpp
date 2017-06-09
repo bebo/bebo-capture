@@ -56,6 +56,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_pCaptureWindowClassName(NULL),
 	game_context(NULL),
     m_iCaptureType(CAPTURE_INJECT),
+	m_pDesktopCapture(new DesktopCapture),
 	m_iDesktopNumber(0)
 {
 	info("CPushPinDesktop");
@@ -182,8 +183,6 @@ char out[1000];
 bool ever_started = false;
 boolean missed = false;
 
-
-
 void CPushPinDesktop::GetGameFromRegistry(void) {
 	DWORD size = 1024;
 	BYTE data[1024];
@@ -265,34 +264,87 @@ HRESULT CPushPinDesktop::Active(void) {
 	return CSourceStream::Active();
 };
 
-bool init_desktop = false;
-DesktopCapture desktopCapture;
 HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
+	__int64 startThisRound = StartCounter();
+
 	CheckPointer(pSample, E_POINTER);
 
-	if (!init_desktop) {
-		init_desktop = true;
+	long double millisThisRoundTook = 0;
+	CRefTime now;
+	now = 0;
 
-		desktopCapture.Init(m_iDesktopNumber);
+	if (!m_pDesktopCapture->IsReady()) {
+		m_pDesktopCapture->Init(m_iDesktopNumber);
 	}
+
+	CSourceStream::m_pFilter->StreamTime(now);
 	
+	bool frame = false;
+	while (!frame) {
+		if (now <= 0) {
+			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
+			debug("no reference graph clock - sleeping %d", dwMilliseconds);
+			Sleep(dwMilliseconds);
+		}
+		else if (now < (previousFrame + (m_rtFrameLength / 2))) {
+			DWORD dwMilliseconds = (DWORD)max(1, min(10000 + previousFrame + (m_rtFrameLength / 2) - now, (m_rtFrameLength / 2)) / 10000L);
+			debug("sleeping A - %d", dwMilliseconds);
+			Sleep(dwMilliseconds);
+		}
+		else if (now < (previousFrame + m_rtFrameLength)) {
+			DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), (m_rtFrameLength / 2)) / 10000L);
+			debug("sleeping B - %d", dwMilliseconds);
+			Sleep(dwMilliseconds);
+		}
+		else if (missed) {
+			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
+			debug("starting/missed - sleeping %d", dwMilliseconds);
+			Sleep(dwMilliseconds);
+			CSourceStream::m_pFilter->StreamTime(now);
+		}
+		else if (missed == false && m_iFrameNumber == 0) {
+			info("getting second frame");
+			missed = true;
+		}
+		else if (now > (previousFrame + 2 * m_rtFrameLength)) {
+			int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
+			m_iFrameNumber += missed_nr;
+			countMissed += missed_nr;
+			warn("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
+				missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
+			previousFrame = previousFrame + missed_nr * m_rtFrameLength;
+			missed = true;
+		}
+		else {
+			info("late need to catch up");
+			missed = true;
+		}
 
-	bool frame = desktopCapture.GetFrame(pSample, false, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), false);
+		startThisRound = StartCounter();
+		frame = m_pDesktopCapture->GetFrame(pSample, false, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), false);
 
-	if (!frame) {
-		error("get desktop frame  - no new frame");
-		return S_OK;
+		if (frame && previousFrame <= 0) {
+			frame = false;
+			previousFrame = now;
+			missed = false;
+			debug("skip first frame");
+		}
 	}
+
+	missed = false;
+	millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
+	fastestRoundMillis = min(millisThisRoundTook, fastestRoundMillis);
+	sumMillisTook += millisThisRoundTook;
+
+	// accomodate for 0 to avoid startup negatives, which would kill our math on the next loop...
+	previousFrame = max(0, previousFrame);
+	// auto-correct drift
+	previousFrame = previousFrame + m_rtFrameLength;
 
 	REFERENCE_TIME startFrame = m_iFrameNumber * m_rtFrameLength;
 	REFERENCE_TIME endFrame = startFrame + m_rtFrameLength;
 	pSample->SetTime((REFERENCE_TIME *)&startFrame, (REFERENCE_TIME *)&endFrame);
-
-	m_iFrameNumber++;
-
-	pSample->SetSyncPoint(TRUE);
-	pSample->SetDiscontinuity(m_iFrameNumber <= 1);
-
+	CSourceStream::m_pFilter->StreamTime(now);	
 	return S_OK;
 }
 
@@ -609,6 +661,9 @@ void CPushPinDesktop::reReadCurrentStartXY(int isReRead) {
 
 CPushPinDesktop::~CPushPinDesktop()
 {
+	delete m_pDesktopCapture;
+	m_pDesktopCapture = nullptr;
+
 	// They *should* call this...VLC does at least, correctly.
 
 	// Release the device context stuff
@@ -616,6 +671,8 @@ CPushPinDesktop::~CPushPinDesktop()
 	::DeleteDC(hScrDc);
 	LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out;
     logRotate();
+
+	// release desktop capture
 
 	if (hRawBitmap)
 		DeleteObject(hRawBitmap); // don't need those bytes anymore -- I think we are supposed to delete just this and not hOldBitmap

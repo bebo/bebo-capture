@@ -31,9 +31,10 @@ public:
 	void Init(int desktopId);
 	DuplReturn ProcessFrame(_In_ FrameData* Data, _Inout_ ID3D11Texture2D* SharedSurf, INT OffsetX, INT OffsetY, _In_ DXGI_OUTPUT_DESC* DeskDesc);
 	
-
 	bool GetFrame(IMediaSample *pSimple, bool miss, int width, int height, bool captureMouse);
 	bool DoneWithFrame();
+	bool IsReady() { return m_Initialized;  };
+
 	DuplReturn GetMouse(_Inout_ PtrInfo* PtrInfo, _In_ DXGI_OUTDUPL_FRAME_INFO* FrameInfo, INT OffsetX, INT OffsetY);
 
 private:
@@ -59,6 +60,7 @@ private:
 	ID3D11Texture2D* m_CopyBuffer;	
 	DXGI_OUTPUT_DESC m_OutputDesc;	
 	IDXGIKeyedMutex* m_KeyMutex;
+	PtrInfo* m_MouseInfo;
 
 	RECT* m_DesktopBounds;
 	ID3D11Device* m_Device;

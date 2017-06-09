@@ -7,6 +7,7 @@
 //------------------------------------------------------------------------------
 
 #include <strsafe.h>
+#include "DesktopCapture.h"
 #include "GameCapture.h"
 #include "CommonTypes.h"
 
@@ -105,6 +106,8 @@ protected:
 	
 	CGameCapture* m_pParent;
 
+	DesktopCapture* m_pDesktopCapture;
+
 	HDC hScrDc;
 	HBITMAP     hRawBitmap;
 
@@ -138,6 +141,7 @@ protected:
 	int m_iDesktopNumber;
 	int getCaptureDesiredFinalWidth();
 	int getCaptureDesiredFinalHeight();
+
 
 public:
 
