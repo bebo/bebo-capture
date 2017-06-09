@@ -1109,15 +1109,17 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int h
 	DXGI_OUTDUPL_FRAME_INFO FrameInfo;
 
 	// Get new frame
-	HRESULT hr = m_DeskDupl->AcquireNextFrame(500, &FrameInfo, &DesktopResource);
+	HRESULT hr = m_DeskDupl->AcquireNextFrame(300, &FrameInfo, &DesktopResource);
 	if (hr == DXGI_ERROR_WAIT_TIMEOUT)
 	{
+		error("Failed to acquire next frame - timeout.");
 		return false;
 	}
 
 	if (FAILED(hr))
 	{
-		return ProcessFailure(m_Device, L"Failed to acquire next frame in DesktopCapture", L"Error", hr, FrameInfoExpectedErrors);
+		ProcessFailure(m_Device, L"Failed to acquire next frame in DesktopCapture", L"Error", hr, FrameInfoExpectedErrors);
+		return false;
 	}
 
 	// If still holding old frame, destroy it
@@ -1133,10 +1135,12 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int h
 	DesktopResource = nullptr;
 	if (FAILED(hr))
 	{
-		return ProcessFailure(nullptr, L"Failed to QI for ID3D11Texture2D from acquired IDXGIResource in DesktopCapture", L"Error", hr);
+		ProcessFailure(nullptr, L"Failed to QI for ID3D11Texture2D from acquired IDXGIResource in DesktopCapture", L"Error", hr);
+		return false;
 	}
 
 	// Get metadata
+	/*
 	if (FrameInfo.TotalMetadataBufferSize)
 	{
 		// Old buffer too small
@@ -1185,21 +1189,22 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int h
 
 		Data->MetaData = m_MetaDataBuffer;
 	}
-
+	*/
 	Data->Frame = m_AcquiredDesktopImage;
 	Data->FrameInfo = FrameInfo;
 
 	// GetMouse...
 
-	int offsetX = 0;
-	int offsetY = 0;
+	// int offsetX = 0;
+	// int offsetY = 0;
 
+	/*
 	DuplReturn ret = ProcessFrame(Data, m_SharedSurf, offsetX, offsetY, &m_OutputDesc);
 
 	if (ret != DUPL_RETURN_SUCCESS) {
 		DoneWithFrame();
 		return false;
-	}
+	}*/
 
 	//m_DXResource->Context->CopySubresourceRegion(m_CopyBuffer, 0, 0, 0, 0, m_SharedSurf, 0, nullptr);
 	m_DXResource->Context->CopyResource(m_CopyBuffer, Data->Frame);
@@ -1216,7 +1221,7 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int h
 	DoneWithFrame();
 
 	delete Data;
-	return DUPL_RETURN_SUCCESS;
+	return true;
 }
 
 //

@@ -276,12 +276,11 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 		desktopCapture.Init(m_iDesktopNumber);
 	}
 	
-	bool frame;
 
-	frame = desktopCapture.GetFrame(pSample, false, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), false);
+	bool frame = desktopCapture.GetFrame(pSample, false, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), false);
 
 	if (!frame) {
-		error("fail desktop timeout - no new frame");
+		error("get desktop frame  - no new frame");
 		return S_OK;
 	}
 
