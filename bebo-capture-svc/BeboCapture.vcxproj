@@ -323,15 +323,14 @@
     <ClCompile Include="..\third_party\g2log\g2logworker.cpp" />
     <ClCompile Include="..\third_party\g2log\g2time.cpp" />
     <ClCompile Include="BeboCapture.cpp" />
+    <ClCompile Include="DesktopCapture.cpp" />
     <ClCompile Include="DibHelper.cpp" />
-    <ClCompile Include="DisplayManager.cpp" />
-    <ClCompile Include="DuplicationManager.cpp" />
     <ClCompile Include="GameCapture.cpp" />
     <ClCompile Include="load-graphics-offsets.c" />
     <ClCompile Include="Logging.cpp" />
     <ClCompile Include="parent.cpp" />
-    <ClCompile Include="CaptureDesktop.cpp" />
-    <ClCompile Include="CaptureDesktopAccessories.cpp" />
+    <ClCompile Include="CapturePin.cpp" />
+    <ClCompile Include="CapturePinAccessories.cpp" />
     <ClCompile Include="setup.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -347,11 +346,10 @@
     <ClInclude Include="BeboCapture.h" />
     <ClInclude Include="BeboCaptureGuids.h" />
     <ClInclude Include="CommonTypes.h" />
+    <ClInclude Include="DesktopCapture.h" />
     <ClInclude Include="DibHelper.h" />
     <ClInclude Include="CaptureGuids.h" />
     <ClInclude Include="Capture.h" />
-    <ClInclude Include="DisplayManager.h" />
-    <ClInclude Include="DuplicationManager.h" />
     <ClInclude Include="GameCapture.h" />
     <ClInclude Include="IBeboCapture.h" />
     <ClInclude Include="Logging.h" />

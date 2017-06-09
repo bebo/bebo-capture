@@ -6,21 +6,17 @@
 #include "DibHelper.h"
 #include <wmsdkidl.h>
 #include "GameCapture.h"
+#include "DesktopCapture.h"
 #include "Logging.h"
-#include "DuplicationManager.h"
-#include "DisplayManager.h"
 #include "CommonTypes.h"
 #include "d3d11.h"
 #include <dxgi.h>
 
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
 
-#define JAKE 1
-
 extern "C" {
 	extern bool load_graphics_offsets(bool is32bit);
 }
-
 
 DWORD globalStart; // for some debug performance benchmarking
 long countMissed = 0;
@@ -269,365 +265,25 @@ HRESULT CPushPinDesktop::Active(void) {
 	return CSourceStream::Active();
 };
 
-void CPushPinDesktop::CleanDx(DX_RESOURCES* Data) {
-	if (Data->Device)
-	{
-		Data->Device->Release();
-		Data->Device = nullptr;
-	}
-
-	if (Data->Context)
-	{
-		Data->Context->Release();
-		Data->Context = nullptr;
-	}
-
-	if (Data->VertexShader)
-	{
-		Data->VertexShader->Release();
-		Data->VertexShader = nullptr;
-	}
-
-	if (Data->PixelShader)
-	{
-		Data->PixelShader->Release();
-		Data->PixelShader = nullptr;
-	}
-
-	if (Data->InputLayout)
-	{
-		Data->InputLayout->Release();
-		Data->InputLayout = nullptr;
-	}
-
-	if (Data->SamplerLinear)
-	{
-		Data->SamplerLinear->Release();
-		Data->SamplerLinear = nullptr;
-	}
-}
-
-HRESULT CPushPinDesktop::InitializeDx(DX_RESOURCES* Data) {
-	HRESULT hr = S_OK;
-
-	// Driver types supported
-	D3D_DRIVER_TYPE DriverTypes[] =
-	{
-		D3D_DRIVER_TYPE_HARDWARE,
-		D3D_DRIVER_TYPE_WARP,
-		D3D_DRIVER_TYPE_REFERENCE,
-	};
-	UINT NumDriverTypes = ARRAYSIZE(DriverTypes);
-
-	// Feature levels supported
-	D3D_FEATURE_LEVEL FeatureLevels[] =
-	{
-		D3D_FEATURE_LEVEL_11_0,
-		D3D_FEATURE_LEVEL_10_1,
-		D3D_FEATURE_LEVEL_10_0,
-		D3D_FEATURE_LEVEL_9_1
-	};
-	UINT NumFeatureLevels = ARRAYSIZE(FeatureLevels);
-
-	D3D_FEATURE_LEVEL FeatureLevel;
-
-	// Create device
-	for (UINT DriverTypeIndex = 0; DriverTypeIndex < NumDriverTypes; ++DriverTypeIndex)
-	{
-		hr = D3D11CreateDevice(nullptr, DriverTypes[DriverTypeIndex], nullptr, 0, FeatureLevels, NumFeatureLevels,
-			D3D11_SDK_VERSION, &Data->Device, &FeatureLevel, &Data->Context);
-		if (SUCCEEDED(hr))
-		{
-			// Device creation success, no need to loop anymore
-			break;
-		}
-	}
-	if (FAILED(hr))
-	{
-		return ProcessFailure(nullptr, L"Failed to create device in InitializeDx", L"Error", hr);
-	}
-
-	// VERTEX shader
-	UINT Size = ARRAYSIZE(g_VS);
-	hr = Data->Device->CreateVertexShader(g_VS, Size, nullptr, &Data->VertexShader);
-	if (FAILED(hr))
-	{
-		return ProcessFailure(Data->Device, L"Failed to create vertex shader in InitializeDx", L"Error", hr, SystemTransitionsExpectedErrors);
-	}
-
-	// Input layout
-	D3D11_INPUT_ELEMENT_DESC Layout[] =
-	{
-		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
-		{"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0}
-	};
-	UINT NumElements = ARRAYSIZE(Layout);
-	hr = Data->Device->CreateInputLayout(Layout, NumElements, g_VS, Size, &Data->InputLayout);
-	if (FAILED(hr))
-	{
-		return ProcessFailure(Data->Device, L"Failed to create input layout in InitializeDx", L"Error", hr, SystemTransitionsExpectedErrors);
-	}
-	Data->Context->IASetInputLayout(Data->InputLayout);
-
-	// Pixel shader
-	Size = ARRAYSIZE(g_PS);
-	hr = Data->Device->CreatePixelShader(g_PS, Size, nullptr, &Data->PixelShader);
-	if (FAILED(hr))
-	{
-		return ProcessFailure(Data->Device, L"Failed to create pixel shader in InitializeDx", L"Error", hr, SystemTransitionsExpectedErrors);
-	}
-
-	// Set up sampler
-	D3D11_SAMPLER_DESC SampDesc;
-	RtlZeroMemory(&SampDesc, sizeof(SampDesc));
-	SampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-	SampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-	SampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-	SampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-	SampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-	SampDesc.MinLOD = 0;
-	SampDesc.MaxLOD = D3D11_FLOAT32_MAX;
-	hr = Data->Device->CreateSamplerState(&SampDesc, &Data->SamplerLinear);
-	if (FAILED(hr))
-	{
-		return ProcessFailure(Data->Device, L"Failed to create sampler state in InitializeDx", L"Error", hr, SystemTransitionsExpectedErrors);
-	}
-
-	return hr;
-}
-
-DX_RESOURCES dxRes;
-DuplicationManager DuplMgr;
-DisplayManager dispMgr;
-// Data passed in from thread creation
-THREAD_DATA TData;
-ID3D11Texture2D* SharedSurf = nullptr;
-IDXGIKeyedMutex* KeyMutex = nullptr;
-DXGI_OUTPUT_DESC DesktopDesc;
-D3D11_TEXTURE2D_DESC CopyBufferDesc;
-ID3D11Texture2D* CopyBuffer = nullptr;
 bool init_desktop = false;
-HRESULT CPushPinDesktop::CreateSharedSurf(INT SingleOutput, _Out_ UINT* OutCount, _Out_ RECT* DeskBounds)
-{
-	HRESULT hr;
-
-	// Get DXGI resources
-	IDXGIDevice* DxgiDevice = nullptr;
-	hr = dxRes.Device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&DxgiDevice));
-	if (FAILED(hr))
-	{
-		return ProcessFailure(nullptr, L"Failed to QI for DXGI Device", L"Error", hr);
-	}
-
-	IDXGIAdapter* DxgiAdapter = nullptr;
-	hr = DxgiDevice->GetParent(__uuidof(IDXGIAdapter), reinterpret_cast<void**>(&DxgiAdapter));
-	DxgiDevice->Release();
-	DxgiDevice = nullptr;
-	if (FAILED(hr))
-	{
-		//return ProcessFailure(m_Device, L"Failed to get parent DXGI Adapter", L"Error", hr, SystemTransitionsExpectedErrors);
-	}
-
-	// Set initial values so that we always catch the right coordinates
-	DeskBounds->left = INT_MAX;
-	DeskBounds->right = INT_MIN;
-	DeskBounds->top = INT_MAX;
-	DeskBounds->bottom = INT_MIN;
-
-	IDXGIOutput* DxgiOutput = nullptr;
-
-	// Figure out right dimensions for full size desktop texture and # of outputs to duplicate
-	UINT OutputCount;
-	if (SingleOutput < 0)
-	{
-		hr = S_OK;
-		for (OutputCount = 0; SUCCEEDED(hr); ++OutputCount)
-		{
-			if (DxgiOutput)
-			{
-				DxgiOutput->Release();
-				DxgiOutput = nullptr;
-			}
-			hr = DxgiAdapter->EnumOutputs(OutputCount, &DxgiOutput);
-			if (DxgiOutput && (hr != DXGI_ERROR_NOT_FOUND))
-			{
-				DXGI_OUTPUT_DESC DesktopDesc;
-				DxgiOutput->GetDesc(&DesktopDesc);
-
-				DeskBounds->left = min(DesktopDesc.DesktopCoordinates.left, DeskBounds->left);
-				DeskBounds->top = min(DesktopDesc.DesktopCoordinates.top, DeskBounds->top);
-				DeskBounds->right = max(DesktopDesc.DesktopCoordinates.right, DeskBounds->right);
-				DeskBounds->bottom = max(DesktopDesc.DesktopCoordinates.bottom, DeskBounds->bottom);
-			}
-		}
-
-		--OutputCount;
-	}
-	else
-	{
-		hr = DxgiAdapter->EnumOutputs(SingleOutput, &DxgiOutput);
-		if (FAILED(hr))
-		{
-			DxgiAdapter->Release();
-			DxgiAdapter = nullptr;
-			//return ProcessFailure(m_Device, L"Output specified to be duplicated does not exist", L"Error", hr);
-			error("Output specified to be duplicated does not exist");
-		}
-		DXGI_OUTPUT_DESC DesktopDesc;
-		DxgiOutput->GetDesc(&DesktopDesc);
-		*DeskBounds = DesktopDesc.DesktopCoordinates;
-
-		DxgiOutput->Release();
-		DxgiOutput = nullptr;
-
-		OutputCount = 1;
-	}
-
-	DxgiAdapter->Release();
-	DxgiAdapter = nullptr;
-
-	// Set passed in output count variable
-	*OutCount = OutputCount;
-
-	if (OutputCount == 0)
-	{
-		// We could not find any outputs, the system must be in a transition so return expected error
-		// so we will attempt to recreate
-		error("Output count === 0");
-		return 1;
-	}
-
-	// Create shared texture for all duplication threads to draw into
-	D3D11_TEXTURE2D_DESC DeskTexD;
-	RtlZeroMemory(&DeskTexD, sizeof(D3D11_TEXTURE2D_DESC));
-	DeskTexD.Width =  DeskBounds->right - DeskBounds->left;
-	DeskTexD.Height = DeskBounds->bottom - DeskBounds->top;
-	DeskTexD.MipLevels = 1;
-	DeskTexD.ArraySize = 1;
-	DeskTexD.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-	DeskTexD.SampleDesc.Count = 1;
-	DeskTexD.Usage = D3D11_USAGE_DEFAULT;
-	DeskTexD.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-	DeskTexD.CPUAccessFlags = 0;
-	DeskTexD.MiscFlags = D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX;
-
-	hr = dxRes.Device->CreateTexture2D(&DeskTexD, nullptr, &SharedSurf);
-	if (FAILED(hr))
-	{
-		if (OutputCount != 1)
-		{
-			// If we are duplicating the complete desktop we try to create a single texture to hold the
-			// complete desktop image and blit updates from the per output DDA interface.  The GPU can
-			// always support a texture size of the maximum resolution of any single output but there is no
-			// guarantee that it can support a texture size of the desktop.
-			// The sample only use this large texture to display the desktop image in a single window using DX
-			// we could revert back to using GDI to update the window in this failure case.
-			//return ProcessFailure(m_Device, L"Failed to create DirectX shared texture - we are attempting to create a texture the size of the complete desktop and this may be larger than the maximum texture size of your GPU.  Please try again using the -output command line parameter to duplicate only 1 monitor or configure your computer to a single monitor configuration", L"Error", hr, SystemTransitionsExpectedErrors);
-			error("Failed to create DirectX shared texture - we are attempting to create a texture the size of the complete desktop and this may be larger than the maximum texture size of your GPU.  Please try again using the -output command line parameter to duplicate only 1 monitor or configure your computer to a single monitor configuration");
-		}
-		else
-		{
-			//return ProcessFailure(m_Device, L"Failed to create shared texture", L"Error", hr, SystemTransitionsExpectedErrors);
-			error("Failed to create shared texture");
-		}
-	}
-
-	// Get keyed mutex
-	//hr = SharedSurf->QueryInterface(__uuidof(IDXGIKeyedMutex), reinterpret_cast<void**>(&m_KeyMutex));
-	//if (FAILED(hr))
-	//{
-		//return ProcessFailure(m_Device, L"Failed to query for keyed mutex in OUTPUTMANAGER", L"Error", hr);
-	//}
-
-	return hr;
-}
-
-
+DesktopCapture desktopCapture;
 HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	CheckPointer(pSample, E_POINTER);
 
 	if (!init_desktop) {
 		init_desktop = true;
 
-		InitializeDx(&dxRes);
-		HDESK CurrentDesktop = nullptr;
-		CurrentDesktop = OpenInputDesktop(0, FALSE, GENERIC_ALL);
-		if (!CurrentDesktop)
-		{
-			// should retry
-			//SetEvent(TData->ExpectedErrorEvent);
-			error("fail current desktop");
-		}
-
-		bool DesktopAttached = SetThreadDesktop(CurrentDesktop) != 0;
-		CloseDesktop(CurrentDesktop);
-		CurrentDesktop = nullptr;
-		if (!DesktopAttached)
-		{
-			// We do not have access to the desktop so request a retry
-			//Ret = DUPL_RETURN_ERROR_EXPECTED;
-			//goto Exit;
-			error("fail desktop attach");
-		}
-
-		// New display manager
-		dispMgr.InitD3D(&dxRes);
-
-		INT singleOutput = 0;
-		UINT outCount;
-		RECT deskBounds;
-
-		CreateSharedSurf(singleOutput, &outCount, &deskBounds);
-
-		DuplMgr.InitDupl(dxRes.Device, m_iDesktopNumber);
-
-		RtlZeroMemory(&DesktopDesc, sizeof(DXGI_OUTPUT_DESC));
-		DuplMgr.GetOutputDesc(&DesktopDesc);
-
-		CopyBufferDesc.Width = DesktopDesc.DesktopCoordinates.right - DesktopDesc.DesktopCoordinates.left;
-		CopyBufferDesc.Height = DesktopDesc.DesktopCoordinates.bottom - DesktopDesc.DesktopCoordinates.top;
-		CopyBufferDesc.MipLevels = 1;
-		CopyBufferDesc.ArraySize = 1;
-		CopyBufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-		CopyBufferDesc.SampleDesc.Count = 1;
-		CopyBufferDesc.SampleDesc.Quality = 0;
-		CopyBufferDesc.Usage = D3D11_USAGE_STAGING;
-		CopyBufferDesc.BindFlags = 0;
-		CopyBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-		CopyBufferDesc.MiscFlags = 0;
-
-		HRESULT hr = dxRes.Device->CreateTexture2D(&CopyBufferDesc, nullptr, &CopyBuffer);
-		if (FAILED(hr))
-		{
-			return ProcessFailure(nullptr, L"Failed creating staging texture for pointer", L"Error", hr, SystemTransitionsExpectedErrors);
-		}
+		desktopCapture.Init(m_iDesktopNumber);
 	}
+	
+	bool frame;
 
-	bool TimeOut;
-	FRAME_DATA CurrentData;
-	DuplMgr.GetFrame(&CurrentData, &TimeOut);
+	frame = desktopCapture.GetFrame(pSample, false, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), false);
 
-	if (TimeOut) {
+	if (!frame) {
 		error("fail desktop timeout - no new frame");
 		return S_OK;
 	}
-
-	
-	//dispMgr.ProcessFrame(&CurrentData, SharedSurf, 0, 0, &DesktopDesc);
-
-	// dxRes.Context->CopySubresourceRegion(CopyBuffer, 0, 0, 0, 0, SharedSurf, 0, nullptr);
-	dxRes.Context->CopyResource(CopyBuffer, CurrentData.Frame);
-
-	// Map pixels
-	const unsigned int subresource = D3D11CalcSubresource(0, 0, 0);
-	D3D11_MAPPED_SUBRESOURCE MappedSubresource;
-	D3D11_TEXTURE2D_DESC FrameDesc;
-
-	CurrentData.Frame->GetDesc(&FrameDesc);
-	dxRes.Context->Map(CopyBuffer, subresource, D3D11_MAP_READ, 0, &MappedSubresource);
-	get_desktop_frame(&game_context, false, pSample, FrameDesc, MappedSubresource, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
-	dxRes.Context->Unmap(CopyBuffer, subresource);
-	DuplMgr.DoneWithFrame();
 
 	REFERENCE_TIME startFrame = m_iFrameNumber * m_rtFrameLength;
 	REFERENCE_TIME endFrame = startFrame + m_rtFrameLength;
@@ -1114,7 +770,6 @@ void CPushPinDesktop::doJustBitBltOrScaling(HDC hMemDC, int nWidth, int nHeight,
 int CPushPinDesktop::getNegotiatedFinalWidth() {
 	int iImageWidth = m_rScreen.right - m_rScreen.left;
 	ASSERT_RAISE(iImageWidth > 0);
-	debug("getNegotiatedFinalWidth: %d", iImageWidth);
 	return iImageWidth;
 }
 
@@ -1122,7 +777,6 @@ int CPushPinDesktop::getNegotiatedFinalHeight() {
 	// might be smaller than the "getCaptureDesiredFinalWidth" if they tell us to give them an even smaller setting...
 	int iImageHeight = m_rScreen.bottom - m_rScreen.top;
 	ASSERT_RAISE(iImageHeight > 0);
-	debug("getNegotiatedFinalHeight: %d", iImageHeight);
 	return iImageHeight;
 }
 

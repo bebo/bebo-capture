@@ -1640,67 +1640,6 @@ boolean get_game_frame(void **data, boolean missed, IMediaSample *pSample) {
 	return false;
 }
 
-int get_i420_buffer_size(int width, int height) {
-	int half_width = (width + 1) >> 1;
-	int half_height = (height + 1) >> 1;
-	return width * height + half_width * half_height * 2;
-}
-
-boolean get_desktop_frame(void **data, boolean missed, IMediaSample *pSample, D3D11_TEXTURE2D_DESC frameDesc, D3D11_MAPPED_SUBRESOURCE map, int dWidth, int dHeight) {
-	if (!map.pData) return false;
-
-	BYTE *pData;
-    pSample->GetPointer(&pData);
-
-	const uint8_t* src_frame = static_cast<uint8_t*>(map.pData);
-	debug("width: %d, height: %d, frames: %d %d", frameDesc.Width, frameDesc.Height, src_frame[0], src_frame[1]);
-	int src_stride_frame = map.RowPitch;
-
-	int width = frameDesc.Width;
-	int height = frameDesc.Height;
-
-	BYTE* yuv = new BYTE[get_i420_buffer_size(width, height)];
-
-	uint8* y = yuv;
-	int stride_y = width;
-	uint8* u = yuv + (width * height);
-	int stride_u = (width + 1) / 2;
-	uint8* v = u + ((width * height) >> 2);
-	int stride_v = stride_u;
-
-	libyuv::ARGBToI420(src_frame,src_stride_frame,
-		y, stride_y,
-		u, stride_u,
-		v, stride_v,
-		width, height);
-
-	int dst_width = dWidth;
-	int dst_height = dHeight;
-	uint8* dst_y = pData;
-	int dst_stride_y = dst_width;
-	uint8* dst_u = pData + (dst_width * dst_height);
-	int dst_stride_u = (dst_width + 1) / 2;
-	uint8* dst_v = dst_u + ((dst_width * dst_height) >> 2);
-	int dst_stride_v = dst_stride_u;
-
-	libyuv::I420Scale(
-		y, stride_y,
-		u, stride_u,
-		v, stride_v,
-		width, height,
-		dst_y, dst_stride_y,
-		dst_u, dst_stride_u,
-		dst_v, dst_stride_v,
-		dst_width, dst_height,
-		libyuv::FilterMode(libyuv::kFilterBox)
-	);
-
-	delete[] yuv;
-	return true;
-}
-
-
-
 boolean stop_game_capture(void **data) {
 	struct game_capture *gc = (game_capture *) *data;
 	stop_capture(gc);

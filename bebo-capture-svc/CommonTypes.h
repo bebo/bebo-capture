@@ -35,15 +35,15 @@ typedef _Return_type_success_(return == DUPL_RETURN_SUCCESS) enum
 	DUPL_RETURN_SUCCESS = 0,
 	DUPL_RETURN_ERROR_EXPECTED = 1,
 	DUPL_RETURN_ERROR_UNEXPECTED = 2
-}DUPL_RETURN;
+} DuplReturn;
 
 _Post_satisfies_(return != DUPL_RETURN_SUCCESS)
-DUPL_RETURN ProcessFailure(_In_opt_ ID3D11Device* Device, _In_ LPCWSTR Str, _In_ LPCWSTR Title, HRESULT hr, _In_opt_z_ HRESULT* ExpectedErrors = nullptr);
+DuplReturn ProcessFailure(_In_opt_ ID3D11Device* Device, _In_ LPCWSTR Str, _In_ LPCWSTR Title, HRESULT hr, _In_opt_z_ HRESULT* ExpectedErrors = nullptr);
 
 //
 // Holds info about the pointer/cursor
 //
-typedef struct _PTR_INFO
+typedef struct _PtrInfo
 {
 	_Field_size_bytes_(BufferSize) BYTE* PtrShapeBuffer;
 	DXGI_OUTDUPL_POINTER_SHAPE_INFO ShapeInfo;
@@ -52,12 +52,12 @@ typedef struct _PTR_INFO
 	UINT BufferSize;
 	UINT WhoUpdatedPositionLast;
 	LARGE_INTEGER LastTimeStamp;
-} PTR_INFO;
+} PtrInfo;
 
 //
 // Structure that holds D3D resources not directly tied to any one thread
 //
-typedef struct _DX_RESOURCES
+typedef struct _DXResources
 {
 	ID3D11Device* Device;
 	ID3D11DeviceContext* Context;
@@ -65,12 +65,12 @@ typedef struct _DX_RESOURCES
 	ID3D11PixelShader* PixelShader;
 	ID3D11InputLayout* InputLayout;
 	ID3D11SamplerState* SamplerLinear;
-} DX_RESOURCES;
+} DXResources;
 
 //
 // Structure to pass to a new thread
 //
-typedef struct _THREAD_DATA
+typedef struct _ThreadData
 {
 	// Used to indicate abnormal error condition
 	HANDLE UnexpectedErrorEvent;
@@ -85,30 +85,30 @@ typedef struct _THREAD_DATA
 	UINT Output;
 	INT OffsetX;
 	INT OffsetY;
-	PTR_INFO* PtrInfo;
-	DX_RESOURCES DxRes;
-} THREAD_DATA;
+	PtrInfo* PtrInfo;
+	DXResources DxRes;
+} ThreadData;
 
 //
 // FRAME_DATA holds information about an acquired frame
 //
-typedef struct _FRAME_DATA
+typedef struct _FrameData
 {
 	ID3D11Texture2D* Frame;
 	DXGI_OUTDUPL_FRAME_INFO FrameInfo;
 	_Field_size_bytes_((MoveCount * sizeof(DXGI_OUTDUPL_MOVE_RECT)) + (DirtyCount * sizeof(RECT))) BYTE* MetaData;
 	UINT DirtyCount;
 	UINT MoveCount;
-} FRAME_DATA;
+} FrameData;
 
 //
 // A vertex with a position and texture coordinate
 //
-typedef struct _VERTEX
+typedef struct _Vertex
 {
 	DirectX::XMFLOAT3 Pos;
 	DirectX::XMFLOAT2 TexCoord;
-} VERTEX;
+} Vertex;
 
 #endif
 
