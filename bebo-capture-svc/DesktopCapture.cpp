@@ -35,95 +35,6 @@ struct desktop_capture {
 	ipc_pipe_server_t             pipe;
 };
 
-HRESULT SystemTransitionsExpectedErrors[] = {
-	DXGI_ERROR_DEVICE_REMOVED,
-	DXGI_ERROR_ACCESS_LOST,
-	static_cast<HRESULT>(WAIT_ABANDONED),
-	S_OK                                    // Terminate list with zero valued HRESULT 
-};
-
-// These are the errors we expect from IDXGIOutput1::DuplicateOutput due to a transition 
-HRESULT CreateDuplicationExpectedErrors[] = {
-	DXGI_ERROR_DEVICE_REMOVED,
-	static_cast<HRESULT>(E_ACCESSDENIED),
-	DXGI_ERROR_UNSUPPORTED,
-	DXGI_ERROR_SESSION_DISCONNECTED,
-	S_OK                                    // Terminate list with zero valued HRESULT 
-};
-
-// These are the errors we expect from IDXGIOutputDuplication methods due to a transition 
-HRESULT FrameInfoExpectedErrors[] = {
-	DXGI_ERROR_DEVICE_REMOVED,
-	DXGI_ERROR_ACCESS_LOST,
-	S_OK                                    // Terminate list with zero valued HRESULT 
-};
-
-// These are the errors we expect from IDXGIAdapter::EnumOutputs methods due to outputs becoming stale during a transition 
-HRESULT EnumOutputsExpectedErrors[] = {
-	DXGI_ERROR_NOT_FOUND,
-	S_OK                                    // Terminate list with zero valued HRESULT 
-};
-
-DuplReturn ProcessFailure(_In_opt_ ID3D11Device* Device, _In_ LPCWSTR Str, _In_ LPCWSTR Title, HRESULT hr, _In_opt_z_ HRESULT* ExpectedErrors)
-{
-	HRESULT TranslatedHr;
-
-	// On an error check if the DX device is lost 
-	if (Device)
-	{
-		HRESULT DeviceRemovedReason = Device->GetDeviceRemovedReason();
-
-		switch (DeviceRemovedReason)
-		{
-		case DXGI_ERROR_DEVICE_REMOVED:
-		case DXGI_ERROR_DEVICE_RESET:
-		case static_cast<HRESULT>(E_OUTOFMEMORY) :
-		{
-			// Our device has been stopped due to an external event on the GPU so map them all to 
-			// device removed and continue processing the condition 
-			TranslatedHr = DXGI_ERROR_DEVICE_REMOVED;
-			break;
-		}
-
-		case S_OK:
-		{
-			// Device is not removed so use original error 
-			TranslatedHr = hr;
-			break;
-		}
-
-		default:
-		{
-			// Device is removed but not a error we want to remap 
-			TranslatedHr = DeviceRemovedReason;
-		}
-		}
-	}
-	else
-	{
-		TranslatedHr = hr;
-	}
-
-	// Check if this error was expected or not 
-	if (ExpectedErrors)
-	{
-		HRESULT* CurrentResult = ExpectedErrors;
-
-		while (*CurrentResult != S_OK)
-		{
-			if (*(CurrentResult++) == TranslatedHr)
-			{
-
-				return DUPL_RETURN_ERROR_EXPECTED;
-			}
-		}
-	}
-
-	// todo: display msg
-
-	return DUPL_RETURN_ERROR_UNEXPECTED;
-}
-
 DesktopCapture::DesktopCapture() : m_Device(nullptr),
                                    m_DeviceContext(nullptr),
                                    m_MoveSurf(nullptr),
@@ -141,7 +52,7 @@ DesktopCapture::DesktopCapture() : m_Device(nullptr),
 								   m_DXResource(new DXResources),
 								   m_MouseInfo(new PtrInfo),
 								   m_Initialized(false),
-								   m_KeyMutex(nullptr)
+								   m_LastFrameData(new FrameData)
 {
 	RtlZeroMemory(&m_OutputDesc, sizeof(DXGI_OUTPUT_DESC));
 }
@@ -152,6 +63,8 @@ DesktopCapture::DesktopCapture() : m_Device(nullptr),
 DesktopCapture::~DesktopCapture()
 {
     CleanRefs();
+
+	delete m_LastFrameData;
 	delete m_MouseInfo;
 	delete m_DXResource;
 }
@@ -254,29 +167,7 @@ void DesktopCapture::Init(int desktopId)
     m_InputLayout->AddRef();
     m_SamplerLinear->AddRef();
 
-	//WHAT
-	HDESK CurrentDesktop = nullptr;
-	CurrentDesktop = OpenInputDesktop(0, FALSE, GENERIC_ALL);
-	if (!CurrentDesktop)
-	{
-		// should retry
-		//SetEvent(TData->ExpectedErrorEvent);
-		error("fail current desktop");
-	}
-
-	bool DesktopAttached = SetThreadDesktop(CurrentDesktop) != 0;
-	CloseDesktop(CurrentDesktop);
-	CurrentDesktop = nullptr;
-	if (!DesktopAttached)
-	{
-		// We do not have access to the desktop so request a retry
-		//Ret = DUPL_RETURN_ERROR_EXPECTED;
-		//goto Exit;
-		error("fail desktop attach");
-	}
-
-	CreateSharedSurf();
-	CreateCopyBuffer();
+	CreateSurface();
 	InitDupl();
 }
 
@@ -317,7 +208,8 @@ HRESULT DesktopCapture::InitializeDXResources() {
 	}
 	if (FAILED(hr))
 	{
-		return ProcessFailure(nullptr, L"Failed to create device in InitializeDx", L"Error", hr);
+		error("Failed to create device in Initialize DX");
+		return E_FAIL;
 	}
 
 	// VERTEX shader
@@ -325,7 +217,8 @@ HRESULT DesktopCapture::InitializeDXResources() {
 	hr = m_DXResource->Device->CreateVertexShader(g_VS, Size, nullptr, &m_DXResource->VertexShader);
 	if (FAILED(hr))
 	{
-		return ProcessFailure(m_DXResource->Device, L"Failed to create vertex shader in InitializeDx", L"Error", hr, SystemTransitionsExpectedErrors);
+		error("Failed to create vertex shader in InitializeDx");
+		return E_FAIL;
 	}
 
 	// Input layout
@@ -338,7 +231,8 @@ HRESULT DesktopCapture::InitializeDXResources() {
 	hr = m_DXResource->Device->CreateInputLayout(Layout, NumElements, g_VS, Size, &m_DXResource->InputLayout);
 	if (FAILED(hr))
 	{
-		return ProcessFailure(m_DXResource->Device, L"Failed to create input layout in InitializeDx", L"Error", hr, SystemTransitionsExpectedErrors);
+		error("Failed to create input layout in Initialize DX");
+		return E_FAIL;
 	}
 	m_DXResource->Context->IASetInputLayout(m_DXResource->InputLayout);
 
@@ -347,7 +241,8 @@ HRESULT DesktopCapture::InitializeDXResources() {
 	hr = m_DXResource->Device->CreatePixelShader(g_PS, Size, nullptr, &m_DXResource->PixelShader);
 	if (FAILED(hr))
 	{
-		return ProcessFailure(m_DXResource->Device, L"Failed to create pixel shader in InitializeDx", L"Error", hr, SystemTransitionsExpectedErrors);
+		error("Failed to create pixel shader in Initialize DX");
+		return E_FAIL;
 	}
 
 	// Set up sampler
@@ -363,22 +258,22 @@ HRESULT DesktopCapture::InitializeDXResources() {
 	hr = m_DXResource->Device->CreateSamplerState(&SampDesc, &m_DXResource->SamplerLinear);
 	if (FAILED(hr))
 	{
-		return ProcessFailure(m_DXResource->Device, L"Failed to create sampler state in InitializeDx", L"Error", hr, SystemTransitionsExpectedErrors);
+		error("Failed to create sampler state in Initialize DX");
+		return E_FAIL;
 	}
 
 	return hr;
 }
 
-HRESULT DesktopCapture::CreateSharedSurf()
-{
+HRESULT DesktopCapture::CreateSurface() {
 	HRESULT hr;
 
-	// Get DXGI resources
 	IDXGIDevice* DxgiDevice = nullptr;
 	hr = m_DXResource->Device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&DxgiDevice));
 	if (FAILED(hr))
 	{
-		return ProcessFailure(nullptr, L"Failed to QI for DXGI Device", L"Error", hr);
+		error("Failed to QI for DXGI Device");
+		return hr;
 	}
 
 	IDXGIAdapter* DxgiAdapter = nullptr;
@@ -387,7 +282,8 @@ HRESULT DesktopCapture::CreateSharedSurf()
 	DxgiDevice = nullptr;
 	if (FAILED(hr))
 	{
-		return ProcessFailure(m_DXResource->Device, L"Failed to get parent DXGI Adapter", L"Error", hr, SystemTransitionsExpectedErrors);
+		error("Failed to get parent DXGI Adapter");
+		return hr;
 	}
 
 	IDXGIOutput* DxgiOutput = nullptr;
@@ -398,48 +294,19 @@ HRESULT DesktopCapture::CreateSharedSurf()
 	{
 		DxgiAdapter->Release();
 		DxgiAdapter = nullptr;
-		return ProcessFailure(m_DXResource->Device, L"Output specified to be duplicated does not exist", L"Error", hr);
+		error("Output specified to be duplicated does not exist");
+		return hr;
 	}
 
 	RtlZeroMemory(&m_OutputDesc, sizeof(DXGI_OUTPUT_DESC));
 	DxgiOutput->GetDesc(&m_OutputDesc);
+
 	DxgiOutput->Release();
 	DxgiOutput = nullptr;
 
 	DxgiAdapter->Release();
 	DxgiAdapter = nullptr;
 
-	// Create shared texture for all duplication threads to draw into
-	D3D11_TEXTURE2D_DESC DeskTexD;
-	RtlZeroMemory(&DeskTexD, sizeof(D3D11_TEXTURE2D_DESC));
-	DeskTexD.Width =  m_OutputDesc.DesktopCoordinates.right - m_OutputDesc.DesktopCoordinates.left;
-	DeskTexD.Height = m_OutputDesc.DesktopCoordinates.bottom -  m_OutputDesc.DesktopCoordinates.top;
-	DeskTexD.MipLevels = 1;
-	DeskTexD.ArraySize = 1;
-	DeskTexD.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-	DeskTexD.SampleDesc.Count = 1;
-	DeskTexD.Usage = D3D11_USAGE_DEFAULT;
-	DeskTexD.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-	DeskTexD.CPUAccessFlags = 0;
-	DeskTexD.MiscFlags = D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX;
-
-	hr = m_DXResource->Device->CreateTexture2D(&DeskTexD, nullptr, &m_SharedSurf);
-	if (FAILED(hr))
-	{
-		return ProcessFailure(m_DXResource->Device, L"Failed to create shared texture", L"Error", hr, SystemTransitionsExpectedErrors);
-	}
-
-	// Get keyed mutex
-	//hr = m_SharedSurf->QueryInterface(__uuidof(IDXGIKeyedMutex), reinterpret_cast<void**>(&m_KeyMutex));
-	//if (FAILED(hr))
-	//{
-	//	return ProcessFailure(m_Device, L"Failed to query for keyed mutex in OUTPUTMANAGER", L"Error", hr);
-	//}
-
-	return hr;
-}
-
-HRESULT DesktopCapture::CreateCopyBuffer() {
 	D3D11_TEXTURE2D_DESC CopyBufferDesc;
 	CopyBufferDesc.Width = m_OutputDesc.DesktopCoordinates.right - m_OutputDesc.DesktopCoordinates.left;
 	CopyBufferDesc.Height = m_OutputDesc.DesktopCoordinates.bottom - m_OutputDesc.DesktopCoordinates.top;
@@ -453,11 +320,20 @@ HRESULT DesktopCapture::CreateCopyBuffer() {
 	CopyBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 	CopyBufferDesc.MiscFlags = 0;
 
-	HRESULT hr = m_DXResource->Device->CreateTexture2D(&CopyBufferDesc, nullptr, &m_CopyBuffer);
+	hr = m_DXResource->Device->CreateTexture2D(&CopyBufferDesc, nullptr, &m_CopyBuffer);
 	if (FAILED(hr))
 	{
-		return ProcessFailure(nullptr, L"Failed creating staging texture for pointer", L"Error", hr, SystemTransitionsExpectedErrors);
+		error("Failed to create staging texture for pointer");
+		return hr;
 	}
+
+	hr = m_CopyBuffer->QueryInterface(__uuidof(IDXGISurface), reinterpret_cast<void**>(&m_Surface));
+	if (FAILED(hr))
+	{
+		error("Failed to QI for IDXGI Surface");
+		return hr;
+	}
+	
 	return hr;
 }
 
@@ -467,7 +343,8 @@ HRESULT DesktopCapture::InitDupl() {
 	HRESULT hr = m_Device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&DxgiDevice));
 	if (FAILED(hr))
 	{
-		return ProcessFailure(nullptr, L"Failed to QI for DXGI Device", L"Error", hr);
+		error("Failed to QI for DXGI Device");
+		return E_FAIL;
 	}
 
 	// Get DXGI adapter
@@ -477,7 +354,8 @@ HRESULT DesktopCapture::InitDupl() {
 	DxgiDevice = nullptr;
 	if (FAILED(hr))
 	{
-		return ProcessFailure(m_Device, L"Failed to get parent DXGI Adapter", L"Error", hr, SystemTransitionsExpectedErrors);
+		error("Failed to get parent DXGI Adapter");
+		return E_FAIL;
 	}
 
 	// Get output
@@ -487,9 +365,11 @@ HRESULT DesktopCapture::InitDupl() {
 	DxgiAdapter = nullptr;
 	if (FAILED(hr))
 	{
-		return ProcessFailure(m_Device, L"Failed to get specified output in DesktopCapture", L"Error", hr, EnumOutputsExpectedErrors);
+		error("Failed to get specific output on DXGI Output");
+		return E_FAIL;
 	}
 
+	memset(&m_OutputDesc, 0, sizeof(m_OutputDesc));
 	DxgiOutput->GetDesc(&m_OutputDesc);
 
 	// QI for Output 1
@@ -499,7 +379,8 @@ HRESULT DesktopCapture::InitDupl() {
 	DxgiOutput = nullptr;
 	if (FAILED(hr))
 	{
-		return ProcessFailure(nullptr, L"Failed to QI for DxgiOutput1 in DesktopCapture", L"Error", hr);
+		error("Failed to QI for DxgiOutput1 in DesktopCapture");
+		return E_FAIL;
 	}
 
 	// Create desktop duplication
@@ -510,11 +391,14 @@ HRESULT DesktopCapture::InitDupl() {
 	{
 		if (hr == DXGI_ERROR_NOT_CURRENTLY_AVAILABLE)
 		{
-			MessageBoxW(nullptr, L"There is already the maximum number of applications using the Desktop Duplication API running, please close one of those applications and then try again.", L"Error", MB_OK);
-			return DUPL_RETURN_ERROR_UNEXPECTED;
+			error("There is already the maximum number of applications using the Desktop Duplication API running, please close one of those applications and then try again.");
+			return E_FAIL;
 		}
-		return ProcessFailure(m_Device, L"Failed to get duplicate output in DesktopCapture", L"Error", hr, CreateDuplicationExpectedErrors);
+		error("Failed to get duplicate output in DesktopCapture");
+		return E_FAIL;
 	}
+
+	return S_OK;
 }
 
 
@@ -522,9 +406,9 @@ HRESULT DesktopCapture::InitDupl() {
 //
 // Process a given frame and its metadata
 //
-DuplReturn DesktopCapture::ProcessFrame(FrameData* Data, ID3D11Texture2D* SharedSurf, INT OffsetX, INT OffsetY, _In_ DXGI_OUTPUT_DESC* DeskDesc)
+HRESULT DesktopCapture::ProcessFrame(FrameData* Data, ID3D11Texture2D* SharedSurf, INT OffsetX, INT OffsetY, _In_ DXGI_OUTPUT_DESC* DeskDesc)
 {
-    DuplReturn Ret = DUPL_RETURN_SUCCESS;
+    HRESULT Ret = DUPL_RETURN_SUCCESS;
 
     // Process dirties and moves
     if (Data->FrameInfo.TotalMetadataBufferSize)
@@ -619,7 +503,7 @@ void DesktopCapture::SetMoveRect(_Out_ RECT* SrcRect, _Out_ RECT* DestRect, _In_
 //
 // Copy move rectangles
 //
-DuplReturn DesktopCapture::CopyMove(_Inout_ ID3D11Texture2D* SharedSurf, _In_reads_(MoveCount) DXGI_OUTDUPL_MOVE_RECT* MoveBuffer, UINT MoveCount, INT OffsetX, INT OffsetY, _In_ DXGI_OUTPUT_DESC* DeskDesc, INT TexWidth, INT TexHeight)
+HRESULT DesktopCapture::CopyMove(_Inout_ ID3D11Texture2D* SharedSurf, _In_reads_(MoveCount) DXGI_OUTDUPL_MOVE_RECT* MoveBuffer, UINT MoveCount, INT OffsetX, INT OffsetY, _In_ DXGI_OUTPUT_DESC* DeskDesc, INT TexWidth, INT TexHeight)
 {
     D3D11_TEXTURE2D_DESC FullDesc;
     SharedSurf->GetDesc(&FullDesc);
@@ -636,7 +520,8 @@ DuplReturn DesktopCapture::CopyMove(_Inout_ ID3D11Texture2D* SharedSurf, _In_rea
         HRESULT hr = m_Device->CreateTexture2D(&MoveDesc, nullptr, &m_MoveSurf);
         if (FAILED(hr))
         {
-            return ProcessFailure(m_Device, L"Failed to create staging texture for move rects", L"Error", hr, SystemTransitionsExpectedErrors);
+            // return ProcessFailure(m_Device, L"Failed to create staging texture for move rects", L"Error", hr, SystemTransitionsExpectedErrors);
+			return hr;
         }
     }
 
@@ -767,7 +652,7 @@ void DesktopCapture::SetDirtyVert(_Out_writes_(NUMVERTICES) Vertex* Vertices, _I
 //
 // Copies dirty rectangles
 //
-DuplReturn DesktopCapture::CopyDirty(_In_ ID3D11Texture2D* SrcSurface, _Inout_ ID3D11Texture2D* SharedSurf, _In_reads_(DirtyCount) RECT* DirtyBuffer, UINT DirtyCount, INT OffsetX, INT OffsetY, _In_ DXGI_OUTPUT_DESC* DeskDesc)
+HRESULT DesktopCapture::CopyDirty(_In_ ID3D11Texture2D* SrcSurface, _Inout_ ID3D11Texture2D* SharedSurf, _In_reads_(DirtyCount) RECT* DirtyBuffer, UINT DirtyCount, INT OffsetX, INT OffsetY, _In_ DXGI_OUTPUT_DESC* DeskDesc)
 {
     HRESULT hr;
 
@@ -782,7 +667,8 @@ DuplReturn DesktopCapture::CopyDirty(_In_ ID3D11Texture2D* SrcSurface, _Inout_ I
         hr = m_Device->CreateRenderTargetView(SharedSurf, nullptr, &m_RTV);
         if (FAILED(hr))
         {
-            return ProcessFailure(m_Device, L"Failed to create render target view for dirty rects", L"Error", hr, SystemTransitionsExpectedErrors);
+            //return ProcessFailure(m_Device, L"Failed to create render target view for dirty rects", L"Error", hr, SystemTransitionsExpectedErrors);
+			return hr;
         }
     }
 
@@ -797,7 +683,8 @@ DuplReturn DesktopCapture::CopyDirty(_In_ ID3D11Texture2D* SrcSurface, _Inout_ I
     hr = m_Device->CreateShaderResourceView(SrcSurface, &ShaderDesc, &ShaderResource);
     if (FAILED(hr))
     {
-        return ProcessFailure(m_Device, L"Failed to create shader resource view for dirty rects", L"Error", hr, SystemTransitionsExpectedErrors);
+        // return ProcessFailure(m_Device, L"Failed to create shader resource view for dirty rects", L"Error", hr, SystemTransitionsExpectedErrors);
+		return hr;
     }
 
     FLOAT BlendFactor[4] = {0.f, 0.f, 0.f, 0.f};
@@ -822,7 +709,8 @@ DuplReturn DesktopCapture::CopyDirty(_In_ ID3D11Texture2D* SrcSurface, _Inout_ I
         if (!m_DirtyVertexBufferAlloc)
         {
             m_DirtyVertexBufferAllocSize = 0;
-            return ProcessFailure(nullptr, L"Failed to allocate memory for dirty vertex buffer.", L"Error", E_OUTOFMEMORY);
+            // return ProcessFailure(nullptr, L"Failed to allocate memory for dirty vertex buffer.", L"Error", E_OUTOFMEMORY);
+			return hr;
         }
 
         m_DirtyVertexBufferAllocSize = BytesNeeded;
@@ -850,7 +738,8 @@ DuplReturn DesktopCapture::CopyDirty(_In_ ID3D11Texture2D* SrcSurface, _Inout_ I
     hr = m_Device->CreateBuffer(&BufferDesc, &InitData, &VertBuf);
     if (FAILED(hr))
     {
-        return ProcessFailure(m_Device, L"Failed to create vertex buffer in dirty rect processing", L"Error", hr, SystemTransitionsExpectedErrors);
+        // return ProcessFailure(m_Device, L"Failed to create vertex buffer in dirty rect processing", L"Error", hr, SystemTransitionsExpectedErrors);
+		return hr;
     }
     UINT Stride = sizeof(Vertex);
     UINT Offset = 0;
@@ -874,50 +763,6 @@ DuplReturn DesktopCapture::CopyDirty(_In_ ID3D11Texture2D* SrcSurface, _Inout_ I
     ShaderResource = nullptr;
 
     return DUPL_RETURN_SUCCESS;
-}
-
-static bool check_file_integrity(struct desktop_capture *gc, const char *file,
-	const char *name)
-{
-	DWORD error;
-	HANDLE handle;
-	wchar_t *w_file = NULL;
-
-	if (!file || !*file) {
-		warn("Game capture %s not found.", STOP_BEING_BAD, name);
-		return false;
-	}
-
-	if (!os_utf8_to_wcs_ptr(file, 0, &w_file)) {
-		warn("Could not convert file name to wide string");
-		return false;
-	}
-
-	handle = CreateFileW(w_file, GENERIC_READ | GENERIC_EXECUTE,
-		FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-
-	bfree(w_file);
-
-	if (handle != INVALID_HANDLE_VALUE) {
-		CloseHandle(handle);
-		return true;
-	}
-
-	error = GetLastError();
-	if (error == ERROR_FILE_NOT_FOUND) {
-		warn("Game capture file '%s' not found."
-			STOP_BEING_BAD, file);
-	}
-	else if (error == ERROR_ACCESS_DENIED) {
-		warn("Game capture file '%s' could not be loaded."
-			STOP_BEING_BAD, file);
-	}
-	else {
-		warn("Game capture file '%s' could not be loaded: %lu."
-			STOP_BEING_BAD, file, error);
-	}
-
-	return false;
 }
 
 static void pipe_log(void *param, uint8_t *data, size_t size)
@@ -966,15 +811,18 @@ static inline int getI420BufferSize(int width, int height) {
 	return width * height + half_width * half_height * 2;
 }
 
-bool DesktopCapture::PushFrame(IMediaSample *pSample, D3D11_TEXTURE2D_DESC frameDesc, D3D11_MAPPED_SUBRESOURCE map, int dWidth, int dHeight) {
-	if (!map.pData) return false;
+bool DesktopCapture::PushFrame(IMediaSample *pSample, DXGI_SURFACE_DESC frameDesc, DXGI_MAPPED_RECT map, int dWidth, int dHeight) {
+	debug("push frame - frame: %dx%d, negotiated: %dx%d", frameDesc.Width, frameDesc.Height, dWidth, dHeight);
+	if (!map.pBits) {
+		warn("push frame - pBits is NULL");
+		return false;
+	}
 
 	BYTE *pData;
 	pSample->GetPointer(&pData);
 
-	const uint8_t* src_frame = static_cast<uint8_t*>(map.pData);
-	debug("get_desktop_frame - frame: %dx%d, negotiated: %dx%d", frameDesc.Width, frameDesc.Height, dWidth, dHeight);
-	int src_stride_frame = map.RowPitch;
+	const uint8_t* src_frame = static_cast<uint8_t*>(map.pBits);
+	int src_stride_frame = map.Pitch;
 
 	int width = frameDesc.Width;
 	int height = frameDesc.Height;
@@ -1022,12 +870,12 @@ bool DesktopCapture::PushFrame(IMediaSample *pSample, D3D11_TEXTURE2D_DESC frame
 //
 // Retrieves mouse info and write it into PtrInfo
 //
-DuplReturn DesktopCapture::GetMouse(_Inout_ PtrInfo* PtrInfo, _In_ DXGI_OUTDUPL_FRAME_INFO* FrameInfo, INT OffsetX, INT OffsetY)
+HRESULT DesktopCapture::GetMouse(_Inout_ PtrInfo* PtrInfo, _In_ DXGI_OUTDUPL_FRAME_INFO* FrameInfo, INT OffsetX, INT OffsetY)
 {
 	// A non-zero mouse update timestamp indicates that there is a mouse position update and optionally a shape change
 	if (FrameInfo->LastMouseUpdateTime.QuadPart == 0)
 	{
-		return DUPL_RETURN_SUCCESS;
+		return S_OK;
 	}
 
 	bool UpdatePosition = true;
@@ -1059,7 +907,7 @@ DuplReturn DesktopCapture::GetMouse(_Inout_ PtrInfo* PtrInfo, _In_ DXGI_OUTDUPL_
 	// No new shape
 	if (FrameInfo->PointerShapeBufferSize == 0)
 	{
-		return DUPL_RETURN_SUCCESS;
+		return S_OK;
 	}
 
 	// Old buffer too small
@@ -1074,7 +922,8 @@ DuplReturn DesktopCapture::GetMouse(_Inout_ PtrInfo* PtrInfo, _In_ DXGI_OUTDUPL_
 		if (!PtrInfo->PtrShapeBuffer)
 		{
 			PtrInfo->BufferSize = 0;
-			return ProcessFailure(nullptr, L"Failed to allocate memory for pointer shape in DesktopCapture", L"Error", E_OUTOFMEMORY);
+			error("Failed to allocate memory for pointer shape in DesktopCapture");
+			return E_UNEXPECTED;
 		}
 
 		// Update buffer size
@@ -1089,39 +938,41 @@ DuplReturn DesktopCapture::GetMouse(_Inout_ PtrInfo* PtrInfo, _In_ DXGI_OUTDUPL_
 		delete[] PtrInfo->PtrShapeBuffer;
 		PtrInfo->PtrShapeBuffer = nullptr;
 		PtrInfo->BufferSize = 0;
-		return ProcessFailure(m_Device, L"Failed to get frame pointer shape in DesktopCapture", L"Error", hr, FrameInfoExpectedErrors);
+		error("Failed to get frame pointer shape in DesktopCapture");
+		return E_UNEXPECTED;
 	}
 
-	return DUPL_RETURN_SUCCESS;
+	return S_OK;
 }
 
 
-//
-// Get next frame and write it into Data
-//
-static const unsigned int subresource = D3D11CalcSubresource(0, 0, 0);
-bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int height, bool captureMouse)
-{
-	if (!m_Initialized) {
-		error("DesktopCapture.Init() required.");
+bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame, IDXGIResource ** resource) {
+	HRESULT hr = S_OK;
+
+	if (!m_DeskDupl) {
+		hr = ReinitializeDuplication();
+	}
+
+	if (FAILED(hr)) {
 		return false;
 	}
 
-	FrameData * Data = new FrameData;
-	IDXGIResource* DesktopResource = nullptr;
-	DXGI_OUTDUPL_FRAME_INFO FrameInfo;
+	hr = m_DeskDupl->AcquireNextFrame(300, frame, resource);
+	if (hr == DXGI_ERROR_ACCESS_LOST) {
+		error("Failed to acquire next frame - dxgi error access lost.");
 
-	// Get new frame
-	HRESULT hr = m_DeskDupl->AcquireNextFrame(300, &FrameInfo, &DesktopResource);
-	if (hr == DXGI_ERROR_WAIT_TIMEOUT)
-	{
+		hr = ReinitializeDuplication();
+
+		if (FAILED(hr)) {
+			return false;
+		}
+
+		hr = m_DeskDupl->AcquireNextFrame(300, frame, resource);
+	} else if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
 		error("Failed to acquire next frame - timeout.");
 		return false;
-	}
-
-	if (FAILED(hr))
-	{
-		ProcessFailure(m_Device, L"Failed to acquire next frame in DesktopCapture", L"Error", hr, FrameInfoExpectedErrors);
+	} else if (FAILED(hr)) {
+		error("Failed to acquire next frame in DesktopCapture - %ld", hr);
 		return false;
 	}
 
@@ -1132,34 +983,56 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int h
 		m_AcquiredDesktopImage = nullptr;
 	}
 
-	// QI for IDXGIResource
-	hr = DesktopResource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&m_AcquiredDesktopImage));
-	DesktopResource->Release();
-	DesktopResource = nullptr;
-	if (FAILED(hr))
-	{
-		ProcessFailure(nullptr, L"Failed to QI for ID3D11Texture2D from acquired IDXGIResource in DesktopCapture", L"Error", hr);
+	return SUCCEEDED(hr);
+}
+
+//
+// Get next frame and write it into Data
+//
+bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int height, bool captureMouse)
+{
+	if (!m_Initialized) {
+		error("DesktopCapture.Init() required.");
 		return false;
 	}
 
-	Data->Frame = m_AcquiredDesktopImage;
-	Data->FrameInfo = FrameInfo;
+	IDXGIResource* DesktopResource = nullptr;
+	DXGI_OUTDUPL_FRAME_INFO FrameInfo = { 0 };
 
-	//m_DXResource->Context->CopySubresourceRegion(m_CopyBuffer, 0, 0, 0, 0, m_SharedSurf, 0, nullptr);
-	m_DXResource->Context->CopyResource(m_CopyBuffer, Data->Frame);
+	bool got_frame = AcquireNextFrame(&FrameInfo, &DesktopResource);
 
-	D3D11_MAPPED_SUBRESOURCE MappedSubresource;
-	D3D11_TEXTURE2D_DESC FrameDesc;
+	if (!got_frame) {
+		error("Unable to acquire next frame");
+		return false;
+	}
 
-	Data->Frame->GetDesc(&FrameDesc);
-	m_DXResource->Context->Map(m_CopyBuffer, subresource, D3D11_MAP_READ, 0, &MappedSubresource);
-	PushFrame(pSample, FrameDesc, MappedSubresource, width, height);
-	m_DXResource->Context->Unmap(m_CopyBuffer, subresource);
+	// QI for IDXGIResource
+	HRESULT hr = DesktopResource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&m_AcquiredDesktopImage));
+	DesktopResource->Release();
+	DesktopResource = nullptr;
+
+	if (FAILED(hr)) {
+		error("Failed to QI for ID3D11Texture2D from acquired IDXGIResource in DesktopCapture");
+		return false;
+	}
+
+	m_LastFrameData->Frame = m_AcquiredDesktopImage;
+	m_LastFrameData->FrameInfo = FrameInfo;
+
+	m_DXResource->Context->CopyResource(m_CopyBuffer, m_LastFrameData->Frame);
+
+	DXGI_MAPPED_RECT Map;
+	DXGI_SURFACE_DESC FrameDesc;
+
+	m_Surface->GetDesc(&FrameDesc);
+
+	m_Surface->Map(&Map, D3D11_MAP_READ);
+	got_frame = PushFrame(pSample, FrameDesc, Map, width, height);
+	m_Surface->Unmap();
 
 	DoneWithFrame();
 
-	delete Data;
-	return true;
+	return got_frame;
 }
 
 //
@@ -1168,17 +1041,57 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int h
 bool DesktopCapture::DoneWithFrame()
 {
 	HRESULT hr = m_DeskDupl->ReleaseFrame();
-	if (FAILED(hr))
-	{
-		ProcessFailure(m_Device, L"Failed to release frame in DesktopCapture", L"Error", hr, FrameInfoExpectedErrors);
-		return false;
+	if (hr == DXGI_ERROR_ACCESS_LOST) {
+		error("Failed to release frame, but trying to reinitialize desktop capture");
+
+		hr = ReinitializeDuplication();
+		if (FAILED(hr)) {
+			error("Failed to release frame AND FAILED to reinitialize desktop capture");
+		}
+	} else if (FAILED(hr)) {
+		error("Failed to release frame in DesktopCapture");
 	}
 
-	if (m_AcquiredDesktopImage)
-	{
+	if (m_AcquiredDesktopImage) {
 		m_AcquiredDesktopImage->Release();
 		m_AcquiredDesktopImage = nullptr;
 	}
 
 	return true;
+}
+
+HRESULT DesktopCapture::ReinitializeDuplication() {
+	if (m_DeskDupl) {
+		m_DeskDupl->Release();
+		m_DeskDupl = nullptr;
+	}
+
+	if (m_AcquiredDesktopImage) {
+		m_AcquiredDesktopImage->Release();
+		m_AcquiredDesktopImage = nullptr;
+	}
+
+	if (m_CopyBuffer) {
+		m_CopyBuffer->Release();
+		m_CopyBuffer = nullptr;
+	}
+
+	if (m_Surface) {
+		m_Surface->Release();
+		m_Surface = nullptr;
+	}
+
+	HRESULT hr = CreateSurface();
+	if (FAILED(hr)) {
+		error("Failed to create surface in reinitialization");
+		return hr;
+	}
+
+	hr = InitDupl();
+	if (FAILED(hr)) {
+		error("Failed to init desktop duplication in reinitialization");
+		return hr;
+	}
+
+	info("reinitlizing, done");
 }

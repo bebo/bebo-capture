@@ -265,6 +265,10 @@ HRESULT CPushPinDesktop::Active(void) {
 };
 
 HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
+	if (!m_pDesktopCapture->IsReady()) {
+		m_pDesktopCapture->Init(m_iDesktopNumber);
+	}
+
 	__int64 startThisRound = StartCounter();
 
 	CheckPointer(pSample, E_POINTER);
@@ -272,10 +276,6 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	long double millisThisRoundTook = 0;
 	CRefTime now;
 	now = 0;
-
-	if (!m_pDesktopCapture->IsReady()) {
-		m_pDesktopCapture->Init(m_iDesktopNumber);
-	}
 
 	CSourceStream::m_pFilter->StreamTime(now);
 	
@@ -321,7 +321,7 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 		}
 
 		startThisRound = StartCounter();
-		frame = m_pDesktopCapture->GetFrame(pSample, false, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), false);
+		frame = m_pDesktopCapture->GetFrame(pSample, missed, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), false);
 
 		if (frame && previousFrame <= 0) {
 			frame = false;
@@ -351,13 +351,13 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 #if 1
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 {
-
 	__int64 startThisRound = StartCounter();
 
 	CheckPointer(pSample, E_POINTER);
 	if (m_bReReadRegistry) {
 		reReadCurrentStartXY(1);
-	}
+	}	
+
 	long double millisThisRoundTook = 0;
 	CRefTime now;
 	now = 0;
@@ -365,18 +365,18 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	boolean gotFrame = false;
 	while (!gotFrame) {
 		switch (m_iCaptureType) {
-			case CAPTURE_DESKTOP: 
-				return FillBuffer_Desktop(pSample);
-			case CAPTURE_INJECT:
-				break;
-			case CAPTURE_GDI:
-				error("GDI CAPTURE IS NOT SUPPORTED YET");
-				break;
-			case CAPTURE_DSHOW:
-				error("LIBDSHOW CAPTURE IS NOT SUPPRTED YET");
-				break;
-			default:
-				error("UNKNOWN CAPTURE TYPE: %d", m_iCaptureType);
+		case CAPTURE_DESKTOP:
+			return FillBuffer_Desktop(pSample);
+		case CAPTURE_INJECT:
+			break;
+		case CAPTURE_GDI:
+			error("GDI CAPTURE IS NOT SUPPORTED YET");
+			break;
+		case CAPTURE_DSHOW:
+			error("LIBDSHOW CAPTURE IS NOT SUPPRTED YET");
+			break;
+		default:
+			error("UNKNOWN CAPTURE TYPE: %d", m_iCaptureType);
 		}
 		// IsStopped() is not set until we have returned, so we need to do a peek to exit or we will never stop
 		if (!active) {

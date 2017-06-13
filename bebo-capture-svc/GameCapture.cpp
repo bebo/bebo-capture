@@ -126,9 +126,6 @@ struct game_capture {
 	boolean (*copy_texture)(struct game_capture*, IMediaSample *pSample);
 };
 
-
-
-
 static inline int inject_library(HANDLE process, const wchar_t *dll)
 {
 	return inject_library_obf(process, dll,
