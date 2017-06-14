@@ -54,7 +54,40 @@ DesktopCapture::DesktopCapture() : m_Device(nullptr),
 //
 DesktopCapture::~DesktopCapture()
 {
-    CleanRefs();
+	CleanRefs();
+
+	if (m_Device) {
+		m_Device->Release();
+		m_Device = nullptr;
+	}
+
+	if (m_DeviceContext) {
+		m_DeviceContext->Release();
+		m_DeviceContext = nullptr;
+	}
+
+	if (m_LastDesktopFrame) {
+		delete m_LastDesktopFrame;
+		m_LastDesktopFrame = nullptr;
+	}
+	
+	if (m_LastFrameData) {
+		delete m_LastFrameData;
+		m_LastFrameData = nullptr;
+	}
+	
+	if (m_MouseInfo) {
+		delete m_MouseInfo;
+		m_MouseInfo = nullptr;
+	}
+}
+
+void DesktopCapture::CleanRefs()
+{
+	if (m_DeskDupl) {
+		m_DeskDupl->Release();
+		m_DeskDupl = nullptr;
+	}
 
 	if (m_MoveSurf) {
 		m_MoveSurf->Release();
@@ -69,28 +102,6 @@ DesktopCapture::~DesktopCapture()
 	if (m_Surface) {
 		m_Surface->Release();
 		m_Surface = nullptr;
-	}
-
-	if (m_Device) {
-		m_Device->Release();
-		m_Device = nullptr;
-	}
-
-    if (m_DeviceContext) {
-        m_DeviceContext->Release();
-        m_DeviceContext = nullptr;
-    }
-
-	delete m_LastDesktopFrame;
-	delete m_LastFrameData;
-	delete m_MouseInfo;
-}
-
-void DesktopCapture::CleanRefs()
-{
-	if (m_DeskDupl) {
-		m_DeskDupl->Release();
-		m_DeskDupl = nullptr;
 	}
 
 	if (m_AcquiredDesktopImage) {
@@ -167,7 +178,7 @@ HRESULT DesktopCapture::InitializeDXResources() {
 }
 
 HRESULT DesktopCapture::CreateSurface() {
-	HRESULT hr;
+	HRESULT hr = S_OK;
 
 	IDXGIDevice* DxgiDevice = nullptr;
 	hr = m_Device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&DxgiDevice));
@@ -651,13 +662,14 @@ HRESULT DesktopCapture::GetMouse(_Inout_ PtrInfo* PtrInfo, _In_ DXGI_OUTDUPL_FRA
 
 bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame) {
 	HRESULT hr = S_OK;
-	IDXGIResource* desktop_resource =  nullptr;
+	IDXGIResource* desktop_resource = nullptr;
 
 	if (!m_DeskDupl) {
 		hr = ReinitializeDuplication();
 	}
 
 	if (FAILED(hr)) {
+		error("Failed to acquire next frame - failed to reinitialize duplication.");
 		return false;
 	}
 
@@ -764,13 +776,14 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int h
 	}
 
 	DXGI_OUTDUPL_FRAME_INFO frame_info = { 0 };
+	DXGI_SURFACE_DESC frame_desc = { 0 };
 	DXGI_MAPPED_RECT map;
-	DXGI_SURFACE_DESC frame_desc;
 
 	bool got_frame = AcquireNextFrame(&frame_info);
 
 	if (!got_frame) {
 		// if can't get frame, push the last success frame
+		info("unable to acquire next frame - reusing old frame for now");
 		if (m_LastDesktopFrame) {
 			return PushFrame(pSample, m_LastDesktopFrame, width, height);
 		}
@@ -842,4 +855,5 @@ HRESULT DesktopCapture::ReinitializeDuplication() {
 	}
 
 	info("reinitlizing, done");
+	return hr;
 }

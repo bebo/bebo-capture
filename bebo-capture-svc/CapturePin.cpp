@@ -281,6 +281,10 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	
 	bool frame = false;
 	while (!frame) {
+		if (!active) {
+			debug("inacitve - fillbuffer_desktop");
+			return S_FALSE;
+		}
 		if (now <= 0) {
 			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
 			debug("no reference graph clock - sleeping %d", dwMilliseconds);
