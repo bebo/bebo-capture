@@ -30,7 +30,6 @@ using namespace DirectX;
         "settings of the security software you are using."
 
 struct desktop_capture {
-	struct desktop_capture_config    config;
 	DWORD                         process_id;
 	ipc_pipe_server_t             pipe;
 };
@@ -38,21 +37,14 @@ struct desktop_capture {
 DesktopCapture::DesktopCapture() : m_Device(nullptr),
                                    m_DeviceContext(nullptr),
                                    m_MoveSurf(nullptr),
-                                   m_VertexShader(nullptr),
-                                   m_PixelShader(nullptr),
-                                   m_InputLayout(nullptr),
-                                   m_RTV(nullptr),
-                                   m_SamplerLinear(nullptr),
-                                   m_DirtyVertexBufferAlloc(nullptr),
-                                   m_DirtyVertexBufferAllocSize(0),
 								   m_DeskDupl(nullptr),
 								   m_AcquiredDesktopImage(nullptr),
 								   m_MetaDataBuffer(nullptr),
 								   m_MetaDataSize(0),
-								   m_DXResource(new DXResources),
 								   m_MouseInfo(new PtrInfo),
 								   m_Initialized(false),
-								   m_LastFrameData(new FrameData)
+								   m_LastFrameData(new FrameData),
+								   m_LastDesktopFrame(nullptr)
 {
 	RtlZeroMemory(&m_OutputDesc, sizeof(DXGI_OUTPUT_DESC));
 }
@@ -64,84 +56,54 @@ DesktopCapture::~DesktopCapture()
 {
     CleanRefs();
 
-	delete m_LastFrameData;
-	delete m_MouseInfo;
-	delete m_DXResource;
-}
+	if (m_MoveSurf) {
+		m_MoveSurf->Release();
+		m_MoveSurf = nullptr;
+	}
 
-void DesktopCapture::CleanRefs()
-{
-    if (m_DeviceContext)
-    {
+	if (m_StagingTexture) {
+		m_StagingTexture->Release();
+		m_StagingTexture = nullptr;
+	}
+
+	if (m_Surface) {
+		m_Surface->Release();
+		m_Surface = nullptr;
+	}
+
+	if (m_Device) {
+		m_Device->Release();
+		m_Device = nullptr;
+	}
+
+    if (m_DeviceContext) {
         m_DeviceContext->Release();
         m_DeviceContext = nullptr;
     }
 
-    if (m_MoveSurf)
-    {
-        m_MoveSurf->Release();
-        m_MoveSurf = nullptr;
-    }
+	delete m_LastDesktopFrame;
+	delete m_LastFrameData;
+	delete m_MouseInfo;
+}
 
-    if (m_VertexShader)
-    {
-        m_VertexShader->Release();
-        m_VertexShader = nullptr;
-    }
-
-    if (m_PixelShader)
-    {
-        m_PixelShader->Release();
-        m_PixelShader = nullptr;
-    }
-
-    if (m_InputLayout)
-    {
-        m_InputLayout->Release();
-        m_InputLayout = nullptr;
-    }
-
-    if (m_SamplerLinear)
-    {
-        m_SamplerLinear->Release();
-        m_SamplerLinear = nullptr;
-    }
-
-    if (m_RTV)
-    {
-        m_RTV->Release();
-        m_RTV = nullptr;
-    }
-
-	if (m_DirtyVertexBufferAlloc)
-	{
-		delete[] m_DirtyVertexBufferAlloc;
-		m_DirtyVertexBufferAlloc = nullptr;
-	}
-
-	if (m_DeskDupl)
-	{
+void DesktopCapture::CleanRefs()
+{
+	if (m_DeskDupl) {
 		m_DeskDupl->Release();
 		m_DeskDupl = nullptr;
 	}
 
-	if (m_AcquiredDesktopImage)
-	{
+	if (m_AcquiredDesktopImage) {
 		m_AcquiredDesktopImage->Release();
 		m_AcquiredDesktopImage = nullptr;
 	}
 
-	if (m_MetaDataBuffer)
-	{
+	if (m_MetaDataBuffer) {
 		delete[] m_MetaDataBuffer;
 		m_MetaDataBuffer = nullptr;
 	}
 
-	if (m_Device)
-	{
-		m_Device->Release();
-		m_Device = nullptr;
-	}
+	m_MetaDataSize = 0;	
 }
 
 //
@@ -153,20 +115,6 @@ void DesktopCapture::Init(int desktopId)
 	m_Initialized = true;
 
 	InitializeDXResources();
-    m_Device = m_DXResource->Device;
-    m_DeviceContext = m_DXResource->Context;
-    m_VertexShader = m_DXResource->VertexShader;
-    m_PixelShader = m_DXResource->PixelShader;
-    m_InputLayout = m_DXResource->InputLayout;
-    m_SamplerLinear = m_DXResource->SamplerLinear;
-
-    m_Device->AddRef();
-    m_DeviceContext->AddRef();
-    m_VertexShader->AddRef();
-    m_PixelShader->AddRef();
-    m_InputLayout->AddRef();
-    m_SamplerLinear->AddRef();
-
 	CreateSurface();
 	InitDupl();
 }
@@ -199,69 +147,22 @@ HRESULT DesktopCapture::InitializeDXResources() {
 	for (UINT DriverTypeIndex = 0; DriverTypeIndex < NumDriverTypes; ++DriverTypeIndex)
 	{
 		hr = D3D11CreateDevice(nullptr, DriverTypes[DriverTypeIndex], nullptr, 0, FeatureLevels, NumFeatureLevels,
-			D3D11_SDK_VERSION, &m_DXResource->Device, &FeatureLevel, &m_DXResource->Context);
+			D3D11_SDK_VERSION, &m_Device, &FeatureLevel, &m_DeviceContext);
 		if (SUCCEEDED(hr))
 		{
 			// Device creation success, no need to loop anymore
 			break;
 		}
 	}
+
 	if (FAILED(hr))
 	{
 		error("Failed to create device in Initialize DX");
 		return E_FAIL;
 	}
 
-	// VERTEX shader
-	UINT Size = ARRAYSIZE(g_VS);
-	hr = m_DXResource->Device->CreateVertexShader(g_VS, Size, nullptr, &m_DXResource->VertexShader);
-	if (FAILED(hr))
-	{
-		error("Failed to create vertex shader in InitializeDx");
-		return E_FAIL;
-	}
-
-	// Input layout
-	D3D11_INPUT_ELEMENT_DESC Layout[] =
-	{
-		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
-		{"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0}
-	};
-	UINT NumElements = ARRAYSIZE(Layout);
-	hr = m_DXResource->Device->CreateInputLayout(Layout, NumElements, g_VS, Size, &m_DXResource->InputLayout);
-	if (FAILED(hr))
-	{
-		error("Failed to create input layout in Initialize DX");
-		return E_FAIL;
-	}
-	m_DXResource->Context->IASetInputLayout(m_DXResource->InputLayout);
-
-	// Pixel shader
-	Size = ARRAYSIZE(g_PS);
-	hr = m_DXResource->Device->CreatePixelShader(g_PS, Size, nullptr, &m_DXResource->PixelShader);
-	if (FAILED(hr))
-	{
-		error("Failed to create pixel shader in Initialize DX");
-		return E_FAIL;
-	}
-
-	// Set up sampler
-	D3D11_SAMPLER_DESC SampDesc;
-	RtlZeroMemory(&SampDesc, sizeof(SampDesc));
-	SampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-	SampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-	SampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-	SampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-	SampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-	SampDesc.MinLOD = 0;
-	SampDesc.MaxLOD = D3D11_FLOAT32_MAX;
-	hr = m_DXResource->Device->CreateSamplerState(&SampDesc, &m_DXResource->SamplerLinear);
-	if (FAILED(hr))
-	{
-		error("Failed to create sampler state in Initialize DX");
-		return E_FAIL;
-	}
-
+    m_Device->AddRef();
+    m_DeviceContext->AddRef();
 	return hr;
 }
 
@@ -269,7 +170,7 @@ HRESULT DesktopCapture::CreateSurface() {
 	HRESULT hr;
 
 	IDXGIDevice* DxgiDevice = nullptr;
-	hr = m_DXResource->Device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&DxgiDevice));
+	hr = m_Device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&DxgiDevice));
 	if (FAILED(hr))
 	{
 		error("Failed to QI for DXGI Device");
@@ -320,14 +221,14 @@ HRESULT DesktopCapture::CreateSurface() {
 	CopyBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 	CopyBufferDesc.MiscFlags = 0;
 
-	hr = m_DXResource->Device->CreateTexture2D(&CopyBufferDesc, nullptr, &m_CopyBuffer);
+	hr = m_Device->CreateTexture2D(&CopyBufferDesc, nullptr, &m_StagingTexture);
 	if (FAILED(hr))
 	{
 		error("Failed to create staging texture for pointer");
 		return hr;
 	}
 
-	hr = m_CopyBuffer->QueryInterface(__uuidof(IDXGISurface), reinterpret_cast<void**>(&m_Surface));
+	hr = m_StagingTexture->QueryInterface(__uuidof(IDXGISurface), reinterpret_cast<void**>(&m_Surface));
 	if (FAILED(hr))
 	{
 		error("Failed to QI for IDXGI Surface");
@@ -401,37 +302,20 @@ HRESULT DesktopCapture::InitDupl() {
 	return S_OK;
 }
 
-
-
 //
 // Process a given frame and its metadata
 //
-HRESULT DesktopCapture::ProcessFrame(FrameData* Data, ID3D11Texture2D* SharedSurf, INT OffsetX, INT OffsetY, _In_ DXGI_OUTPUT_DESC* DeskDesc)
+void DesktopCapture::ProcessFrame(FrameData* data, int offsetX, int offsetY)
 {
-    HRESULT Ret = DUPL_RETURN_SUCCESS;
-
-    // Process dirties and moves
-    if (Data->FrameInfo.TotalMetadataBufferSize)
-    {
-        D3D11_TEXTURE2D_DESC Desc;
-        Data->Frame->GetDesc(&Desc);
-
-        if (Data->MoveCount)
-        {
-            Ret = CopyMove(SharedSurf, reinterpret_cast<DXGI_OUTDUPL_MOVE_RECT*>(Data->MetaData), Data->MoveCount, OffsetX, OffsetY, DeskDesc, Desc.Width, Desc.Height);
-            if (Ret != DUPL_RETURN_SUCCESS)
-            {
-                return Ret;
-            }
-        }
-
-        if (Data->DirtyCount)
-        {
-            Ret = CopyDirty(Data->Frame, SharedSurf, reinterpret_cast<RECT*>(Data->MetaData + (Data->MoveCount * sizeof(DXGI_OUTDUPL_MOVE_RECT))), Data->DirtyCount, OffsetX, OffsetY, DeskDesc);
-        }
-    }
-
-    return Ret;
+	if (data->FrameInfo.TotalMetadataBufferSize) {
+		// Process dirties and moves
+		if (data->MoveCount) {
+			CopyMove(data, offsetX, offsetY);
+		}
+		if (data->DirtyCount) {
+			CopyDirty(data, offsetX, offsetY);
+		}
+	}
 }
 
 //
@@ -503,266 +387,85 @@ void DesktopCapture::SetMoveRect(_Out_ RECT* SrcRect, _Out_ RECT* DestRect, _In_
 //
 // Copy move rectangles
 //
-HRESULT DesktopCapture::CopyMove(_Inout_ ID3D11Texture2D* SharedSurf, _In_reads_(MoveCount) DXGI_OUTDUPL_MOVE_RECT* MoveBuffer, UINT MoveCount, INT OffsetX, INT OffsetY, _In_ DXGI_OUTPUT_DESC* DeskDesc, INT TexWidth, INT TexHeight)
+void DesktopCapture::CopyMove(FrameData* data, INT offsetX, INT offsetY)
 {
-    D3D11_TEXTURE2D_DESC FullDesc;
-    SharedSurf->GetDesc(&FullDesc);
+	DXGI_OUTDUPL_MOVE_RECT* move_buffer = reinterpret_cast<DXGI_OUTDUPL_MOVE_RECT*>(data->MetaData); 
+	UINT move_count = data->MoveCount;
 
-    // Make new intermediate surface to copy into for moving
-    if (!m_MoveSurf)
-    {
-        D3D11_TEXTURE2D_DESC MoveDesc;
-        MoveDesc = FullDesc;
-        MoveDesc.Width = DeskDesc->DesktopCoordinates.right - DeskDesc->DesktopCoordinates.left;
-        MoveDesc.Height = DeskDesc->DesktopCoordinates.bottom - DeskDesc->DesktopCoordinates.top;
-        MoveDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
-        MoveDesc.MiscFlags = 0;
-        HRESULT hr = m_Device->CreateTexture2D(&MoveDesc, nullptr, &m_MoveSurf);
-        if (FAILED(hr))
-        {
-            // return ProcessFailure(m_Device, L"Failed to create staging texture for move rects", L"Error", hr, SystemTransitionsExpectedErrors);
-			return hr;
-        }
-    }
+	D3D11_TEXTURE2D_DESC desc;
+	D3D11_TEXTURE2D_DESC full_desc;
 
-    for (UINT i = 0; i < MoveCount; ++i)
-    {
-        RECT SrcRect;
-        RECT DestRect;
+	data->Frame->GetDesc(&desc);
+	m_StagingTexture->GetDesc(&full_desc);
 
-        SetMoveRect(&SrcRect, &DestRect, DeskDesc, &(MoveBuffer[i]), TexWidth, TexHeight);
+	// Make new intermediate surface to copy into for moving
+	if (!m_MoveSurf) {
+		D3D11_TEXTURE2D_DESC move_desc;
+		move_desc = full_desc;
+		move_desc.Width = m_OutputDesc.DesktopCoordinates.right - m_OutputDesc.DesktopCoordinates.left;
+		move_desc.Height = m_OutputDesc.DesktopCoordinates.bottom - m_OutputDesc.DesktopCoordinates.top;
+		move_desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+		move_desc.MiscFlags = 0;
+		HRESULT hr = m_Device->CreateTexture2D(&move_desc, nullptr, &m_MoveSurf);
+		if (FAILED(hr)) {
+			error("Failed to create staging texture for move rects");
+			return;
+		}
+	}
 
-        // Copy rect out of shared surface
-        D3D11_BOX Box;
-        Box.left = SrcRect.left + DeskDesc->DesktopCoordinates.left - OffsetX;
-        Box.top = SrcRect.top + DeskDesc->DesktopCoordinates.top - OffsetY;
-        Box.front = 0;
-        Box.right = SrcRect.right + DeskDesc->DesktopCoordinates.left - OffsetX;
-        Box.bottom = SrcRect.bottom + DeskDesc->DesktopCoordinates.top - OffsetY;
-        Box.back = 1;
-        m_DeviceContext->CopySubresourceRegion(m_MoveSurf, 0, SrcRect.left, SrcRect.top, 0, SharedSurf, 0, &Box);
+	while (move_count > 0) {
+		RECT src_rect;
+		RECT dest_rect;
 
-        // Copy back to shared surface
-        Box.left = SrcRect.left;
-        Box.top = SrcRect.top;
-        Box.front = 0;
-        Box.right = SrcRect.right;
-        Box.bottom = SrcRect.bottom;
-        Box.back = 1;
-        m_DeviceContext->CopySubresourceRegion(SharedSurf, 0, DestRect.left + DeskDesc->DesktopCoordinates.left - OffsetX, DestRect.top + DeskDesc->DesktopCoordinates.top - OffsetY, 0, m_MoveSurf, 0, &Box);
-    }
+		SetMoveRect(&src_rect, &dest_rect, &m_OutputDesc, move_buffer, desc.Width, desc.Height);
 
-    return DUPL_RETURN_SUCCESS;
+		// Copy rect out of shared surface
+		D3D11_BOX box;
+		box.left = src_rect.left + m_OutputDesc.DesktopCoordinates.left - offsetX;
+		box.top = src_rect.top + m_OutputDesc.DesktopCoordinates.top - offsetY;
+		box.front = 0;
+		box.right = src_rect.right + m_OutputDesc.DesktopCoordinates.left - offsetX;
+		box.bottom = src_rect.bottom + m_OutputDesc.DesktopCoordinates.top - offsetY;
+		box.back = 1;
+		m_DeviceContext->CopySubresourceRegion(m_MoveSurf, 0, src_rect.left, src_rect.top, 0, data->Frame, 0, &box);
+
+		box.left = src_rect.left;
+		box.top = src_rect.top;
+		box.front = 0;
+		box.right = src_rect.right;
+		box.bottom = src_rect.bottom;
+		box.back = 1;
+
+		m_DeviceContext->CopySubresourceRegion(m_StagingTexture, 0, dest_rect.left + m_OutputDesc.DesktopCoordinates.left - offsetX, 
+			dest_rect.top + m_OutputDesc.DesktopCoordinates.top - offsetY, 0, m_MoveSurf, 0, &box);
+
+		move_buffer++;
+		move_count--;
+	}
 }
-
-//
-// Sets up vertices for dirty rects for rotated desktops
-//
-#pragma warning(push)
-#pragma warning(disable:__WARNING_USING_UNINIT_VAR) // false positives in SetDirtyVert due to tool bug
-
-void DesktopCapture::SetDirtyVert(_Out_writes_(NUMVERTICES) Vertex* Vertices, _In_ RECT* Dirty, INT OffsetX, INT OffsetY, _In_ DXGI_OUTPUT_DESC* DeskDesc, _In_ D3D11_TEXTURE2D_DESC* FullDesc, _In_ D3D11_TEXTURE2D_DESC* ThisDesc)
-{
-    INT CenterX = FullDesc->Width / 2;
-    INT CenterY = FullDesc->Height / 2;
-
-    INT Width = DeskDesc->DesktopCoordinates.right - DeskDesc->DesktopCoordinates.left;
-    INT Height = DeskDesc->DesktopCoordinates.bottom - DeskDesc->DesktopCoordinates.top;
-
-    // Rotation compensated destination rect
-    RECT DestDirty = *Dirty;
-
-    // Set appropriate coordinates compensated for rotation
-    switch (DeskDesc->Rotation)
-    {
-        case DXGI_MODE_ROTATION_ROTATE90:
-        {
-            DestDirty.left = Width - Dirty->bottom;
-            DestDirty.top = Dirty->left;
-            DestDirty.right = Width - Dirty->top;
-            DestDirty.bottom = Dirty->right;
-
-            Vertices[0].TexCoord = XMFLOAT2(Dirty->right / static_cast<FLOAT>(ThisDesc->Width), Dirty->bottom / static_cast<FLOAT>(ThisDesc->Height));
-            Vertices[1].TexCoord = XMFLOAT2(Dirty->left / static_cast<FLOAT>(ThisDesc->Width), Dirty->bottom / static_cast<FLOAT>(ThisDesc->Height));
-            Vertices[2].TexCoord = XMFLOAT2(Dirty->right / static_cast<FLOAT>(ThisDesc->Width), Dirty->top / static_cast<FLOAT>(ThisDesc->Height));
-            Vertices[5].TexCoord = XMFLOAT2(Dirty->left / static_cast<FLOAT>(ThisDesc->Width), Dirty->top / static_cast<FLOAT>(ThisDesc->Height));
-            break;
-        }
-        case DXGI_MODE_ROTATION_ROTATE180:
-        {
-            DestDirty.left = Width - Dirty->right;
-            DestDirty.top = Height - Dirty->bottom;
-            DestDirty.right = Width - Dirty->left;
-            DestDirty.bottom = Height - Dirty->top;
-
-            Vertices[0].TexCoord = XMFLOAT2(Dirty->right / static_cast<FLOAT>(ThisDesc->Width), Dirty->top / static_cast<FLOAT>(ThisDesc->Height));
-            Vertices[1].TexCoord = XMFLOAT2(Dirty->right / static_cast<FLOAT>(ThisDesc->Width), Dirty->bottom / static_cast<FLOAT>(ThisDesc->Height));
-            Vertices[2].TexCoord = XMFLOAT2(Dirty->left / static_cast<FLOAT>(ThisDesc->Width), Dirty->top / static_cast<FLOAT>(ThisDesc->Height));
-            Vertices[5].TexCoord = XMFLOAT2(Dirty->left / static_cast<FLOAT>(ThisDesc->Width), Dirty->bottom / static_cast<FLOAT>(ThisDesc->Height));
-            break;
-        }
-        case DXGI_MODE_ROTATION_ROTATE270:
-        {
-            DestDirty.left = Dirty->top;
-            DestDirty.top = Height - Dirty->right;
-            DestDirty.right = Dirty->bottom;
-            DestDirty.bottom = Height - Dirty->left;
-
-            Vertices[0].TexCoord = XMFLOAT2(Dirty->left / static_cast<FLOAT>(ThisDesc->Width), Dirty->top / static_cast<FLOAT>(ThisDesc->Height));
-            Vertices[1].TexCoord = XMFLOAT2(Dirty->right / static_cast<FLOAT>(ThisDesc->Width), Dirty->top / static_cast<FLOAT>(ThisDesc->Height));
-            Vertices[2].TexCoord = XMFLOAT2(Dirty->left / static_cast<FLOAT>(ThisDesc->Width), Dirty->bottom / static_cast<FLOAT>(ThisDesc->Height));
-            Vertices[5].TexCoord = XMFLOAT2(Dirty->right / static_cast<FLOAT>(ThisDesc->Width), Dirty->bottom / static_cast<FLOAT>(ThisDesc->Height));
-            break;
-        }
-        default:
-            assert(false); // drop through
-        case DXGI_MODE_ROTATION_UNSPECIFIED:
-        case DXGI_MODE_ROTATION_IDENTITY:
-        {
-            Vertices[0].TexCoord = XMFLOAT2(Dirty->left / static_cast<FLOAT>(ThisDesc->Width), Dirty->bottom / static_cast<FLOAT>(ThisDesc->Height));
-            Vertices[1].TexCoord = XMFLOAT2(Dirty->left / static_cast<FLOAT>(ThisDesc->Width), Dirty->top / static_cast<FLOAT>(ThisDesc->Height));
-            Vertices[2].TexCoord = XMFLOAT2(Dirty->right / static_cast<FLOAT>(ThisDesc->Width), Dirty->bottom / static_cast<FLOAT>(ThisDesc->Height));
-            Vertices[5].TexCoord = XMFLOAT2(Dirty->right / static_cast<FLOAT>(ThisDesc->Width), Dirty->top / static_cast<FLOAT>(ThisDesc->Height));
-            break;
-        }
-    }
-
-    // Set positions
-    Vertices[0].Pos = XMFLOAT3((DestDirty.left + DeskDesc->DesktopCoordinates.left - OffsetX - CenterX) / static_cast<FLOAT>(CenterX),
-                             -1 * (DestDirty.bottom + DeskDesc->DesktopCoordinates.top - OffsetY - CenterY) / static_cast<FLOAT>(CenterY),
-                             0.0f);
-    Vertices[1].Pos = XMFLOAT3((DestDirty.left + DeskDesc->DesktopCoordinates.left - OffsetX - CenterX) / static_cast<FLOAT>(CenterX),
-                             -1 * (DestDirty.top + DeskDesc->DesktopCoordinates.top - OffsetY - CenterY) / static_cast<FLOAT>(CenterY),
-                             0.0f);
-    Vertices[2].Pos = XMFLOAT3((DestDirty.right + DeskDesc->DesktopCoordinates.left - OffsetX - CenterX) / static_cast<FLOAT>(CenterX),
-                             -1 * (DestDirty.bottom + DeskDesc->DesktopCoordinates.top - OffsetY - CenterY) / static_cast<FLOAT>(CenterY),
-                             0.0f);
-    Vertices[3].Pos = Vertices[2].Pos;
-    Vertices[4].Pos = Vertices[1].Pos;
-    Vertices[5].Pos = XMFLOAT3((DestDirty.right + DeskDesc->DesktopCoordinates.left - OffsetX - CenterX) / static_cast<FLOAT>(CenterX),
-                             -1 * (DestDirty.top + DeskDesc->DesktopCoordinates.top - OffsetY - CenterY) / static_cast<FLOAT>(CenterY),
-                             0.0f);
-
-    Vertices[3].TexCoord = Vertices[2].TexCoord;
-    Vertices[4].TexCoord = Vertices[1].TexCoord;
-}
-
-#pragma warning(pop) // re-enable __WARNING_USING_UNINIT_VAR
 
 //
 // Copies dirty rectangles
 //
-HRESULT DesktopCapture::CopyDirty(_In_ ID3D11Texture2D* SrcSurface, _Inout_ ID3D11Texture2D* SharedSurf, _In_reads_(DirtyCount) RECT* DirtyBuffer, UINT DirtyCount, INT OffsetX, INT OffsetY, _In_ DXGI_OUTPUT_DESC* DeskDesc)
+void DesktopCapture::CopyDirty(FrameData* data, INT offsetX, INT offsetY)
 {
-    HRESULT hr;
+	RECT* dirty_buffer =  reinterpret_cast<RECT*>(data->MetaData + (data->MoveCount * sizeof(DXGI_OUTDUPL_MOVE_RECT)));
+	int dirty_count = data->DirtyCount;
 
-    D3D11_TEXTURE2D_DESC FullDesc;
-    SharedSurf->GetDesc(&FullDesc);
+	while (dirty_count > 0) {
+		D3D11_BOX Box;
+		Box.left = dirty_buffer->left + m_OutputDesc.DesktopCoordinates.left - offsetX;
+		Box.top = dirty_buffer->top + m_OutputDesc.DesktopCoordinates.top - offsetY;
+		Box.front = 0;
+		Box.right = dirty_buffer->right + m_OutputDesc.DesktopCoordinates.left - offsetX;
+		Box.bottom = dirty_buffer->bottom + m_OutputDesc.DesktopCoordinates.top - offsetY;
+		Box.back = 1;
 
-    D3D11_TEXTURE2D_DESC ThisDesc;
-    SrcSurface->GetDesc(&ThisDesc);
+		m_DeviceContext->CopySubresourceRegion(m_StagingTexture, 0, dirty_buffer->left, dirty_buffer->top, 0, data->Frame, 0, &Box);
 
-    if (!m_RTV)
-    {
-        hr = m_Device->CreateRenderTargetView(SharedSurf, nullptr, &m_RTV);
-        if (FAILED(hr))
-        {
-            //return ProcessFailure(m_Device, L"Failed to create render target view for dirty rects", L"Error", hr, SystemTransitionsExpectedErrors);
-			return hr;
-        }
-    }
-
-    D3D11_SHADER_RESOURCE_VIEW_DESC ShaderDesc;
-    ShaderDesc.Format = ThisDesc.Format;
-    ShaderDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-    ShaderDesc.Texture2D.MostDetailedMip = ThisDesc.MipLevels - 1;
-    ShaderDesc.Texture2D.MipLevels = ThisDesc.MipLevels;
-
-    // Create new shader resource view
-    ID3D11ShaderResourceView* ShaderResource = nullptr;
-    hr = m_Device->CreateShaderResourceView(SrcSurface, &ShaderDesc, &ShaderResource);
-    if (FAILED(hr))
-    {
-        // return ProcessFailure(m_Device, L"Failed to create shader resource view for dirty rects", L"Error", hr, SystemTransitionsExpectedErrors);
-		return hr;
-    }
-
-    FLOAT BlendFactor[4] = {0.f, 0.f, 0.f, 0.f};
-    m_DeviceContext->OMSetBlendState(nullptr, BlendFactor, 0xFFFFFFFF);
-    m_DeviceContext->OMSetRenderTargets(1, &m_RTV, nullptr);
-    m_DeviceContext->VSSetShader(m_VertexShader, nullptr, 0);
-    m_DeviceContext->PSSetShader(m_PixelShader, nullptr, 0);
-    m_DeviceContext->PSSetShaderResources(0, 1, &ShaderResource);
-    m_DeviceContext->PSSetSamplers(0, 1, &m_SamplerLinear);
-    m_DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-    // Create space for vertices for the dirty rects if the current space isn't large enough
-    UINT BytesNeeded = sizeof(Vertex) * NUMVERTICES * DirtyCount;
-    if (BytesNeeded > m_DirtyVertexBufferAllocSize)
-    {
-        if (m_DirtyVertexBufferAlloc)
-        {
-            delete [] m_DirtyVertexBufferAlloc;
-        }
-
-        m_DirtyVertexBufferAlloc = new (std::nothrow) BYTE[BytesNeeded];
-        if (!m_DirtyVertexBufferAlloc)
-        {
-            m_DirtyVertexBufferAllocSize = 0;
-            // return ProcessFailure(nullptr, L"Failed to allocate memory for dirty vertex buffer.", L"Error", E_OUTOFMEMORY);
-			return hr;
-        }
-
-        m_DirtyVertexBufferAllocSize = BytesNeeded;
-    }
-
-    // Fill them in
-    Vertex* DirtyVertex = reinterpret_cast<Vertex*>(m_DirtyVertexBufferAlloc);
-    for (UINT i = 0; i < DirtyCount; ++i, DirtyVertex += NUMVERTICES)
-    {
-        SetDirtyVert(DirtyVertex, &(DirtyBuffer[i]), OffsetX, OffsetY, DeskDesc, &FullDesc, &ThisDesc);
-    }
-
-    // Create vertex buffer
-    D3D11_BUFFER_DESC BufferDesc;
-    RtlZeroMemory(&BufferDesc, sizeof(BufferDesc));
-    BufferDesc.Usage = D3D11_USAGE_DEFAULT;
-    BufferDesc.ByteWidth = BytesNeeded;
-    BufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    BufferDesc.CPUAccessFlags = 0;
-    D3D11_SUBRESOURCE_DATA InitData;
-    RtlZeroMemory(&InitData, sizeof(InitData));
-    InitData.pSysMem = m_DirtyVertexBufferAlloc;
-
-    ID3D11Buffer* VertBuf = nullptr;
-    hr = m_Device->CreateBuffer(&BufferDesc, &InitData, &VertBuf);
-    if (FAILED(hr))
-    {
-        // return ProcessFailure(m_Device, L"Failed to create vertex buffer in dirty rect processing", L"Error", hr, SystemTransitionsExpectedErrors);
-		return hr;
-    }
-    UINT Stride = sizeof(Vertex);
-    UINT Offset = 0;
-    m_DeviceContext->IASetVertexBuffers(0, 1, &VertBuf, &Stride, &Offset);
-
-    D3D11_VIEWPORT VP;
-    VP.Width = static_cast<FLOAT>(FullDesc.Width);
-    VP.Height = static_cast<FLOAT>(FullDesc.Height);
-    VP.MinDepth = 0.0f;
-    VP.MaxDepth = 1.0f;
-    VP.TopLeftX = 0.0f;
-    VP.TopLeftY = 0.0f;
-    m_DeviceContext->RSSetViewports(1, &VP);
-
-    m_DeviceContext->Draw(NUMVERTICES * DirtyCount, 0);
-
-    VertBuf->Release();
-    VertBuf = nullptr;
-
-    ShaderResource->Release();
-    ShaderResource = nullptr;
-
-    return DUPL_RETURN_SUCCESS;
+		dirty_buffer++;
+		dirty_count--;
+	}
 }
 
 static void pipe_log(void *param, uint8_t *data, size_t size)
@@ -811,21 +514,21 @@ static inline int getI420BufferSize(int width, int height) {
 	return width * height + half_width * half_height * 2;
 }
 
-bool DesktopCapture::PushFrame(IMediaSample *pSample, DXGI_SURFACE_DESC frameDesc, DXGI_MAPPED_RECT map, int dWidth, int dHeight) {
-	debug("push frame - frame: %dx%d, negotiated: %dx%d", frameDesc.Width, frameDesc.Height, dWidth, dHeight);
-	if (!map.pBits) {
-		warn("push frame - pBits is NULL");
+bool DesktopCapture::PushFrame(IMediaSample* pSample, DesktopFrame* frame, int dWidth, int dHeight) {
+	debug("push frame - frame: %dx%d, negotiated: %dx%d", frame->width(), frame->height(), dWidth, dHeight);
+	if (!frame->data()) {
+		warn("push frame - no data");
 		return false;
 	}
 
 	BYTE *pData;
 	pSample->GetPointer(&pData);
 
-	const uint8_t* src_frame = static_cast<uint8_t*>(map.pBits);
-	int src_stride_frame = map.Pitch;
+	const uint8_t* src_frame = frame->data();
+	int src_stride_frame = frame->stride();
 
-	int width = frameDesc.Width;
-	int height = frameDesc.Height;
+	int width = frame->width();
+	int height = frame->height();
 
 	BYTE* yuv = new BYTE[getI420BufferSize(width, height)];
 
@@ -946,8 +649,9 @@ HRESULT DesktopCapture::GetMouse(_Inout_ PtrInfo* PtrInfo, _In_ DXGI_OUTDUPL_FRA
 }
 
 
-bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame, IDXGIResource ** resource) {
+bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame) {
 	HRESULT hr = S_OK;
+	IDXGIResource* desktop_resource =  nullptr;
 
 	if (!m_DeskDupl) {
 		hr = ReinitializeDuplication();
@@ -957,17 +661,16 @@ bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame, IDXGIReso
 		return false;
 	}
 
-	hr = m_DeskDupl->AcquireNextFrame(300, frame, resource);
+	hr = m_DeskDupl->AcquireNextFrame(0, frame, &desktop_resource);
 	if (hr == DXGI_ERROR_ACCESS_LOST) {
 		error("Failed to acquire next frame - dxgi error access lost.");
 
-		hr = ReinitializeDuplication();
-
-		if (FAILED(hr)) {
-			return false;
+		if (m_DeskDupl) {
+			m_DeskDupl->Release();
+			m_DeskDupl = nullptr;
 		}
 
-		hr = m_DeskDupl->AcquireNextFrame(300, frame, resource);
+		return false;
 	} else if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
 		error("Failed to acquire next frame - timeout.");
 		return false;
@@ -977,15 +680,79 @@ bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame, IDXGIReso
 	}
 
 	// If still holding old frame, destroy it
-	if (m_AcquiredDesktopImage)
-	{
+	if (m_AcquiredDesktopImage) {
 		m_AcquiredDesktopImage->Release();
 		m_AcquiredDesktopImage = nullptr;
+	}
+
+	// QI for IDXGIResource
+	hr = desktop_resource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&m_AcquiredDesktopImage));
+	desktop_resource->Release();
+	desktop_resource = nullptr;
+
+	if (FAILED(hr)) {
+		error("Failed to QI for ID3D11Texture2D from acquired IDXGIResource in DesktopCapture");
+		DoneWithFrame();
+		return false;
 	}
 
 	return SUCCEEDED(hr);
 }
 
+HRESULT DesktopCapture::ProcessFrameMetaData(FrameData* Data) {
+	HRESULT Ret = S_OK;
+
+	// process meta data
+	if (Data->FrameInfo.TotalMetadataBufferSize) {
+		// Old buffer too small
+		if (Data->FrameInfo.TotalMetadataBufferSize > m_MetaDataSize) {
+			if (m_MetaDataBuffer) {
+				delete[] m_MetaDataBuffer;
+				m_MetaDataBuffer = nullptr;
+			}
+
+			m_MetaDataBuffer = new (std::nothrow) BYTE[Data->FrameInfo.TotalMetadataBufferSize];
+
+			if (!m_MetaDataBuffer) {
+				m_MetaDataSize = 0;
+				Data->MoveCount = 0;
+				Data->DirtyCount = 0;
+				error("Failed to allocate memory for meta data");
+				return E_UNEXPECTED;
+			}
+			m_MetaDataSize = Data->FrameInfo.TotalMetadataBufferSize;
+		}
+
+		UINT BufSize = Data->FrameInfo.TotalMetadataBufferSize;
+		// Get move rectangles
+		Ret = m_DeskDupl->GetFrameMoveRects(BufSize, reinterpret_cast<DXGI_OUTDUPL_MOVE_RECT*>(m_MetaDataBuffer), &BufSize);
+		if (FAILED(Ret)) {
+			Data->MoveCount = 0;
+			Data->DirtyCount = 0;
+			error("Failed to frame move rects");
+			return Ret;
+		}
+
+		Data->MoveCount = BufSize / sizeof(DXGI_OUTDUPL_MOVE_RECT);
+		BYTE* DirtyRects = m_MetaDataBuffer + BufSize;
+
+		BufSize = Data->FrameInfo.TotalMetadataBufferSize - BufSize;
+
+		// Get dirty rectangles
+
+		Ret = m_DeskDupl->GetFrameDirtyRects(BufSize, reinterpret_cast<RECT*>(DirtyRects), &BufSize);
+		if (FAILED(Ret)) {
+			Data->MoveCount = 0;
+			Data->DirtyCount = 0;
+			error("Failed to dirty frame rects");
+			return Ret;
+		}
+		Data->DirtyCount = BufSize / sizeof(RECT);
+		Data->MetaData = m_MetaDataBuffer;
+	}
+
+	return Ret;
+}
 //
 // Get next frame and write it into Data
 //
@@ -996,38 +763,41 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int h
 		return false;
 	}
 
-	IDXGIResource* DesktopResource = nullptr;
-	DXGI_OUTDUPL_FRAME_INFO FrameInfo = { 0 };
+	DXGI_OUTDUPL_FRAME_INFO frame_info = { 0 };
+	DXGI_MAPPED_RECT map;
+	DXGI_SURFACE_DESC frame_desc;
 
-	bool got_frame = AcquireNextFrame(&FrameInfo, &DesktopResource);
+	bool got_frame = AcquireNextFrame(&frame_info);
 
 	if (!got_frame) {
-		error("Unable to acquire next frame");
-		return false;
-	}
+		// if can't get frame, push the last success frame
+		if (m_LastDesktopFrame) {
+			return PushFrame(pSample, m_LastDesktopFrame, width, height);
+		}
 
-	// QI for IDXGIResource
-	HRESULT hr = DesktopResource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&m_AcquiredDesktopImage));
-	DesktopResource->Release();
-	DesktopResource = nullptr;
-
-	if (FAILED(hr)) {
-		error("Failed to QI for ID3D11Texture2D from acquired IDXGIResource in DesktopCapture");
 		return false;
 	}
 
 	m_LastFrameData->Frame = m_AcquiredDesktopImage;
-	m_LastFrameData->FrameInfo = FrameInfo;
+	m_LastFrameData->FrameInfo = frame_info;
 
-	m_DXResource->Context->CopyResource(m_CopyBuffer, m_LastFrameData->Frame);
+	int offset_x = m_OutputDesc.DesktopCoordinates.left;
+	int offset_y = m_OutputDesc.DesktopCoordinates.top;
+	
+	ProcessFrameMetaData(m_LastFrameData);
+	ProcessFrame(m_LastFrameData, offset_x, offset_y);
 
-	DXGI_MAPPED_RECT Map;
-	DXGI_SURFACE_DESC FrameDesc;
+	if (m_LastDesktopFrame) {
+		delete m_LastDesktopFrame;
+		m_LastDesktopFrame = nullptr;
+	}
 
-	m_Surface->GetDesc(&FrameDesc);
+	m_Surface->GetDesc(&frame_desc);
 
-	m_Surface->Map(&Map, D3D11_MAP_READ);
-	got_frame = PushFrame(pSample, FrameDesc, Map, width, height);
+	m_Surface->Map(&map, D3D11_MAP_READ);
+	DesktopFrame * cur_desktop_frame = new DesktopFrame(frame_desc.Width, frame_desc.Height, map.Pitch, map.pBits);
+	m_LastDesktopFrame = cur_desktop_frame;
+	got_frame = PushFrame(pSample, cur_desktop_frame, width, height);
 	m_Surface->Unmap();
 
 	DoneWithFrame();
@@ -1043,13 +813,9 @@ bool DesktopCapture::DoneWithFrame()
 	HRESULT hr = m_DeskDupl->ReleaseFrame();
 	if (hr == DXGI_ERROR_ACCESS_LOST) {
 		error("Failed to release frame, but trying to reinitialize desktop capture");
-
 		hr = ReinitializeDuplication();
-		if (FAILED(hr)) {
-			error("Failed to release frame AND FAILED to reinitialize desktop capture");
-		}
 	} else if (FAILED(hr)) {
-		error("Failed to release frame in DesktopCapture");
+		error("Failed to release frame. hr: %ld", hr);
 	}
 
 	if (m_AcquiredDesktopImage) {
@@ -1057,29 +823,11 @@ bool DesktopCapture::DoneWithFrame()
 		m_AcquiredDesktopImage = nullptr;
 	}
 
-	return true;
+	return SUCCEEDED(hr);
 }
 
 HRESULT DesktopCapture::ReinitializeDuplication() {
-	if (m_DeskDupl) {
-		m_DeskDupl->Release();
-		m_DeskDupl = nullptr;
-	}
-
-	if (m_AcquiredDesktopImage) {
-		m_AcquiredDesktopImage->Release();
-		m_AcquiredDesktopImage = nullptr;
-	}
-
-	if (m_CopyBuffer) {
-		m_CopyBuffer->Release();
-		m_CopyBuffer = nullptr;
-	}
-
-	if (m_Surface) {
-		m_Surface->Release();
-		m_Surface = nullptr;
-	}
+	CleanRefs();
 
 	HRESULT hr = CreateSurface();
 	if (FAILED(hr)) {
