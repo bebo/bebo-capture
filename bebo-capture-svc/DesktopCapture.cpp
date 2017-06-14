@@ -21,7 +21,7 @@ using namespace DirectX;
 #include "window-helpers.h"
 #include "ipc-util/pipe.h"
 #include "libyuv/convert.h"
-#include "libyuv/scale.h"
+#include "libyuv/scale_argb.h"
 #include "CommonTypes.h"
 
 #define STOP_BEING_BAD \
@@ -527,8 +527,8 @@ static inline int getI420BufferSize(int width, int height) {
 	return width * height + half_width * half_height * 2;
 }
 
-bool DesktopCapture::PushFrame(IMediaSample* pSample, DesktopFrame* frame, int dWidth, int dHeight) {
-	debug("push frame - frame: %dx%d, negotiated: %dx%d", frame->width(), frame->height(), dWidth, dHeight);
+bool DesktopCapture::PushFrame(IMediaSample* pSample, DesktopFrame* frame, int dst_width, int dst_height) {
+	debug("push frame - frame: %dx%d, negotiated: %dx%d", frame->width(), frame->height(), dst_width, dst_height);
 	if (!frame->data()) {
 		warn("push frame - no data");
 		return false;
@@ -539,47 +539,35 @@ bool DesktopCapture::PushFrame(IMediaSample* pSample, DesktopFrame* frame, int d
 
 	const uint8_t* src_frame = frame->data();
 	int src_stride_frame = frame->stride();
+	int src_width = frame->width();
+	int src_height = frame->height();
 
-	int width = frame->width();
-	int height = frame->height();
+	BYTE* scaled_argb = new BYTE[4 * dst_width * dst_height];
+	int scaled_argb_stride = 4 * dst_width;
 
-	BYTE* yuv = new BYTE[getI420BufferSize(width, height)];
-
-	uint8* y = yuv;
-	int stride_y = width;
-	uint8* u = yuv + (width * height);
-	int stride_u = (width + 1) / 2;
-	uint8* v = u + ((width * height) >> 2);
-	int stride_v = stride_u;
-
-	libyuv::ARGBToI420(src_frame, src_stride_frame,
-		y, stride_y,
-		u, stride_u,
-		v, stride_v,
-		width, height);
-
-	int dst_width = dWidth;
-	int dst_height = dHeight;
-	uint8* dst_y = pData;
-	int dst_stride_y = dst_width;
-	uint8* dst_u = pData + (dst_width * dst_height);
-	int dst_stride_u = (dst_width + 1) / 2;
-	uint8* dst_v = dst_u + ((dst_width * dst_height) >> 2);
-	int dst_stride_v = dst_stride_u;
-
-	libyuv::I420Scale(
-		y, stride_y,
-		u, stride_u,
-		v, stride_v,
-		width, height,
-		dst_y, dst_stride_y,
-		dst_u, dst_stride_u,
-		dst_v, dst_stride_v,
+	libyuv::ARGBScale(
+		src_frame, src_stride_frame,
+		src_width, src_height,
+		scaled_argb, scaled_argb_stride,
 		dst_width, dst_height,
 		libyuv::FilterMode(libyuv::kFilterBox)
 	);
 
-	delete[] yuv;
+
+	uint8* y = pData;
+	int stride_y = dst_width;
+	uint8* u = pData + (dst_width * dst_height);
+	int stride_u = (dst_width + 1) / 2;
+	uint8* v = u + ((dst_width * dst_height) >> 2);
+	int stride_v = stride_u;
+
+	libyuv::ARGBToI420(scaled_argb, scaled_argb_stride,
+		y, stride_y,
+		u, stride_u,
+		v, stride_v,
+		dst_width, dst_height);
+
+	delete[] scaled_argb;
 	return true;
 }
 
