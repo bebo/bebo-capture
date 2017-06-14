@@ -16,8 +16,6 @@
 #include <warning.h>
 #include <DirectXMath.h>
 
-#define OCCLUSION_STATUS_MSG WM_USER
-
 //
 // Holds info about the pointer/cursor
 //

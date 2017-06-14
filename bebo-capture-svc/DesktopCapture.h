@@ -6,7 +6,6 @@
 #include <windows.h>
 #include <stdint.h>
 #include "CommonTypes.h"
-#include <mutex>
 
 class Rect {
 public:
@@ -93,10 +92,10 @@ private:
 	HRESULT ReinitializeDuplication();
 
 	bool AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame);
+	bool PushFrame(IMediaSample *pSample, DesktopFrame* frame, int width, int height);
 
 	void CleanRefs();
 
-	static bool PushFrame(IMediaSample *pSample, DesktopFrame* frame, int width, int height);
 
 	// variables
 	DXGI_OUTPUT_DESC m_OutputDesc;	

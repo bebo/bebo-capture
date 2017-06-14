@@ -823,6 +823,9 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int h
 //
 bool DesktopCapture::DoneWithFrame()
 {
+	if (!m_DeskDupl) {
+		return false;
+	}
 	HRESULT hr = m_DeskDupl->ReleaseFrame();
 	if (hr == DXGI_ERROR_ACCESS_LOST) {
 		error("Failed to release frame, but trying to reinitialize desktop capture");

@@ -265,24 +265,23 @@ HRESULT CPushPinDesktop::Active(void) {
 };
 
 HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
+	CheckPointer(pSample, E_POINTER);
+
 	if (!m_pDesktopCapture->IsReady()) {
 		m_pDesktopCapture->Init(m_iDesktopNumber);
 	}
 
 	__int64 startThisRound = StartCounter();
 
-	CheckPointer(pSample, E_POINTER);
-
 	long double millisThisRoundTook = 0;
 	CRefTime now;
-	now = 0;
 
 	CSourceStream::m_pFilter->StreamTime(now);
 	
 	bool frame = false;
 	while (!frame) {
 		if (!active) {
-			debug("inacitve - fillbuffer_desktop");
+			info("inactive - fillbuffer_desktop");
 			return S_FALSE;
 		}
 		if (now <= 0) {
