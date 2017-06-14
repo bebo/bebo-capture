@@ -35,16 +35,18 @@ struct desktop_capture {
 };
 
 DesktopCapture::DesktopCapture() : m_Device(nullptr),
-                                   m_DeviceContext(nullptr),
-                                   m_MoveSurf(nullptr),
-								   m_DeskDupl(nullptr),
-								   m_AcquiredDesktopImage(nullptr),
-								   m_MetaDataBuffer(nullptr),
-								   m_MetaDataSize(0),
-								   m_MouseInfo(new PtrInfo),
-								   m_Initialized(false),
-								   m_LastFrameData(new FrameData),
-								   m_LastDesktopFrame(nullptr)
+	m_DeviceContext(nullptr),
+	m_MoveSurf(nullptr),
+	m_DeskDupl(nullptr),
+	m_AcquiredDesktopImage(nullptr),
+	m_MetaDataBuffer(nullptr),
+	m_StagingTexture(nullptr),
+	m_Surface(nullptr),
+	m_MetaDataSize(0),
+	m_MouseInfo(new PtrInfo),
+	m_Initialized(false),
+	m_LastFrameData(new FrameData),
+	m_LastDesktopFrame(nullptr)
 {
 	RtlZeroMemory(&m_OutputDesc, sizeof(DXGI_OUTPUT_DESC));
 }

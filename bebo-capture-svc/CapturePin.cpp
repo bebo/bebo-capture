@@ -275,8 +275,7 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 
 	long double millisThisRoundTook = 0;
 	CRefTime now;
-
-	CSourceStream::m_pFilter->StreamTime(now);
+	now = 0;
 	
 	bool frame = false;
 	while (!frame) {
@@ -284,6 +283,7 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 			info("inactive - fillbuffer_desktop");
 			return S_FALSE;
 		}
+		CSourceStream::m_pFilter->StreamTime(now);
 		if (now <= 0) {
 			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
 			debug("no reference graph clock - sleeping %d", dwMilliseconds);
