@@ -715,7 +715,7 @@ bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame) {
 
 		return false;
 	} else if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
-		error("Failed to acquire next frame - timeout.");
+		debug("Failed to acquire next frame - timeout.");
 		return false;
 	} else if (FAILED(hr)) {
 		error("Failed to acquire next frame in DesktopCapture - %ld", hr);
@@ -813,12 +813,6 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, int width, int height, bool
 	bool got_frame = AcquireNextFrame(&frame_info);
 
 	if (!got_frame) {
-		// if can't get frame, push the last success frame
-		info("unable to acquire next frame - reusing old frame for now");
-		if (m_LastDesktopFrame) {
-			return PushFrame(pSample, m_LastDesktopFrame, width, height);
-		}
-
 		return false;
 	}
 
