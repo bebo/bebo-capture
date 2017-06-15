@@ -799,7 +799,7 @@ HRESULT DesktopCapture::ProcessFrameMetaData(FrameData* Data) {
 //
 // Get next frame and write it into Data
 //
-bool DesktopCapture::GetFrame(IMediaSample *pSample, bool miss, int width, int height, bool captureMouse)
+bool DesktopCapture::GetFrame(IMediaSample *pSample, int width, int height, bool captureMouse)
 {
 	if (!m_Initialized) {
 		error("DesktopCapture.Init() required.");

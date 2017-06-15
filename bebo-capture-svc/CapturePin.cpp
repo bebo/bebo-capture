@@ -292,56 +292,32 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 		}
 		CSourceStream::m_pFilter->StreamTime(now);
 		if (now <= 0) {
-			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
+			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
 			debug("no reference graph clock - sleeping %d", dwMilliseconds);
 			Sleep(dwMilliseconds);
-		}
-		else if (now < (previousFrame + (m_rtFrameLength / 2))) {
-			DWORD dwMilliseconds = (DWORD)max(1, min(10000 + previousFrame + (m_rtFrameLength / 2) - now, (m_rtFrameLength / 2)) / 10000L);
-			debug("sleeping A - %d", dwMilliseconds);
+		} else if (now < (previousFrame + m_rtFrameLength)) {
+			DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), m_rtFrameLength) / 10000L);
+			debug("sleeping - %d", dwMilliseconds);
 			Sleep(dwMilliseconds);
-		}
-		else if (now < (previousFrame + m_rtFrameLength)) {
-			DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), (m_rtFrameLength / 2)) / 10000L);
-			debug("sleeping B - %d", dwMilliseconds);
-			Sleep(dwMilliseconds);
-		}
-		else if (missed) {
-			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
-			debug("starting/missed - sleeping %d", dwMilliseconds);
-			Sleep(dwMilliseconds);
-			CSourceStream::m_pFilter->StreamTime(now);
-		}
-		else if (missed == false && m_iFrameNumber == 0) {
-			info("getting second frame");
-			missed = true;
-		}
-		else if (now > (previousFrame + 2 * m_rtFrameLength)) {
+		} else if (now > (previousFrame + 2 * m_rtFrameLength)) {
 			int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
 			m_iFrameNumber += missed_nr;
 			countMissed += missed_nr;
 			warn("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
 				missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
 			previousFrame = previousFrame + missed_nr * m_rtFrameLength;
-			missed = true;
-		}
-		else {
-			info("late need to catch up");
-			missed = true;
 		}
 
 		startThisRound = StartCounter();
-		frame = m_pDesktopCapture->GetFrame(pSample, missed, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), false);
+		frame = m_pDesktopCapture->GetFrame(pSample, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), false);
 
 		if (frame && previousFrame <= 0) {
 			frame = false;
 			previousFrame = now;
-			missed = false;
 			debug("skip first frame");
 		}
 	}
 
-	missed = false;
 	millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
 	fastestRoundMillis = min(millisThisRoundTook, fastestRoundMillis);
 	sumMillisTook += millisThisRoundTook;
