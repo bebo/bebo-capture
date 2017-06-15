@@ -276,6 +276,15 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 
 	if (!m_pDesktopCapture->IsReady()) {
 		m_pDesktopCapture->Init(m_iDesktopAdapterNumber, m_iDesktopNumber);
+
+		globalStart = GetTickCount();
+		countMissed = 0;
+		sumMillisTook = 0;
+		fastestRoundMillis = LONG_MAX;
+		m_iFrameNumber = 0;
+		missed = true;
+		previousFrame = 0;
+		debug("frame_length: %d", m_rtFrameLength);
 	}
 
 	__int64 startThisRound = StartCounter();
@@ -299,6 +308,11 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 			DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), m_rtFrameLength) / 10000L);
 			debug("sleeping - %d", dwMilliseconds);
 			Sleep(dwMilliseconds);
+		} else if (missed) {
+			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
+			debug("starting/missed - sleeping %d", dwMilliseconds);
+			Sleep(dwMilliseconds);
+			CSourceStream::m_pFilter->StreamTime(now);
 		} else if (now > (previousFrame + 2 * m_rtFrameLength)) {
 			int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
 			m_iFrameNumber += missed_nr;
@@ -306,6 +320,7 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 			warn("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
 				missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
 			previousFrame = previousFrame + missed_nr * m_rtFrameLength;
+			missed = true;
 		}
 
 		startThisRound = StartCounter();
@@ -314,10 +329,11 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 		if (frame && previousFrame <= 0) {
 			frame = false;
 			previousFrame = now;
+			missed = false;
 			debug("skip first frame");
 		}
 	}
-
+	missed = false;
 	millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
 	fastestRoundMillis = min(millisThisRoundTook, fastestRoundMillis);
 	sumMillisTook += millisThisRoundTook;
@@ -331,6 +347,21 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	REFERENCE_TIME endFrame = startFrame + m_rtFrameLength;
 	pSample->SetTime((REFERENCE_TIME *)&startFrame, (REFERENCE_TIME *)&endFrame);
 	CSourceStream::m_pFilter->StreamTime(now);	
+	debug("timestamping (%11f) video packet %llf -> %llf length:(%11f) drift:(%llf)", 0.0001 * now, 0.0001 * startFrame, 0.0001 * endFrame, 0.0001 * (endFrame - startFrame), 0.0001 * (now - previousFrame));
+
+	m_iFrameNumber++;
+
+	// Set TRUE on every sample for uncompressed frames http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
+	pSample->SetSyncPoint(TRUE);
+
+	// only set discontinuous for the first...I think...
+	pSample->SetDiscontinuity(m_iFrameNumber <= 1);
+
+	double m_fFpsSinceBeginningOfTime = ((double)m_iFrameNumber) / (GetTickCount() - globalStart) * 1000;
+	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed %d",
+		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0 * 1000 / millisThisRoundTook,
+		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed);
+	debug(out);
 	return S_OK;
 }
 
