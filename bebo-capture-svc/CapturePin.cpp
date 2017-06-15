@@ -57,7 +57,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	game_context(NULL),
     m_iCaptureType(CAPTURE_INJECT),
 	m_pDesktopCapture(new DesktopCapture),
-	m_iDesktopNumber(0)
+	m_iDesktopNumber(0),
+	m_iDesktopAdapterNumber(0)
 {
 	info("CPushPinDesktop");
 	// Get the device context of the main display, just to get some metrics for it...
@@ -210,11 +211,17 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		char text[1024];
 		sprintf(text, "%S", data);
 		char * typeName = strtok(text, ":");
-		char * id = strtok(NULL, ":");
-		debug("CaptureId, %s:%s", typeName, id);
-		if (id != NULL) {
+		char * adapterId = strtok(NULL, ":");
+		char * desktopId = strtok(NULL, ":");
+		debug("CaptureId, %s:%s:%s", typeName, adapterId, desktopId);
+		if (adapterId != NULL) {
 			if (strcmp(typeName, "desktop") == 0) {
-				m_iDesktopNumber = atoi(id);
+				m_iDesktopAdapterNumber = atoi(adapterId);
+			}
+		}
+		if (desktopId != NULL) {
+			if (strcmp(typeName, "desktop") == 0) {
+				m_iDesktopNumber = atoi(desktopId);
 			}
 		}
 	}
@@ -268,7 +275,7 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	CheckPointer(pSample, E_POINTER);
 
 	if (!m_pDesktopCapture->IsReady()) {
-		m_pDesktopCapture->Init(m_iDesktopNumber);
+		m_pDesktopCapture->Init(m_iDesktopAdapterNumber, m_iDesktopNumber);
 	}
 
 	__int64 startThisRound = StartCounter();

@@ -43,6 +43,8 @@ DesktopCapture::DesktopCapture() : m_Device(nullptr),
 	m_StagingTexture(nullptr),
 	m_Surface(nullptr),
 	m_MetaDataSize(0),
+	m_iDesktopNumber(0),
+	m_iAdapterNumber(0),
 	m_MouseInfo(new PtrInfo),
 	m_Initialized(false),
 	m_LastFrameData(new FrameData),
@@ -122,8 +124,9 @@ void DesktopCapture::CleanRefs()
 //
 // Initialize
 //
-void DesktopCapture::Init(int desktopId)
+void DesktopCapture::Init(int adapterId, int desktopId)
 {
+	m_iAdapterNumber = adapterId;
 	m_iDesktopNumber = desktopId;
 	m_Initialized = true;
 
@@ -200,14 +203,33 @@ HRESULT DesktopCapture::CreateSurface() {
 		return hr;
 	}
 
-	IDXGIOutput* DxgiOutput = nullptr;
-
-	// Figure out right dimensions for full size desktop texture and # of outputs to duplicate
-	hr = DxgiAdapter->EnumOutputs(m_iDesktopNumber, &DxgiOutput);
+	IDXGIFactory * DxgiFactory = nullptr;
+	hr = DxgiAdapter->GetParent(__uuidof(IDXGIFactory), reinterpret_cast<void**>(&DxgiFactory));
+	DxgiAdapter->Release();
+	DxgiAdapter = nullptr;
 	if (FAILED(hr))
 	{
-		DxgiAdapter->Release();
-		DxgiAdapter = nullptr;
+		error("Failed to get parent DXGI DxgiFactory");
+		return hr;
+	}
+
+	IDXGIAdapter* DxgiActualAdapter = nullptr;
+	hr = DxgiFactory->EnumAdapters(m_iAdapterNumber, &DxgiActualAdapter);
+	DxgiFactory->Release();
+	DxgiFactory = nullptr;
+	if (FAILED(hr))
+	{
+		error("Output specified to be duplicated does not exist");
+		return hr;
+	}
+
+	IDXGIOutput* DxgiOutput = nullptr;
+	// Figure out right dimensions for full size desktop texture and # of outputs to duplicate
+	hr = DxgiActualAdapter->EnumOutputs(m_iDesktopNumber, &DxgiOutput);
+	DxgiActualAdapter->Release();
+	DxgiActualAdapter = nullptr;
+	if (FAILED(hr))
+	{
 		error("Output specified to be duplicated does not exist");
 		return hr;
 	}
@@ -217,9 +239,6 @@ HRESULT DesktopCapture::CreateSurface() {
 
 	DxgiOutput->Release();
 	DxgiOutput = nullptr;
-
-	DxgiAdapter->Release();
-	DxgiAdapter = nullptr;
 
 	D3D11_TEXTURE2D_DESC CopyBufferDesc;
 	CopyBufferDesc.Width = m_OutputDesc.DesktopCoordinates.right - m_OutputDesc.DesktopCoordinates.left;
@@ -272,11 +291,33 @@ HRESULT DesktopCapture::InitDupl() {
 		return E_FAIL;
 	}
 
-	// Get output
-	IDXGIOutput* DxgiOutput = nullptr;
-	hr = DxgiAdapter->EnumOutputs(m_iDesktopNumber, &DxgiOutput);
+	///// here
+	IDXGIFactory * DxgiFactory = nullptr;
+	hr = DxgiAdapter->GetParent(__uuidof(IDXGIFactory), reinterpret_cast<void**>(&DxgiFactory));
 	DxgiAdapter->Release();
 	DxgiAdapter = nullptr;
+	if (FAILED(hr))
+	{
+		error("Failed to get parent DXGI DxgiFactory");
+		return hr;
+	}
+
+	IDXGIAdapter* DxgiActualAdapter = nullptr;
+	hr = DxgiFactory->EnumAdapters(m_iAdapterNumber, &DxgiActualAdapter);
+	DxgiFactory->Release();
+	DxgiFactory = nullptr;
+	if (FAILED(hr))
+	{
+		error("Output specified to be duplicated does not exist");
+		return hr;
+	}
+	///// end
+
+	// Get output
+	IDXGIOutput* DxgiOutput = nullptr;
+	hr = DxgiActualAdapter->EnumOutputs(m_iDesktopNumber, &DxgiOutput);
+	DxgiActualAdapter->Release();
+	DxgiActualAdapter = nullptr;
 	if (FAILED(hr))
 	{
 		error("Failed to get specific output on DXGI Output");

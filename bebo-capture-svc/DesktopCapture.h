@@ -69,7 +69,7 @@ class DesktopCapture {
 public:
 	DesktopCapture();
 	~DesktopCapture();
-	void Init(int desktopId);
+	void Init(int adapterId, int desktopId);
 	
 	bool GetFrame(IMediaSample *pSimple, bool miss, int width, int height, bool captureMouse);
 	bool DoneWithFrame();
@@ -106,6 +106,8 @@ private:
 	ID3D11Device* m_Device;
 	ID3D11DeviceContext* m_DeviceContext;
 	ID3D11Texture2D* m_MoveSurf;
+
+	int m_iAdapterNumber;
 	int m_iDesktopNumber;
 	bool m_Initialized;
 	FrameData* m_LastFrameData;
