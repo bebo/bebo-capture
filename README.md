@@ -21,6 +21,16 @@ run cmd as __Administrator__:
 regsvr32 BeboGameCapture.DLL
 ```
 
+## Registry Values
+
+
+* CaptureType
+ * "desktop" -> DXGI Desktop Duplication API
+ * "inject" -> graphics hook injection
+ * "gdi" -> gdi
+ * "dshow" -> libdshow
+
+ - defaults to "inject" for backwards compatibility
 
 ## libyuv (notes)
 

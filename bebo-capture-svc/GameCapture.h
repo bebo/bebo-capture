@@ -4,6 +4,7 @@
 #include <dshow.h>
 #include <windows.h>
 #include <stdint.h>
+#include "CommonTypes.h"
 
 struct game_capture_config {
 	char                          *title;
@@ -21,7 +22,6 @@ struct game_capture_config {
 	bool                          capture_overlays : 1;
 	bool                          anticheat_hook : 1;
 };
-
 
 boolean isReady(void ** data);
 void * hook(void **data, LPCWSTR windowClassName, LPCWSTR windowName, game_capture_config *config, uint64_t frame_interval);

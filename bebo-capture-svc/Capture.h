@@ -7,7 +7,9 @@
 //------------------------------------------------------------------------------
 
 #include <strsafe.h>
+#include "DesktopCapture.h"
 #include "GameCapture.h"
+#include "CommonTypes.h"
 
 /*
 // UNITS = 10 ^ 7  
@@ -26,6 +28,11 @@ const REFERENCE_TIME FPS_1  = UNITS / 1;
 
 // Filter name strings
 #define g_wszPushDesktop    L"Bebo Game Capture Filter"
+
+const int CAPTURE_INJECT = 0;
+const int CAPTURE_GDI = 1;
+const int CAPTURE_DESKTOP = 2;
+const int CAPTURE_DSHOW = 3;
 
 class CPushPinDesktop;
 
@@ -99,6 +106,8 @@ protected:
 	
 	CGameCapture* m_pParent;
 
+	DesktopCapture* m_pDesktopCapture;
+
 	HDC hScrDc;
 	HBITMAP     hRawBitmap;
 
@@ -128,9 +137,12 @@ protected:
 	int m_iStretchToThisConfigWidth;
     int m_iStretchToThisConfigHeight;
     int m_iStretchMode;
-
+	int m_iCaptureType;
+	int m_iDesktopNumber;
+	int m_iDesktopAdapterNumber;
 	int getCaptureDesiredFinalWidth();
 	int getCaptureDesiredFinalHeight();
+
 
 public:
 
@@ -164,7 +176,9 @@ public:
     // Override the version that offers exactly one media type
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
     HRESULT FillBuffer(IMediaSample *pSample);
-    
+
+    HRESULT FillBuffer_Desktop(IMediaSample *pSample);
+
     // Set the agreed media type and set up the necessary parameters
     HRESULT SetMediaType(const CMediaType *pMediaType);
 

@@ -19,6 +19,8 @@
 #include "window-helpers.h"
 #include "ipc-util/pipe.h"
 #include "libyuv/convert.h"
+#include "libyuv/scale.h"
+#include "CommonTypes.h"
 
 
 #define STOP_BEING_BAD \
@@ -123,9 +125,6 @@ struct game_capture {
 
 	boolean (*copy_texture)(struct game_capture*, IMediaSample *pSample);
 };
-
-
-
 
 static inline int inject_library(HANDLE process, const wchar_t *dll)
 {
@@ -1365,10 +1364,11 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 		uint8* dst_v = dst_u + ((width * height) >> 2);
 		int dst_stride_v = dst_stride_u;
 
+		debug("width: %d, height: %d", width, height);
+
 		if (gc->global_hook_info->flip) {
 			height = -height;
 		}
-
 		// TODO - better to initialize function pointer once ?
 		int err = NULL;
 		if (gc->global_hook_info->format == DXGI_FORMAT_R8G8B8A8_UNORM) {
@@ -1636,7 +1636,6 @@ boolean get_game_frame(void **data, boolean missed, IMediaSample *pSample) {
 //		gc->showing = true;
 	return false;
 }
-
 
 boolean stop_game_capture(void **data) {
 	struct game_capture *gc = (game_capture *) *data;

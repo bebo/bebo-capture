@@ -323,8 +323,8 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
         set_fps(&game_context, m_rtFrameLength * 100);
     }
     // also setup scaling here, as WFMLE and ffplay and VLC all get here...
-    m_rScreen.right = m_rScreen.left + pvi->bmiHeader.biWidth; // allow them to set whatever "scaling size" they want [set m_rScreen is negotiated right here]
-    m_rScreen.bottom = m_rScreen.top + pvi->bmiHeader.biHeight;
+	m_rScreen.right = m_rScreen.left + pvi->bmiHeader.biWidth; // allow them to set whatever "scaling size" they want [set m_rScreen is negotiated right here]
+	m_rScreen.bottom = m_rScreen.top + pvi->bmiHeader.biHeight;
 
     char debug_buffer[1024];
     if (hr == S_OK) {
@@ -391,17 +391,15 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::SetFormat(AM_MEDIA_TYPE *pmt)
     if(pin)
     {
         IFilterGraph *pGraph = m_pParent->GetGraph();
-        HRESULT res = pGraph->Reconnect(this);
-		if(res != S_OK) // LODO check first, and then just re-use the old one?
-		  return res; // else return early...not really sure how to handle this...since we already set m_mt...but it's a pretty rare case I think...
+		HRESULT res = pGraph->Reconnect(this);
+		if (res != S_OK) // LODO check first, and then just re-use the old one?
+			return res; // else return early...not really sure how to handle this...since we already set m_mt...but it's a pretty rare case I think...
 		// plus ours is a weird case...
     } else {
 		// graph hasn't been built yet...
 		// so we're ok with "whatever" format they pass us, we're just in the setup phase...
 	}
 	
-
-
 	// success of some type
 	if(pmt == NULL) {		
 		m_bFormatAlreadySet = false;
