@@ -3,6 +3,7 @@
 using namespace DirectX;
 
 #include "Logging.h"
+#include <comdef.h>
 #include <dshow.h>
 #include <strsafe.h>
 #include <tchar.h>
@@ -45,6 +46,7 @@ DesktopCapture::DesktopCapture() : m_Device(nullptr),
 	m_MetaDataSize(0),
 	m_iDesktopNumber(0),
 	m_iAdapterNumber(0),
+	m_InitializeFailCount(0),
 	m_MouseInfo(new PtrInfo),
 	m_Initialized(false),
 	m_LastFrameData(new FrameData),
@@ -130,12 +132,27 @@ void DesktopCapture::Init(int adapterId, int desktopId)
 	m_iDesktopNumber = desktopId;
 	m_Initialized = true;
 
-	InitializeDXResources();
-	CreateSurface();
-	InitDupl();
+	HRESULT hr = InitializeDXResources();
+
+	if (SUCCEEDED(hr)) {
+		hr = InitDuplication();
+	}
+
+	if (FAILED(hr)) {
+		m_Initialized = false;
+		m_InitializeFailCount++;
+
+		_com_error err(hr);
+		error("Failed to initialize duplication. 0x%08x - %S", hr, err.ErrorMessage());
+	}
 }
 
 HRESULT DesktopCapture::InitializeDXResources() {
+	if (m_Device && m_DeviceContext) {
+		info("DX context is already initialize.");
+		return S_OK;
+	}
+
 	HRESULT hr = S_OK;
 
 	// Driver types supported
@@ -173,7 +190,8 @@ HRESULT DesktopCapture::InitializeDXResources() {
 
 	if (FAILED(hr))
 	{
-		error("Failed to create device in Initialize DX");
+		_com_error err(hr);
+		error("Failed to create device in Initialize DX. 0x%08x - %S", hr, err.ErrorMessage());
 		return E_FAIL;
 	}
 
@@ -182,14 +200,15 @@ HRESULT DesktopCapture::InitializeDXResources() {
 	return hr;
 }
 
-HRESULT DesktopCapture::CreateSurface() {
+HRESULT DesktopCapture::InitDuplication() {
 	HRESULT hr = S_OK;
 
 	IDXGIDevice* DxgiDevice = nullptr;
 	hr = m_Device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&DxgiDevice));
 	if (FAILED(hr))
 	{
-		error("Failed to QI for DXGI Device");
+		_com_error err(hr);
+		error("Failed to QI for DXGI Device. 0x%08x - %S", hr, err.ErrorMessage());
 		return hr;
 	}
 
@@ -199,7 +218,8 @@ HRESULT DesktopCapture::CreateSurface() {
 	DxgiDevice = nullptr;
 	if (FAILED(hr))
 	{
-		error("Failed to get parent DXGI Adapter");
+		_com_error err(hr);
+		error("Failed to get parent DXGI Adapter. 0x%08x - %S", hr, err.ErrorMessage());
 		return hr;
 	}
 
@@ -208,8 +228,9 @@ HRESULT DesktopCapture::CreateSurface() {
 	DxgiAdapter->Release();
 	DxgiAdapter = nullptr;
 	if (FAILED(hr))
-	{
-		error("Failed to get parent DXGI DxgiFactory");
+	{ 
+		_com_error err(hr);
+		error("Failed to get parent DXGI DxgiFactory. 0x%08x - %S", hr, err.ErrorMessage());
 		return hr;
 	}
 
@@ -219,7 +240,8 @@ HRESULT DesktopCapture::CreateSurface() {
 	DxgiFactory = nullptr;
 	if (FAILED(hr))
 	{
-		error("Output specified to be duplicated does not exist");
+		_com_error err(hr);
+		error("Adapter specified to be duplicated does not exist. 0x%08x - %S", hr, err.ErrorMessage());
 		return hr;
 	}
 
@@ -230,15 +252,46 @@ HRESULT DesktopCapture::CreateSurface() {
 	DxgiActualAdapter = nullptr;
 	if (FAILED(hr))
 	{
-		error("Output specified to be duplicated does not exist");
+		_com_error err(hr);
+		error("Output specified to be duplicated does not exist. 0x%08x - %S", hr, err.ErrorMessage());
 		return hr;
 	}
 
 	RtlZeroMemory(&m_OutputDesc, sizeof(DXGI_OUTPUT_DESC));
 	DxgiOutput->GetDesc(&m_OutputDesc);
 
+	// QI for Output 1
+	IDXGIOutput1* DxgiOutput1 = nullptr;
+	hr = DxgiOutput->QueryInterface(__uuidof(DxgiOutput1), reinterpret_cast<void**>(&DxgiOutput1));
 	DxgiOutput->Release();
 	DxgiOutput = nullptr;
+	if (FAILED(hr))
+	{
+		_com_error err(hr);
+		error("Failed to QI for DxgiOutput1 in DesktopCapture. 0x%08x - %S", hr, err.ErrorMessage());
+		return E_FAIL;
+	}
+
+	if (m_DeskDupl) {
+		m_DeskDupl->Release();
+		m_DeskDupl = nullptr;
+	}
+
+	// Create desktop duplication
+	hr = DxgiOutput1->DuplicateOutput(m_Device, &m_DeskDupl);
+	DxgiOutput1->Release();
+	DxgiOutput1 = nullptr;
+	if (FAILED(hr))
+	{
+		if (hr == DXGI_ERROR_NOT_CURRENTLY_AVAILABLE)
+		{
+			error("There is already the maximum number of applications using the Desktop Duplication API running, please close one of those applications and then try again.");
+			return E_FAIL;
+		}
+		_com_error err(hr);
+		error("Failed to get duplicate output in DesktopCapture. 0x%08x - %S", hr, err.ErrorMessage());
+		return E_FAIL;
+	}
 
 	D3D11_TEXTURE2D_DESC CopyBufferDesc;
 	CopyBufferDesc.Width = m_OutputDesc.DesktopCoordinates.right - m_OutputDesc.DesktopCoordinates.left;
@@ -253,107 +306,32 @@ HRESULT DesktopCapture::CreateSurface() {
 	CopyBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 	CopyBufferDesc.MiscFlags = 0;
 
+	if (m_StagingTexture) {
+		m_StagingTexture->Release();
+		m_StagingTexture = nullptr;
+	}
+
 	hr = m_Device->CreateTexture2D(&CopyBufferDesc, nullptr, &m_StagingTexture);
 	if (FAILED(hr))
 	{
-		error("Failed to create staging texture for pointer");
+		_com_error err(hr);
+		error("Failed to create staging texture. 0x%08x - %S", hr, err.ErrorMessage());
 		return hr;
 	}
 
+	if (m_Surface) {
+		m_Surface->Release();
+		m_Surface = nullptr;
+	}
 	hr = m_StagingTexture->QueryInterface(__uuidof(IDXGISurface), reinterpret_cast<void**>(&m_Surface));
 	if (FAILED(hr))
 	{
-		error("Failed to QI for IDXGI Surface");
+		_com_error err(hr);
+		error("Failed to QI for IDXGI staging texture surface. 0x%08x - %S", hr, err.ErrorMessage());
 		return hr;
 	}
-	
+
 	return hr;
-}
-
-HRESULT DesktopCapture::InitDupl() {
-	// Get DXGI device
-	IDXGIDevice* DxgiDevice = nullptr;
-	HRESULT hr = m_Device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&DxgiDevice));
-	if (FAILED(hr))
-	{
-		error("Failed to QI for DXGI Device");
-		return E_FAIL;
-	}
-
-	// Get DXGI adapter
-	IDXGIAdapter* DxgiAdapter = nullptr;
-	hr = DxgiDevice->GetParent(__uuidof(IDXGIAdapter), reinterpret_cast<void**>(&DxgiAdapter));
-	DxgiDevice->Release();
-	DxgiDevice = nullptr;
-	if (FAILED(hr))
-	{
-		error("Failed to get parent DXGI Adapter");
-		return E_FAIL;
-	}
-
-	///// here
-	IDXGIFactory * DxgiFactory = nullptr;
-	hr = DxgiAdapter->GetParent(__uuidof(IDXGIFactory), reinterpret_cast<void**>(&DxgiFactory));
-	DxgiAdapter->Release();
-	DxgiAdapter = nullptr;
-	if (FAILED(hr))
-	{
-		error("Failed to get parent DXGI DxgiFactory");
-		return hr;
-	}
-
-	IDXGIAdapter* DxgiActualAdapter = nullptr;
-	hr = DxgiFactory->EnumAdapters(m_iAdapterNumber, &DxgiActualAdapter);
-	DxgiFactory->Release();
-	DxgiFactory = nullptr;
-	if (FAILED(hr))
-	{
-		error("Output specified to be duplicated does not exist");
-		return hr;
-	}
-	///// end
-
-	// Get output
-	IDXGIOutput* DxgiOutput = nullptr;
-	hr = DxgiActualAdapter->EnumOutputs(m_iDesktopNumber, &DxgiOutput);
-	DxgiActualAdapter->Release();
-	DxgiActualAdapter = nullptr;
-	if (FAILED(hr))
-	{
-		error("Failed to get specific output on DXGI Output");
-		return E_FAIL;
-	}
-
-	memset(&m_OutputDesc, 0, sizeof(m_OutputDesc));
-	DxgiOutput->GetDesc(&m_OutputDesc);
-
-	// QI for Output 1
-	IDXGIOutput1* DxgiOutput1 = nullptr;
-	hr = DxgiOutput->QueryInterface(__uuidof(DxgiOutput1), reinterpret_cast<void**>(&DxgiOutput1));
-	DxgiOutput->Release();
-	DxgiOutput = nullptr;
-	if (FAILED(hr))
-	{
-		error("Failed to QI for DxgiOutput1 in DesktopCapture");
-		return E_FAIL;
-	}
-
-	// Create desktop duplication
-	hr = DxgiOutput1->DuplicateOutput(m_Device, &m_DeskDupl);
-	DxgiOutput1->Release();
-	DxgiOutput1 = nullptr;
-	if (FAILED(hr))
-	{
-		if (hr == DXGI_ERROR_NOT_CURRENTLY_AVAILABLE)
-		{
-			error("There is already the maximum number of applications using the Desktop Duplication API running, please close one of those applications and then try again.");
-			return E_FAIL;
-		}
-		error("Failed to get duplicate output in DesktopCapture");
-		return E_FAIL;
-	}
-
-	return S_OK;
 }
 
 //
@@ -700,7 +678,6 @@ bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame) {
 	}
 
 	if (FAILED(hr)) {
-		error("Failed to acquire next frame - failed to reinitialize duplication.");
 		return false;
 	}
 
@@ -718,7 +695,8 @@ bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame) {
 		// debug("Failed to acquire next frame - timeout.");
 		return false;
 	} else if (FAILED(hr)) {
-		error("Failed to acquire next frame in DesktopCapture - %ld", hr);
+		_com_error err(hr);
+		error("Failed to acquire next frame in DesktopCapture. 0x%08x - %S", hr, err.ErrorMessage());
 		return false;
 	}
 
@@ -862,11 +840,15 @@ bool DesktopCapture::DoneWithFrame()
 		return false;
 	}
 	HRESULT hr = m_DeskDupl->ReleaseFrame();
+	 
+	if (FAILED(hr)) {
+		_com_error err(hr);
+		error("Failed to release frame. 0x%08x - %S", hr, err.ErrorMessage());
+	}
+
 	if (hr == DXGI_ERROR_ACCESS_LOST) {
-		error("Failed to release frame, but trying to reinitialize desktop capture");
-		hr = ReinitializeDuplication();
-	} else if (FAILED(hr)) {
-		error("Failed to release frame. hr: %ld", hr);
+		m_DeskDupl->Release();
+		m_DeskDupl = nullptr;
 	}
 
 	if (m_AcquiredDesktopImage) {
@@ -880,18 +862,11 @@ bool DesktopCapture::DoneWithFrame()
 HRESULT DesktopCapture::ReinitializeDuplication() {
 	CleanRefs();
 
-	HRESULT hr = CreateSurface();
-	if (FAILED(hr)) {
-		error("Failed to create surface in reinitialization");
-		return hr;
-	}
-
-	hr = InitDupl();
+	HRESULT hr = InitDuplication();
 	if (FAILED(hr)) {
 		error("Failed to init desktop duplication in reinitialization");
 		return hr;
 	}
 
-	info("reinitlizing, done");
 	return hr;
 }

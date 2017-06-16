@@ -274,7 +274,7 @@ HRESULT CPushPinDesktop::Active(void) {
 HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	CheckPointer(pSample, E_POINTER);
 
-	if (!m_pDesktopCapture->IsReady()) {
+	while (!m_pDesktopCapture->IsReady() && !m_pDesktopCapture->ExceedMaxRetry()) {
 		m_pDesktopCapture->Init(m_iDesktopAdapterNumber, m_iDesktopNumber);
 
 		globalStart = GetTickCount();
@@ -285,6 +285,11 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 		missed = true;
 		previousFrame = 0;
 		debug("frame_length: %d", m_rtFrameLength);
+	}
+
+	if (!m_pDesktopCapture->IsReady() && m_pDesktopCapture->ExceedMaxRetry()) {
+		error("Unable to initialize desktop capture. Maximum retry exceeded.");
+		return S_FALSE;
 	}
 
 	__int64 startThisRound = StartCounter();
