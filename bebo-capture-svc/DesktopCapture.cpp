@@ -50,8 +50,10 @@ DesktopCapture::DesktopCapture() : m_Device(nullptr),
 	m_MouseInfo(new PtrInfo),
 	m_Initialized(false),
 	m_LastFrameData(new FrameData),
-	m_LastDesktopFrame(nullptr)
+	m_LastDesktopFrame(new DesktopFrame),
+	m_negotiatedArgbBuffer(nullptr)
 {
+	m_retryTimeout = 0;
 	RtlZeroMemory(&m_OutputDesc, sizeof(DXGI_OUTPUT_DESC));
 }
 
@@ -85,6 +87,11 @@ DesktopCapture::~DesktopCapture()
 	if (m_MouseInfo) {
 		delete m_MouseInfo;
 		m_MouseInfo = nullptr;
+	}
+
+	if (m_negotiatedArgbBuffer) {
+		delete[] m_negotiatedArgbBuffer;
+		m_negotiatedArgbBuffer = nullptr;
 	}
 }
 
@@ -126,11 +133,18 @@ void DesktopCapture::CleanRefs()
 //
 // Initialize
 //
-void DesktopCapture::Init(int adapterId, int desktopId)
+void DesktopCapture::Init(int adapterId, int desktopId, int width, int height)
 {
 	m_iAdapterNumber = adapterId;
 	m_iDesktopNumber = desktopId;
+	m_negotiatedWidth = width;
+	m_negotiatedHeight = height;
 	m_Initialized = true;
+
+	if (m_negotiatedArgbBuffer) {
+		delete[] m_negotiatedArgbBuffer;
+	}
+	m_negotiatedArgbBuffer = new BYTE[4 * m_negotiatedWidth * m_negotiatedHeight];
 
 	HRESULT hr = InitializeDXResources();
 
@@ -323,6 +337,7 @@ HRESULT DesktopCapture::InitDuplication() {
 		m_Surface->Release();
 		m_Surface = nullptr;
 	}
+
 	hr = m_StagingTexture->QueryInterface(__uuidof(IDXGISurface), reinterpret_cast<void**>(&m_Surface));
 	if (FAILED(hr))
 	{
@@ -546,8 +561,8 @@ static inline int getI420BufferSize(int width, int height) {
 	return width * height + half_width * half_height * 2;
 }
 
-bool DesktopCapture::PushFrame(IMediaSample* pSample, DesktopFrame* frame, int dst_width, int dst_height) {
-	debug("push frame - frame: %dx%d, negotiated: %dx%d", frame->width(), frame->height(), dst_width, dst_height);
+bool DesktopCapture::PushFrame(IMediaSample* pSample, DesktopFrame* frame) {
+	debug("push frame - frame: %dx%d, negotiated: %dx%d", frame->width(), frame->height(), m_negotiatedWidth, m_negotiatedHeight);
 	if (!frame->data()) {
 		warn("push frame - no data");
 		return false;
@@ -561,32 +576,30 @@ bool DesktopCapture::PushFrame(IMediaSample* pSample, DesktopFrame* frame, int d
 	int src_width = frame->width();
 	int src_height = frame->height();
 
-	BYTE* scaled_argb = new BYTE[4 * dst_width * dst_height];
-	int scaled_argb_stride = 4 * dst_width;
+	int scaled_argb_stride = 4 * m_negotiatedWidth;
 
 	libyuv::ARGBScale(
 		src_frame, src_stride_frame,
 		src_width, src_height,
-		scaled_argb, scaled_argb_stride,
-		dst_width, dst_height,
+		m_negotiatedArgbBuffer, scaled_argb_stride,
+		m_negotiatedWidth, m_negotiatedHeight,
 		libyuv::FilterMode(libyuv::kFilterBox)
 	);
 
 
 	uint8* y = pData;
-	int stride_y = dst_width;
-	uint8* u = pData + (dst_width * dst_height);
-	int stride_u = (dst_width + 1) / 2;
-	uint8* v = u + ((dst_width * dst_height) >> 2);
+	int stride_y = m_negotiatedWidth;
+	uint8* u = pData + (m_negotiatedWidth * m_negotiatedHeight);
+	int stride_u = (m_negotiatedWidth + 1) / 2;
+	uint8* v = u + ((m_negotiatedWidth * m_negotiatedHeight) >> 2);
 	int stride_v = stride_u;
 
-	libyuv::ARGBToI420(scaled_argb, scaled_argb_stride,
+	libyuv::ARGBToI420(m_negotiatedArgbBuffer, scaled_argb_stride,
 		y, stride_y,
 		u, stride_u,
 		v, stride_v,
-		dst_width, dst_height);
+		m_negotiatedWidth, m_negotiatedHeight);
 
-	delete[] scaled_argb;
 	return true;
 }
 
@@ -669,12 +682,19 @@ HRESULT DesktopCapture::GetMouse(_Inout_ PtrInfo* PtrInfo, _In_ DXGI_OUTDUPL_FRA
 }
 
 
-bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame) {
+bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame, REFERENCE_TIME now) {
 	HRESULT hr = S_OK;
 	IDXGIResource* desktop_resource = nullptr;
 
 	if (!m_DeskDupl) {
-		hr = ReinitializeDuplication();
+		hr = E_FAIL;
+		if (m_retryTimeout == 0) {
+			m_retryTimeout = now + 10000000L * DUPLICATOR_RETRY_SECONDS;
+		}
+		if (now >= m_retryTimeout) {
+			m_retryTimeout = now + 10000000L * DUPLICATOR_RETRY_SECONDS;
+			hr = ReinitializeDuplication();
+		}
 	}
 
 	if (FAILED(hr)) {
@@ -684,12 +704,7 @@ bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame) {
 	hr = m_DeskDupl->AcquireNextFrame(0, frame, &desktop_resource);
 	if (hr == DXGI_ERROR_ACCESS_LOST) {
 		error("Failed to acquire next frame - dxgi error access lost.");
-
-		if (m_DeskDupl) {
-			m_DeskDupl->Release();
-			m_DeskDupl = nullptr;
-		}
-
+		CleanRefs(); // clean it up so it gets recreate later
 		return false;
 	} else if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
 		// debug("Failed to acquire next frame - timeout.");
@@ -777,7 +792,7 @@ HRESULT DesktopCapture::ProcessFrameMetaData(FrameData* Data) {
 //
 // Get next frame and write it into Data
 //
-bool DesktopCapture::GetFrame(IMediaSample *pSample, int width, int height, bool captureMouse)
+bool DesktopCapture::GetFrame(IMediaSample *pSample, bool captureMouse, REFERENCE_TIME now)
 {
 	if (!m_Initialized) {
 		error("DesktopCapture.Init() required.");
@@ -788,7 +803,7 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, int width, int height, bool
 	DXGI_SURFACE_DESC frame_desc = { 0 };
 	DXGI_MAPPED_RECT map;
 
-	bool got_frame = AcquireNextFrame(&frame_info);
+	bool got_frame = AcquireNextFrame(&frame_info, now);
 
 	if (!got_frame) {
 		return false;
@@ -803,17 +818,11 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, int width, int height, bool
 	ProcessFrameMetaData(m_LastFrameData);
 	ProcessFrame(m_LastFrameData, offset_x, offset_y);
 
-	if (m_LastDesktopFrame) {
-		delete m_LastDesktopFrame;
-		m_LastDesktopFrame = nullptr;
-	}
-
 	m_Surface->GetDesc(&frame_desc);
 
 	m_Surface->Map(&map, D3D11_MAP_READ);
-	DesktopFrame * cur_desktop_frame = new DesktopFrame(frame_desc.Width, frame_desc.Height, map.Pitch, map.pBits);
-	m_LastDesktopFrame = cur_desktop_frame;
-	got_frame = PushFrame(pSample, cur_desktop_frame, width, height);
+	m_LastDesktopFrame->updateFrame(frame_desc.Width, frame_desc.Height, map.Pitch, map.pBits);
+	got_frame = PushFrame(pSample, m_LastDesktopFrame);
 	m_Surface->Unmap();
 
 	DoneWithFrame();
@@ -821,14 +830,14 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, int width, int height, bool
 	return got_frame;
 }
 
-bool DesktopCapture::GetOldFrame(IMediaSample *pSample, int width, int height, bool captureMouse)
+bool DesktopCapture::GetOldFrame(IMediaSample *pSample, bool captureMouse)
 {
 	if (!m_LastDesktopFrame) {
 		error("last desktop frame required.");
 		return false;
 	}
 
-	return PushFrame(pSample, m_LastDesktopFrame, width, height);
+	return PushFrame(pSample, m_LastDesktopFrame);
 }
 
 //
@@ -847,8 +856,7 @@ bool DesktopCapture::DoneWithFrame()
 	}
 
 	if (hr == DXGI_ERROR_ACCESS_LOST) {
-		m_DeskDupl->Release();
-		m_DeskDupl = nullptr;
+		CleanRefs(); // clean it up so it gets recreate later
 	}
 
 	if (m_AcquiredDesktopImage) {
@@ -864,9 +872,11 @@ HRESULT DesktopCapture::ReinitializeDuplication() {
 
 	HRESULT hr = InitDuplication();
 	if (FAILED(hr)) {
+		CleanRefs();
 		error("Failed to init desktop duplication in reinitialization");
 		return hr;
 	}
-
+	m_retryTimeout = 0;
+	info("Reinitializing duplication successful");
 	return hr;
 }

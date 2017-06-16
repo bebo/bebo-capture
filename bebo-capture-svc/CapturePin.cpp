@@ -275,7 +275,7 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	CheckPointer(pSample, E_POINTER);
 
 	while (!m_pDesktopCapture->IsReady() && !m_pDesktopCapture->ExceedMaxRetry()) {
-		m_pDesktopCapture->Init(m_iDesktopAdapterNumber, m_iDesktopNumber);
+		m_pDesktopCapture->Init(m_iDesktopAdapterNumber, m_iDesktopNumber, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
 
 		globalStart = GetTickCount();
 		countMissed = 0;
@@ -329,12 +329,12 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 		}
 
 		startThisRound = StartCounter();
-		frame = m_pDesktopCapture->GetFrame(pSample, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), false);
+		frame = m_pDesktopCapture->GetFrame(pSample, false, now);
 
 		if (!frame && missed && now > (previousFrame + 10000000L / 5)) {
 			debug("fake frame");
 			countMissed += 1;
-			frame = m_pDesktopCapture->GetOldFrame(pSample, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), false);
+			frame = m_pDesktopCapture->GetOldFrame(pSample, false);
 		}
 		if (frame && previousFrame <= 0) {
 			frame = false;

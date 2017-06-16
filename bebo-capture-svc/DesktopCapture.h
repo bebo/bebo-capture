@@ -9,6 +9,8 @@
 
 class DesktopFrame {
 public:
+	DesktopFrame() : _width(0), _height(0), _stride(0), _data(nullptr) {};
+	DesktopFrame(int w, int h) : _width(w), _height(h), _stride(0), _data(nullptr) {};
 	DesktopFrame(int width, int height, int stride, uint8_t* const data) :
 		_width(width), _height(height), _stride(stride), _data(data) {};
 
@@ -17,21 +19,28 @@ public:
 	int stride() const { return _stride; };
 	uint8_t* data() const { return _data; };
 
+	void updateFrame(int w, int h, int stride, uint8_t* data) {
+		_width = w;
+		_height = h;
+		_stride = stride;
+		_data = data;
+	}
+
 private:
-	const int _stride;
-	const int _width;
-	const int _height;
-	uint8_t* const _data;
+	int _width;
+	int _height;
+	int _stride;
+	uint8_t* _data;
 };
 
 class DesktopCapture {
 public:
 	DesktopCapture();
 	~DesktopCapture();
-	void Init(int adapterId, int desktopId);
+	void Init(int adapterId, int desktopId, int width, int height);
 	
-	bool GetFrame(IMediaSample *pSimple, int width, int height, bool captureMouse);
-	bool GetOldFrame(IMediaSample *pSimple, int width, int height, bool captureMouse);
+	bool GetFrame(IMediaSample *pSimple, bool captureMouse, REFERENCE_TIME now);
+	bool GetOldFrame(IMediaSample *pSimple, bool captureMouse);
 	bool DoneWithFrame();
 	bool IsReady() { return m_Initialized;  };
 	bool ExceedMaxRetry() { return m_InitializeFailCount >= MAX_INIT_RETRY_COUNT;  };
@@ -39,6 +48,7 @@ public:
 private:
 	// methods
 	static const int MAX_INIT_RETRY_COUNT = 5;
+	static const int DUPLICATOR_RETRY_SECONDS = 3;
 
 	void ProcessFrame(FrameData * Data, int OffsetX, int OffsetY);
 	void CopyDirty(FrameData* Data, INT OffsetX, INT OffsetY);
@@ -52,11 +62,10 @@ private:
 	HRESULT InitDuplication();
 	HRESULT ReinitializeDuplication();
 
-	bool AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame);
-	bool PushFrame(IMediaSample *pSample, DesktopFrame* frame, int width, int height);
+	bool AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame, REFERENCE_TIME now);
+	bool PushFrame(IMediaSample *pSample, DesktopFrame* frame);
 
 	void CleanRefs();
-
 
 	// variables
 	DXGI_OUTPUT_DESC m_OutputDesc;	
@@ -79,5 +88,10 @@ private:
 	ID3D11Texture2D* m_AcquiredDesktopImage;
 	BYTE* m_MetaDataBuffer;
 	UINT m_MetaDataSize;
+
+	REFERENCE_TIME m_retryTimeout;
+	int m_negotiatedWidth;
+	int m_negotiatedHeight;
+	BYTE* m_negotiatedArgbBuffer;
 };
 #endif
