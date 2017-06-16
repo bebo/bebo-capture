@@ -326,12 +326,18 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 		startThisRound = StartCounter();
 		frame = m_pDesktopCapture->GetFrame(pSample, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), false);
 
+		if (!frame && missed && now > (previousFrame + 10000000L / 5)) {
+			debug("fake frame");
+			countMissed += 1;
+			frame = m_pDesktopCapture->GetOldFrame(pSample, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), false);
+		}
 		if (frame && previousFrame <= 0) {
 			frame = false;
 			previousFrame = now;
 			missed = false;
 			debug("skip first frame");
-		}
+		} 
+
 	}
 	missed = false;
 	millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);

@@ -72,6 +72,7 @@ public:
 	void Init(int adapterId, int desktopId);
 	
 	bool GetFrame(IMediaSample *pSimple, int width, int height, bool captureMouse);
+	bool GetOldFrame(IMediaSample *pSimple, int width, int height, bool captureMouse);
 	bool DoneWithFrame();
 	bool IsReady() { return m_Initialized;  };
 

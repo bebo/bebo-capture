@@ -715,7 +715,7 @@ bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame) {
 
 		return false;
 	} else if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
-		debug("Failed to acquire next frame - timeout.");
+		// debug("Failed to acquire next frame - timeout.");
 		return false;
 	} else if (FAILED(hr)) {
 		error("Failed to acquire next frame in DesktopCapture - %ld", hr);
@@ -841,6 +841,16 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, int width, int height, bool
 	DoneWithFrame();
 
 	return got_frame;
+}
+
+bool DesktopCapture::GetOldFrame(IMediaSample *pSample, int width, int height, bool captureMouse)
+{
+	if (!m_LastDesktopFrame) {
+		error("last desktop frame required.");
+		return false;
+	}
+
+	return PushFrame(pSample, m_LastDesktopFrame, width, height);
 }
 
 //
