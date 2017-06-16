@@ -272,6 +272,11 @@ HRESULT DesktopCapture::InitDuplication() {
 		return E_FAIL;
 	}
 
+	if (m_DeskDupl) {
+		m_DeskDupl->Release();
+		m_DeskDupl = nullptr;
+	}
+
 	// Create desktop duplication
 	hr = DxgiOutput1->DuplicateOutput(m_Device, &m_DeskDupl);
 	DxgiOutput1->Release();
@@ -301,6 +306,11 @@ HRESULT DesktopCapture::InitDuplication() {
 	CopyBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 	CopyBufferDesc.MiscFlags = 0;
 
+	if (m_StagingTexture) {
+		m_StagingTexture->Release();
+		m_StagingTexture = nullptr;
+	}
+
 	hr = m_Device->CreateTexture2D(&CopyBufferDesc, nullptr, &m_StagingTexture);
 	if (FAILED(hr))
 	{
@@ -309,6 +319,10 @@ HRESULT DesktopCapture::InitDuplication() {
 		return hr;
 	}
 
+	if (m_Surface) {
+		m_Surface->Release();
+		m_Surface = nullptr;
+	}
 	hr = m_StagingTexture->QueryInterface(__uuidof(IDXGISurface), reinterpret_cast<void**>(&m_Surface));
 	if (FAILED(hr))
 	{
@@ -681,7 +695,8 @@ bool DesktopCapture::AcquireNextFrame(DXGI_OUTDUPL_FRAME_INFO * frame) {
 		// debug("Failed to acquire next frame - timeout.");
 		return false;
 	} else if (FAILED(hr)) {
-		error("Failed to acquire next frame in DesktopCapture - %ld", hr);
+		_com_error err(hr);
+		error("Failed to acquire next frame in DesktopCapture. 0x%08x - %S", hr, err.ErrorMessage());
 		return false;
 	}
 
@@ -825,13 +840,15 @@ bool DesktopCapture::DoneWithFrame()
 		return false;
 	}
 	HRESULT hr = m_DeskDupl->ReleaseFrame();
-	if (hr == DXGI_ERROR_ACCESS_LOST) {
-		_com_error err(hr);
-		error("Failed to release frame, but trying to reinitialize desktop capture. 0x%08x - %S", hr, err.ErrorMessage());
-		hr = ReinitializeDuplication();
-	} else if (FAILED(hr)) {
+	 
+	if (FAILED(hr)) {
 		_com_error err(hr);
 		error("Failed to release frame. 0x%08x - %S", hr, err.ErrorMessage());
+	}
+
+	if (hr == DXGI_ERROR_ACCESS_LOST) {
+		m_DeskDupl->Release();
+		m_DeskDupl = nullptr;
 	}
 
 	if (m_AcquiredDesktopImage) {

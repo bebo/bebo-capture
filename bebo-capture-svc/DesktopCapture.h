@@ -38,7 +38,7 @@ public:
 
 private:
 	// methods
-	static const int MAX_INIT_RETRY_COUNT = 20;
+	static const int MAX_INIT_RETRY_COUNT = 5;
 
 	void ProcessFrame(FrameData * Data, int OffsetX, int OffsetY);
 	void CopyDirty(FrameData* Data, INT OffsetX, INT OffsetY);
