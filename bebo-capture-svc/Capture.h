@@ -9,6 +9,7 @@
 #include <strsafe.h>
 #include "DesktopCapture.h"
 #include "GameCapture.h"
+#include "GDICapture.h"
 #include "CommonTypes.h"
 
 /*
@@ -107,6 +108,7 @@ protected:
 	CGameCapture* m_pParent;
 
 	DesktopCapture* m_pDesktopCapture;
+	GDICapture* m_pGDICapture;
 
 	HDC hScrDc;
 	HBITMAP     hRawBitmap;
@@ -128,9 +130,6 @@ protected:
 	int m_millisToSleepBeforePollForChanges;
 	HWND m_iHwndToTrack;
 	boolean m_bHwndTrackDecoration;
-	void CopyScreenToDataBlock(HDC hScrDc, BYTE *pData, BITMAPINFO *pHeader, IMediaSample *pSample);
-	void doJustBitBltOrScaling(HDC hMemDC, int nWidth, int nHeight,int nDestWidth,int nDestHeight, HDC hScrDC, int nX, int nY);
-	void doDIBits(HDC hScrDC, HBITMAP hRawBitmap, int nHeightScanLines, BYTE *pData, BITMAPINFO *pHeader);
 
     BYTE *pOldData;
 
@@ -178,6 +177,7 @@ public:
     HRESULT FillBuffer(IMediaSample *pSample);
 
     HRESULT FillBuffer_Desktop(IMediaSample *pSample);
+    HRESULT FillBuffer_GDI(IMediaSample *pSample);
 
     // Set the agreed media type and set up the necessary parameters
     HRESULT SetMediaType(const CMediaType *pMediaType);
