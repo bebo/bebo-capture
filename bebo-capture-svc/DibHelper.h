@@ -14,6 +14,8 @@
 #define RECTWIDTH(lpRect)   ((lpRect)->right - (lpRect)->left)
 #define RECTHEIGHT(lpRect)  ((lpRect)->bottom - (lpRect)->top)
 
+typedef unsigned __int64 QWORD;
+
 // Function prototypes
 HDIB BitmapToDIB (HBITMAP hBitmap, HPALETTE hPal);
 HDIB ChangeBitmapFormat (HBITMAP	hBitmap,
@@ -51,6 +53,7 @@ int read_config_setting(LPCTSTR szValueName, int default, boolean zeroAllowed);
 boolean is_config_set_to_1(LPCTSTR szValueName);
 HRESULT set_config_string_setting(LPCTSTR szValueName, wchar_t *szToThis );
 HRESULT RegGetBeboSZ(LPCTSTR szValueName, LPBYTE data, LPDWORD datasize);
+HRESULT RegGetBeboQWord(LPCTSTR szValueName, QWORD* data);
 
 void WarmupCounter();
 __int64 StartCounter();

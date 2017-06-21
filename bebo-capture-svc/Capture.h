@@ -5,6 +5,8 @@
 //
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------------------------
+#ifndef CAPTURE_H
+#define CAPTURE_H
 
 #include <strsafe.h>
 #include "DesktopCapture.h"
@@ -29,6 +31,7 @@ const REFERENCE_TIME FPS_1  = UNITS / 1;
 
 // Filter name strings
 #define g_wszPushDesktop    L"Bebo Game Capture Filter"
+typedef unsigned __int64 QWORD;
 
 const int CAPTURE_INJECT = 0;
 const int CAPTURE_GDI = 1;
@@ -142,9 +145,10 @@ protected:
 	int getCaptureDesiredFinalWidth();
 	int getCaptureDesiredFinalHeight();
 
+	QWORD m_iCaptureHandle;
 
 public:
-
+	
 	//CSourceStream overrrides
 	HRESULT OnThreadCreate(void);
 	HRESULT OnThreadDestroy(void);
@@ -152,6 +156,7 @@ public:
 	void GetGameFromRegistry(void);
 	HRESULT Inactive(void);
 	HRESULT Active(void);
+
 
     //////////////////////////////////////////////////////////////////////////
     //  IUnknown
@@ -205,5 +210,16 @@ public:
 
 private:
 	void reReadCurrentStartXY(int isReRead);
+	HWND FindCaptureWindows(QWORD captureHandle, LPWSTR className, LPWSTR windowName);
 
 };
+
+struct EnumWindowParams {
+	QWORD find_hwnd;
+	LPWSTR find_class_name;
+	LPWSTR find_window_name;
+
+	bool to_window_found;
+	HWND to_capture_hwnd;
+};
+#endif

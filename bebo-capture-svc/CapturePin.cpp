@@ -59,7 +59,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_pDesktopCapture(new DesktopCapture),
 	m_pGDICapture(new GDICapture),
 	m_iDesktopNumber(0),
-	m_iDesktopAdapterNumber(0)
+	m_iDesktopAdapterNumber(0),
+	m_iCaptureHandle(-1)
 {
 	info("CPushPinDesktop");
 	// Get the device context of the main display, just to get some metrics for it...
@@ -218,6 +219,12 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 				free(old);
 			}
 		}
+	}
+
+	QWORD qout;
+	if (RegGetBeboQWord(TEXT("CaptureWindowHandle"), &qout) == S_OK) {
+		m_iCaptureHandle = qout;
+		info("CaptureWindowHandle: %ld", m_iCaptureHandle);
 	}
 
 	int oldAntiCheat = m_bCaptureAntiCheat;
@@ -490,13 +497,18 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	return S_OK;
 }
 
-
 HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 {
 	CheckPointer(pSample, E_POINTER);
 
 	while (!m_pGDICapture->IsReady()) {
-		m_pGDICapture->InitHDC(getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), FindWindow(NULL, L"Untitled - Notepad"));
+		debug("GDI Init -  handle: %ld, class name: %S, window name: %S", m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName);
+		HWND hwnd = FindCaptureWindows(m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName);
+		if (hwnd == NULL) {
+			error("Unable to initialize gdi capture. window not found.");
+			return S_FALSE;
+		}
+		m_pGDICapture->InitHDC(getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), hwnd);
 
 		globalStart = GetTickCount();
 		countMissed = 0;
@@ -552,11 +564,20 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 		startThisRound = StartCounter();
 		frame = m_pGDICapture->GetFrame(pSample);
 
-		if (!frame && missed && now > (previousFrame + 10000000L / 5)) {
-			debug("fake frame");
-			countMissed += 1;
-			// frame = m_pDesktopCapture->GetOldFrame(pSample, false);
+		if (!frame) {
+			if (!IsWindow(m_pGDICapture->capturingHwnd())) {
+				info("window is no longer exists.");
+				return S_FALSE;
+			}
+			/*
+			if (missed && now > (previousFrame + 10000000L / 5)) {
+				debug("fake frame");
+				countMissed += 1;
+				frame = m_pGDICapture->GetOldFrame(pSample);
+			}
+			*/
 		}
+
 		if (frame && previousFrame <= 0) {
 			frame = false;
 			previousFrame = now;
@@ -814,3 +835,49 @@ HRESULT CPushPinDesktop::OnThreadStartPlay() {
 	debug("CPushPinDesktop::OnThreadStartPlay()");
 	return NOERROR;
 };
+
+BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param) 
+{
+	EnumWindowParams* p = reinterpret_cast<EnumWindowParams*>(param);
+
+	bool hwnd_match = (QWORD) hwnd == p->find_hwnd;
+	bool hwnd_must_match = false; // capture type specify instance only TODO
+
+	if (!hwnd_match && hwnd_must_match) { 
+		return TRUE;
+	}
+
+	int buf_len = 1024;
+
+	LPTSTR class_name = new TCHAR[buf_len];
+	GetClassName(hwnd, class_name, buf_len);
+
+	// check if class match
+	bool class_match = lstrcmp(class_name, p->find_class_name) == 0;
+
+	// debug("WindowsProcVerifier. HWND: %ld, class name:%S, class match: %d", hwnd, class_name, class_match);
+
+	// check exe match TODO
+	bool exe_match = true;
+
+	bool found = exe_match && class_match;
+	if (found) {
+		p->to_capture_hwnd = hwnd;
+		p->to_window_found = true;
+	}
+
+	delete[] class_name;
+	return !found;
+}
+
+HWND CPushPinDesktop::FindCaptureWindows(QWORD capture_handle, LPWSTR capture_class, LPWSTR capture_name) {
+	EnumWindowParams cb;
+	cb.find_hwnd = capture_handle;
+	cb.find_class_name = capture_class;
+	cb.find_window_name = capture_name;
+	cb.to_window_found = false;
+	cb.to_capture_hwnd = NULL;
+
+	EnumWindows(&WindowsProcVerifier, reinterpret_cast<LPARAM>(&cb));
+	return cb.to_capture_hwnd;
+}
