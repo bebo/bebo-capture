@@ -7,11 +7,12 @@
 #include <windows.h>
 #include <wmsdkidl.h>
 #include <dxgi.h>
+#include <thread>
 #include "DibHelper.h"
 #include "window-helpers.h"
 #include "Logging.h"
 #include "libyuv/convert.h"
-#include "libyuv/scale.h"
+#include "libyuv/scale_argb.h"
 
 GDICapture::GDICapture():
 	negotiated_width(0),
@@ -22,19 +23,19 @@ GDICapture::GDICapture():
 	capture_decoration(false),
 	capture_mouse(false),
 	capture_hwnd(false),
-	screen_hdc(nullptr),
-	mem_hdc(nullptr),
-	bitmap(0),
-	old_bitmap(0)
+	last_frame(new GDIFrame),
+	negotiated_argb_buffer(nullptr)
 {
-
 }
 
 GDICapture::~GDICapture() {
-	ReleaseDC(NULL, mem_hdc);
-	DeleteDC(mem_hdc);
-	ReleaseDC(NULL, screen_hdc);
-	DeleteDC(screen_hdc);
+	if (last_frame) {
+		delete last_frame;
+	}
+
+	if (negotiated_argb_buffer) {
+		delete[] negotiated_argb_buffer;
+	}
 }
 
 void GDICapture::InitHDC(int width, int height, HWND hwnd) {
@@ -42,112 +43,98 @@ void GDICapture::InitHDC(int width, int height, HWND hwnd) {
 	negotiated_width = width;
 	negotiated_height = height;
 	capture_hwnd = hwnd;
-	capture_decoration = true;
-
-	if (capture_hwnd) {
-		if (capture_decoration) {
-			screen_hdc = GetWindowDC(capture_hwnd);
-		} else {
-			screen_hdc = GetDC(capture_hwnd);
-		}
-	} else if (capture_screen) {
-		//CreateDC(TEXT("DISPLAY"), NULL, NULL, NULL);
-		screen_hdc = GetDC(NULL);
-	} else if (capture_foreground) {
-		screen_hdc = GetDC(GetForegroundWindow());
-	}
-
-	if (screen_hdc == 0) {
-		throw "HDC not found";
-	}
-
-	// Get the dimensions of the main desktop window as the default
-	GetWindowRect(capture_hwnd, &screen_rect);
-
-	mem_hdc = CreateCompatibleDC(screen_hdc);
-
-	int screen_width = screen_rect.right - screen_rect.left;
-	int screen_height = screen_rect.bottom - screen_rect.top;
-	BITMAPINFO bi = { 0 };
-	BITMAPINFOHEADER *bih = &bi.bmiHeader;
-	bih->biSize = sizeof(BITMAPINFOHEADER);
-	bih->biBitCount = 32;
-	bih->biWidth = screen_width;
-	bih->biHeight = screen_height * -1;
-	bih->biPlanes = 1;
-	bitmap_bits = new BYTE[4 * screen_width * screen_height];
-	bitmap = CreateDIBSection(mem_hdc, &bi,
-		DIB_RGB_COLORS, (void**)&bitmap_bits,
-		NULL, 0);
+	negotiated_argb_buffer = new BYTE[4 * negotiated_width * negotiated_height];
 }
 
-static inline int getI420BufferSize(int width, int height) {
-	int half_width = (width + 1) >> 1;
-	int half_height = (height + 1) >> 1;
-	return width * height + half_width * half_height * 2;
+GDIFrame* GDICapture::CaptureFrame()
+{
+	if (!capture_hwnd) {
+		return NULL;
+	}
+
+	if (!IsWindow(capture_hwnd)) {
+		return NULL;
+	}
+
+	if ((IsIconic(capture_hwnd) || !IsWindowVisible(capture_hwnd)) && last_frame) {
+		debug("Window not visible, returning last frame");
+		return last_frame;
+	}
+
+	HDC hdc_target = GetDC(capture_hwnd);
+
+	RECT capture_window_rect;
+	GetClientRect(capture_hwnd, &capture_window_rect);
+
+	last_frame->updateFrame(hdc_target, capture_window_rect);
+
+	GDIFrame* frame = last_frame;
+
+	HDC mem_hdc = CreateCompatibleDC(hdc_target);
+
+	HGDIOBJ old_bmp = SelectObject(mem_hdc, frame->bitmap());
+	if (!old_bmp || old_bmp == HGDI_ERROR) {
+		error("SelectObject failed from mem_hdc into bitmap.");
+		return NULL;
+	}
+
+	// debug("frame wh: %dx%d - xy: %d,%d - cxy: %d,%d - xy: %d,%d", frame->width(), frame->height(), frame->x(), frame->y(), cx, cy);
+
+	int cx = GetSystemMetrics(SM_CXSIZEFRAME);
+	int cy = GetSystemMetrics(SM_CYSIZEFRAME);
+	BitBlt(mem_hdc, 0, 0, 
+		frame->width(), frame->height(), 
+		hdc_target, 
+		cx, cy, SRCCOPY);
+
+	SelectObject(mem_hdc, old_bmp);
+	ReleaseDC(capture_hwnd, mem_hdc);
+	DeleteDC(mem_hdc);
+	ReleaseDC(capture_hwnd, hdc_target);
+
+	return frame;
 }
 
 bool GDICapture::GetFrame(IMediaSample *pSample)
 {
 	debug("CopyScreenToDataBlock - start");
+
+	GDIFrame* frame = CaptureFrame();
+	if (frame == NULL) {
+		return false;
+	}
+
 	BYTE *pdata;
 	pSample->GetPointer(&pdata);
 
-	int width = (screen_rect.right - screen_rect.left);
-	int height = (screen_rect.bottom - screen_rect.top);
+	const uint8_t* src_frame = frame->data();
+	int src_stride_frame = frame->stride();
+	int src_width = frame->width();
+	int src_height = frame->height();
 
-	// determine points of where to grab from it, though I think we control these with m_rScreen
-	int screen_x = screen_rect.left;
-	int screen_y = screen_rect.top;
+	int scaled_argb_stride = 4 * negotiated_width;
 
-	debug("screen rect size: %dx%d, xy: %dx%d", width, height, screen_x, screen_y);
-
-	// select new bitmap into memory DC
-	SelectObject(mem_hdc, bitmap);
-
-	// if (m_bCaptureMouse)
-	//	AddMouse(hMemDC, &m_rScreen, hScrDC, m_iHwndToTrack);
-
-		// copy it to a temporary buffer first
-	// doDIBits(screen_hdc, bitmap, negotiated_height, old_frame_buffer, &tweakableHeader);
-	BitBlt(mem_hdc, 0, 0, width, height, screen_hdc, screen_x, screen_y, SRCCOPY);
-
-	BYTE* yuv = new BYTE[getI420BufferSize(width, height)];
-
-	uint8* y = yuv;
-	int stride_y = width;
-	uint8* u = yuv + (width * height);
-	int stride_u = (width + 1) / 2;
-	uint8* v = u + ((width * height) >> 2);
-	int stride_v = stride_u;
-
-	libyuv::ARGBToI420(bitmap_bits, width * 4,
-		y, stride_y,
-		u, stride_u,
-		v, stride_v,
-		width, height);
-
-	int dst_width = negotiated_width;
-	int dst_height = negotiated_height;
-	uint8* dst_y = pdata;
-	int dst_stride_y = dst_width;
-	uint8* dst_u = pdata + (dst_width * dst_height);
-	int dst_stride_u = (dst_width + 1) / 2;
-	uint8* dst_v = dst_u + ((dst_width * dst_height) >> 2);
-	int dst_stride_v = dst_stride_u;
-
-	libyuv::I420Scale(
-		y, stride_y,
-		u, stride_u,
-		v, stride_v,
-		width, height,
-		dst_y, dst_stride_y,
-		dst_u, dst_stride_u,
-		dst_v, dst_stride_v,
-		dst_width, dst_height,
+	libyuv::ARGBScale(
+		src_frame, src_stride_frame,
+		src_width, src_height,
+		negotiated_argb_buffer, scaled_argb_stride,
+		negotiated_width, negotiated_height,
 		libyuv::FilterMode(libyuv::kFilterBox)
 	);
 
-	delete[] yuv;
+	uint8* y = pdata;
+	int stride_y = negotiated_width;
+	uint8* u = pdata + (negotiated_width * negotiated_height);
+	int stride_u = (negotiated_width + 1) / 2;
+	uint8* v = u + ((negotiated_width * negotiated_height) >> 2);
+	int stride_v = stride_u;
+
+	libyuv::ARGBToI420(negotiated_argb_buffer, scaled_argb_stride,
+		y, stride_y,
+		u, stride_u,
+		v, stride_v,
+		negotiated_width, negotiated_height);
+
 	return true;
 }
+
