@@ -185,7 +185,7 @@ HRESULT RegGetBeboQWord(LPCTSTR szValueName, QWORD * data) {
 		// key doesn't exist in the reg at all...
 		return E_INVALIDARG;
 	}
-	debug("Registry key: %S value: %S (REG_QWORD)", szValueName, data);
+	debug("Registry key: %S value: %ld (REG_QWORD)", szValueName, *data);
 	return NOERROR;
 }
 

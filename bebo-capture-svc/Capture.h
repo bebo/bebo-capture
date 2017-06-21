@@ -102,6 +102,7 @@ protected:
 	int m_iCaptureConfigHeight;
 	LPWSTR m_pCaptureWindowName;
 	LPWSTR m_pCaptureWindowClassName;
+	LPWSTR m_pCaptureExeFullName;
 
 	HANDLE init_hooks_thread;
 
@@ -122,6 +123,7 @@ protected:
 	bool m_bConvertToI420;
 	bool m_bUseCaptureBlt;
 	bool m_bCaptureMouse;
+	bool m_bCaptureOnce;
 	volatile bool active;
 	//int m_iScreenBitDepth;
 	bool m_bCaptureAntiCheat;
@@ -210,14 +212,16 @@ public:
 
 private:
 	void reReadCurrentStartXY(int isReRead);
-	HWND FindCaptureWindows(QWORD captureHandle, LPWSTR className, LPWSTR windowName);
+	HWND FindCaptureWindows(bool hwnd_must_match, QWORD captureHandle, LPWSTR className, LPWSTR windowName, LPWSTR exeName);
 
 };
 
 struct EnumWindowParams {
+	bool find_hwnd_must_match;
 	QWORD find_hwnd;
 	LPWSTR find_class_name;
 	LPWSTR find_window_name;
+	LPWSTR find_exe_name;
 
 	bool to_window_found;
 	HWND to_capture_hwnd;

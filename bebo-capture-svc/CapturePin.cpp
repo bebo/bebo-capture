@@ -11,6 +11,7 @@
 #include "CommonTypes.h"
 #include "d3d11.h"
 #include <dxgi.h>
+#include <Psapi.h>
 
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
 
@@ -22,6 +23,11 @@ DWORD globalStart; // for some debug performance benchmarking
 long countMissed = 0;
 long fastestRoundMillis = 1000000; // random big number
 long sumMillisTook = 0;
+
+char out[1000];
+// FIXME :  move these
+bool ever_started = false;
+boolean missed = false;
 
 #ifdef _DEBUG 
 int show_performance = 1;
@@ -54,13 +60,15 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	active(false),
 	m_pCaptureWindowName(NULL),
 	m_pCaptureWindowClassName(NULL),
+	m_pCaptureExeFullName(NULL),
 	game_context(NULL),
     m_iCaptureType(CAPTURE_INJECT),
 	m_pDesktopCapture(new DesktopCapture),
 	m_pGDICapture(new GDICapture),
 	m_iDesktopNumber(0),
 	m_iDesktopAdapterNumber(0),
-	m_iCaptureHandle(-1)
+	m_iCaptureHandle(-1),
+	m_bCaptureOnce(0)
 {
 	info("CPushPinDesktop");
 	// Get the device context of the main display, just to get some metrics for it...
@@ -148,10 +156,30 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 		m_iCaptureConfigHeight, m_iCaptureConfigWidth, getCaptureDesiredFinalHeight(), getCaptureDesiredFinalWidth(), m_rScreen.top, m_rScreen.bottom, m_rScreen.left, m_rScreen.right, config_max_fps, m_bDeDupe, m_millisToSleepBeforePollForChanges, m_bReReadRegistry, m_iHwndToTrack);
 }
 
-char out[1000];
-// FIXME :  move these
-bool ever_started = false;
-boolean missed = false;
+CPushPinDesktop::~CPushPinDesktop()
+{
+	delete m_pDesktopCapture;
+	m_pDesktopCapture = nullptr;
+
+	delete m_pGDICapture;
+	m_pGDICapture = nullptr;
+
+	// They *should* call this...VLC does at least, correctly.
+
+	// Release the device context stuff
+	LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out;
+    logRotate();
+
+	// release desktop capture
+
+	if (hRawBitmap)
+		DeleteObject(hRawBitmap); // don't need those bytes anymore -- I think we are supposed to delete just this and not hOldBitmap
+
+	if (pOldData) {
+		free(pOldData);
+		pOldData = NULL;
+	}
+}
 
 void CPushPinDesktop::GetGameFromRegistry(void) {
 	DWORD size = 1024;
@@ -221,6 +249,19 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		}
 	}
 
+	size = sizeof(data);
+	if (RegGetBeboSZ(TEXT("CaptureExeFullName"), data, &size) == S_OK) {
+		LPWSTR old = m_pCaptureExeFullName;
+		m_pCaptureExeFullName = (LPWSTR) malloc(size * 2);
+		wsprintfW(m_pCaptureExeFullName, L"%s", data);
+		if (old == NULL || wcscmp(old, m_pCaptureExeFullName) != 0) {
+			info("m_pCaptureExeFullName: %S", m_pCaptureExeFullName);
+			if (old != NULL) {
+				free(old);
+			}
+		}
+	}
+
 	QWORD qout;
 	if (RegGetBeboQWord(TEXT("CaptureWindowHandle"), &qout) == S_OK) {
 		m_iCaptureHandle = qout;
@@ -231,6 +272,12 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 	m_bCaptureAntiCheat = read_config_setting(TEXT("CaptureAntiCheat"), 0, true) == 1;
 	if (oldAntiCheat != m_bCaptureAntiCheat) {
 		info("CaptureAntiCheat: %d", m_bCaptureAntiCheat);
+	}
+
+	int oldCaptureOnce = m_bCaptureOnce;
+	m_bCaptureOnce = read_config_setting(TEXT("CaptureOnce"), 0, true) == 1;
+	if (oldCaptureOnce != m_bCaptureOnce) {
+		info("CaptureOnce: %d", m_bCaptureOnce);
 	}
 	return;
 }
@@ -504,8 +551,9 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 	CheckPointer(pSample, E_POINTER);
 
 	while (!m_pGDICapture->IsReady()) {
-		debug("GDI Init -  handle: %ld, class name: %S, window name: %S", m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName);
-		HWND hwnd = FindCaptureWindows(m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName);
+		debug("GDI Init - capture once: %d, handle: %ld, class name: %S, window name: %S, exe full name: %S", 
+			m_bCaptureOnce, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName);
+		HWND hwnd = FindCaptureWindows(m_bCaptureOnce, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName);
 		if (hwnd == NULL) {
 			error("Unable to initialize gdi capture. window not found.");
 			return S_FALSE;
@@ -651,30 +699,6 @@ void CPushPinDesktop::reReadCurrentStartXY(int isReRead) {
 	}
 }
 
-CPushPinDesktop::~CPushPinDesktop()
-{
-	delete m_pDesktopCapture;
-	m_pDesktopCapture = nullptr;
-
-	delete m_pGDICapture;
-	m_pGDICapture = nullptr;
-
-	// They *should* call this...VLC does at least, correctly.
-
-	// Release the device context stuff
-	LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out;
-    logRotate();
-
-	// release desktop capture
-
-	if (hRawBitmap)
-		DeleteObject(hRawBitmap); // don't need those bytes anymore -- I think we are supposed to delete just this and not hOldBitmap
-
-	if (pOldData) {
-		free(pOldData);
-		pOldData = NULL;
-	}
-}
 
 int CPushPinDesktop::getNegotiatedFinalWidth() {
 	int iImageWidth = m_rScreen.right - m_rScreen.left;
@@ -843,7 +867,7 @@ BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
 	EnumWindowParams* p = reinterpret_cast<EnumWindowParams*>(param);
 
 	bool hwnd_match = (QWORD) hwnd == p->find_hwnd;
-	bool hwnd_must_match = false; // capture type specify instance only TODO
+	bool hwnd_must_match = p->find_hwnd_must_match; // capture type specify instance only TODO
 
 	if (!hwnd_match && hwnd_must_match) { 
 		return TRUE;
@@ -859,8 +883,17 @@ BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
 
 	// debug("WindowsProcVerifier. HWND: %ld, class name:%S, class match: %d", hwnd, class_name, class_match);
 
-	// check exe match TODO
-	bool exe_match = true;
+	// check exe match
+	bool exe_match = false;
+	DWORD pid;
+	GetWindowThreadProcessId(hwnd, &pid);
+	HANDLE handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
+	LPTSTR exe_name = new TCHAR[buf_len];
+	if (handle != NULL) {
+		GetModuleFileNameEx(handle, NULL, exe_name, 1024);
+		exe_match = lstrcmp(exe_name, p->find_exe_name) == 0;
+		CloseHandle(handle);
+	}
 
 	bool found = exe_match && class_match;
 	if (found) {
@@ -868,15 +901,18 @@ BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
 		p->to_window_found = true;
 	}
 
+	delete[] exe_name;
 	delete[] class_name;
 	return !found;
 }
 
-HWND CPushPinDesktop::FindCaptureWindows(QWORD capture_handle, LPWSTR capture_class, LPWSTR capture_name) {
+HWND CPushPinDesktop::FindCaptureWindows(bool hwnd_must_match, QWORD capture_handle, LPWSTR capture_class, LPWSTR capture_name, LPWSTR capture_exe_name) {
 	EnumWindowParams cb;
 	cb.find_hwnd = capture_handle;
 	cb.find_class_name = capture_class;
 	cb.find_window_name = capture_name;
+	cb.find_exe_name = capture_exe_name;
+	cb.find_hwnd_must_match = hwnd_must_match;
 	cb.to_window_found = false;
 	cb.to_capture_hwnd = NULL;
 
