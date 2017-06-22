@@ -864,6 +864,14 @@ HRESULT CPushPinDesktop::OnThreadStartPlay() {
 
 BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
 {
+	EnumWindowParams* p = reinterpret_cast<EnumWindowParams*>(param);
+	bool hwnd_match = (QWORD) hwnd == p->find_hwnd;
+	bool hwnd_must_match = p->find_hwnd_must_match; // capture type specify instance only TODO
+
+	if (!hwnd_match && hwnd_must_match) { 
+		return TRUE;
+	}
+
 	if (!IsWindowVisible(hwnd)) {
 		return TRUE;
 	}
@@ -895,17 +903,9 @@ BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
 		return TRUE;
 	}
 
-	EnumWindowParams* p = reinterpret_cast<EnumWindowParams*>(param);
-	bool hwnd_match = (QWORD) hwnd == p->find_hwnd;
-	bool hwnd_must_match = p->find_hwnd_must_match; // capture type specify instance only TODO
+	const int buf_len = 1024;
 
-	if (!hwnd_match && hwnd_must_match) { 
-		return TRUE;
-	}
-
-	int buf_len = 1024;
-
-	TCHAR class_name[1024] = { 0 };
+	TCHAR class_name[buf_len] = { 0 };
 	GetClassName(hwnd, class_name, buf_len);
 
 	// check if class match
@@ -917,10 +917,10 @@ BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
 	DWORD pid;
 	GetWindowThreadProcessId(hwnd, &pid);
 	HANDLE handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
-	TCHAR exe_name[1024] = { 0 };
+	TCHAR exe_name[buf_len] = { 0 };
 
 	if (handle != NULL) {
-		GetModuleFileNameEx(handle, NULL, exe_name, 1024);
+		GetModuleFileNameEx(handle, NULL, exe_name, buf_len);
 		exe_match = lstrcmp(exe_name, p->find_exe_name) == 0;
 		CloseHandle(handle);
 	}
