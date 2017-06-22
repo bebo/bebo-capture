@@ -111,7 +111,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 		reReadCurrentStartXY(0);
 	}
 	else {
-		info("ignoring startx, starty since hwnd was specified");
+		debug("ignoring startx, starty since hwnd was specified");
 	}
 
 	int config_width = read_config_setting(TEXT("MaxCaptureWidth"), 1920, true);
@@ -213,7 +213,7 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		char * typeName = strtok(text, ":");
 		char * adapterId = strtok(NULL, ":");
 		char * desktopId = strtok(NULL, ":");
-		debug("CaptureId, %s:%s:%s", typeName, adapterId, desktopId);
+		info("CaptureId, %s:%s:%s", typeName, adapterId, desktopId);
 		if (adapterId != NULL) {
 			if (strcmp(typeName, "desktop") == 0) {
 				m_iDesktopAdapterNumber = atoi(adapterId);
@@ -275,6 +275,8 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	CheckPointer(pSample, E_POINTER);
 
 	while (!m_pDesktopCapture->IsReady() && !m_pDesktopCapture->ExceedMaxRetry()) {
+		info("Initializing desktop capture - adapter: %d, desktop: %d, size: %dx%d",
+			m_iDesktopAdapterNumber, m_iDesktopNumber, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
 		m_pDesktopCapture->Init(m_iDesktopAdapterNumber, m_iDesktopNumber, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
 
 		globalStart = GetTickCount();
@@ -322,7 +324,7 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 			int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
 			m_iFrameNumber += missed_nr;
 			countMissed += missed_nr;
-			warn("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
+			debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
 				missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
 			previousFrame = previousFrame + missed_nr * m_rtFrameLength;
 			missed = true;
@@ -461,20 +463,20 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			CSourceStream::m_pFilter->StreamTime(now);
 		}
 		else if (missed == false && m_iFrameNumber == 0) {
-			info("getting second frame");
+			debug("getting second frame");
 			missed = true;
 		}
 		else if (now > (previousFrame + 2 * m_rtFrameLength)) {
 			int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
 			m_iFrameNumber += missed_nr;
 			countMissed += missed_nr;
-			warn("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
+			debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
 				missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
 			previousFrame = previousFrame + missed_nr * m_rtFrameLength;
 			missed = true;
 		}
 		else {
-			info("late need to catch up");
+			debug("late need to catch up");
 			missed = true;
 		}
 
