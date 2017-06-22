@@ -862,10 +862,40 @@ HRESULT CPushPinDesktop::OnThreadStartPlay() {
 	return NOERROR;
 };
 
-BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param) 
+BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
 {
-	EnumWindowParams* p = reinterpret_cast<EnumWindowParams*>(param);
+	if (!IsWindowVisible(hwnd)) {
+		return TRUE;
+	}
 
+	HWND hwnd_try = GetAncestor(hwnd, GA_ROOTOWNER);
+	HWND hwnd_walk = NULL;
+	while (hwnd_try != hwnd_walk) {
+		hwnd_walk = hwnd_try;
+		hwnd_try = GetLastActivePopup(hwnd_walk);
+		if (IsWindowVisible(hwnd_try))
+			break;
+	}
+
+	if (hwnd_walk != hwnd) {
+		return TRUE;
+	}
+
+	TITLEBARINFO ti;
+	// the following removes some task tray programs and "Program Manager"
+	ti.cbSize = sizeof(ti);
+	GetTitleBarInfo(hwnd, &ti);
+	if (ti.rgstate[0] & STATE_SYSTEM_INVISIBLE && !(ti.rgstate[0] & STATE_SYSTEM_FOCUSABLE)) {
+		return TRUE;
+	}
+
+	// Tool windows should not be displayed either, these do not appear in the
+	// task bar.
+	if (GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) {
+		return TRUE;
+	}
+
+	EnumWindowParams* p = reinterpret_cast<EnumWindowParams*>(param);
 	bool hwnd_match = (QWORD) hwnd == p->find_hwnd;
 	bool hwnd_must_match = p->find_hwnd_must_match; // capture type specify instance only TODO
 
@@ -875,20 +905,20 @@ BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
 
 	int buf_len = 1024;
 
-	LPTSTR class_name = new TCHAR[buf_len];
+	TCHAR class_name[1024] = { 0 };
 	GetClassName(hwnd, class_name, buf_len);
 
 	// check if class match
 	bool class_match = lstrcmp(class_name, p->find_class_name) == 0;
 
-	// debug("WindowsProcVerifier. HWND: %ld, class name:%S, class match: %d", hwnd, class_name, class_match);
 
 	// check exe match
 	bool exe_match = false;
 	DWORD pid;
 	GetWindowThreadProcessId(hwnd, &pid);
 	HANDLE handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
-	LPTSTR exe_name = new TCHAR[buf_len];
+	TCHAR exe_name[1024] = { 0 };
+
 	if (handle != NULL) {
 		GetModuleFileNameEx(handle, NULL, exe_name, 1024);
 		exe_match = lstrcmp(exe_name, p->find_exe_name) == 0;
@@ -901,8 +931,8 @@ BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
 		p->to_window_found = true;
 	}
 
-	delete[] exe_name;
-	delete[] class_name;
+	// debug("WindowsProcVerifier. HWND: %lld, class name: %S, exe name: %S, found: %d", hwnd, class_name, exe_name, found);
+
 	return !found;
 }
 
