@@ -18,8 +18,6 @@
 // #pragma comment(lib,"dwmapi.lib")  // ?
 #include <dwmapi.h>
 
-
-
 extern int show_performance;
 
 long double PCFreqMillis = 0.0;
@@ -118,6 +116,24 @@ HRESULT RegGetDWord(HKEY hKey, LPCTSTR szValueName, DWORD * lpdwResult) {
 	return NOERROR;
 }
 
+HRESULT RegGetQWord(HKEY hKey, LPCTSTR szValueName, QWORD * lpdwResult) {
+	LONG lResult;
+	DWORD dwDataSize = sizeof(QWORD);
+	DWORD dwType = REG_QWORD;
+
+	// Check input parameters...
+	if (hKey == NULL || lpdwResult == NULL) return E_INVALIDARG;
+
+	// Get dword value from the registry...
+	lResult = RegQueryValueEx(hKey, szValueName, 0, &dwType, (LPBYTE) lpdwResult, &dwDataSize );
+
+	// Check result and make sure the registry value is a QWORD(REG_QWORD)...
+	if (lResult != ERROR_SUCCESS) return HRESULT_FROM_WIN32(lResult);
+	else if (dwType != REG_QWORD) return DISP_E_TYPEMISMATCH;
+
+	return NOERROR;
+}
+
 HRESULT RegGetSZ(HKEY hKey, LPCTSTR szValueName, LPBYTE data, LPDWORD datasize) {
 
 	DWORD dwType = REG_SZ;
@@ -151,7 +167,25 @@ HRESULT RegGetBeboSZ(LPCTSTR szValueName, LPBYTE data, LPDWORD datasize) {
 		// key doesn't exist in the reg at all...
 		return E_INVALIDARG;
 	}
-	debug("Registry key: %S value: %S (REG_SZ)", szValueName, data);
+	debug("Registry key: %S value: %ld (REG_SZ)", szValueName, data);
+	return NOERROR;
+}
+
+HRESULT RegGetBeboQWord(LPCTSTR szValueName, QWORD * data) {
+	HKEY hKey;
+	LONG i;
+	i = RegOpenKeyEx(HKEY_CURRENT_USER, L"SOFTWARE\\Bebo\\GameCapture", 0, KEY_READ, &hKey);
+
+	if (i != ERROR_SUCCESS) {
+		return E_INVALIDARG;
+	}
+	HRESULT hr = RegGetQWord(hKey, szValueName, data);
+	RegCloseKey(hKey);
+	if (FAILED(hr)) {
+		// key doesn't exist in the reg at all...
+		return E_INVALIDARG;
+	}
+	debug("Registry key: %S value: %ld (REG_QWORD)", szValueName, *data);
 	return NOERROR;
 }
 

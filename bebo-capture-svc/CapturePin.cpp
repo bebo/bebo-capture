@@ -11,6 +11,7 @@
 #include "CommonTypes.h"
 #include "d3d11.h"
 #include <dxgi.h>
+#include <Psapi.h>
 
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
 
@@ -22,6 +23,11 @@ DWORD globalStart; // for some debug performance benchmarking
 long countMissed = 0;
 long fastestRoundMillis = 1000000; // random big number
 long sumMillisTook = 0;
+
+char out[1000];
+// FIXME :  move these
+bool ever_started = false;
+boolean missed = false;
 
 #ifdef _DEBUG 
 int show_performance = 1;
@@ -54,11 +60,15 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	active(false),
 	m_pCaptureWindowName(NULL),
 	m_pCaptureWindowClassName(NULL),
+	m_pCaptureExeFullName(NULL),
 	game_context(NULL),
     m_iCaptureType(CAPTURE_INJECT),
 	m_pDesktopCapture(new DesktopCapture),
+	m_pGDICapture(new GDICapture),
 	m_iDesktopNumber(0),
-	m_iDesktopAdapterNumber(0)
+	m_iDesktopAdapterNumber(0),
+	m_iCaptureHandle(-1),
+	m_bCaptureOnce(0)
 {
 	info("CPushPinDesktop");
 	// Get the device context of the main display, just to get some metrics for it...
@@ -66,39 +76,6 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	memset(config, 0, sizeof game_capture_config);
 
 	init_hooks_thread = CreateThread(NULL, 0, init_hooks, NULL, 0, NULL);
-
-#if 0
-	m_iHwndToTrack = (HWND)read_config_setting(TEXT("hwnd_to_track"), NULL, false);
-	if (m_iHwndToTrack) {
-		info("using specified hwnd no decoration: %d", m_iHwndToTrack);
-		hScrDc = GetDC(m_iHwndToTrack); // using GetDC here seemingly allows you to capture "just a window" without decoration
-		m_bHwndTrackDecoration = false;
-	}
-	else {
-		m_iHwndToTrack = (HWND)read_config_setting(TEXT("hwnd_to_track_with_window_decoration"), NULL, false);
-		if (m_iHwndToTrack) {
-			info("using specified hwnd with decoration: %d", m_iHwndToTrack);
-			hScrDc = GetWindowDC(m_iHwndToTrack);
-			m_bHwndTrackDecoration = true;
-		}
-		else {
-			int useForeGroundWindow = read_config_setting(TEXT("capture_foreground_window_if_1"), 0, true);
-			if (useForeGroundWindow) {
-				info("using foreground window %d", GetForegroundWindow());
-				hScrDc = GetDC(GetForegroundWindow());
-			}
-			else {
-				// the default, just capture desktop
-				// hScrDc = CreateDC(TEXT("DISPLAY"), NULL, NULL, NULL); // possibly better than GetDC(0), supposed to be multi monitor?
-				// LocalOutput("using the dangerous CreateDC DISPLAY\n");
-				// danger, CreateDC DC is only good as long as this particular thread is still alive...hmm...is it better for directdraw
-				hScrDc = GetDC(NULL);
-			}
-		}
-	}
-	//m_iScreenBitDepth = GetTrueScreenDepth(hScrDc);
-	ASSERT_RAISE(hScrDc != 0); // 0 implies failure... [if using hwnd, can mean the window is gone!]
-#endif
 
 	// Get the dimensions of the main desktop window as the default
 	m_rScreen.left = m_rScreen.top = 0;
@@ -179,10 +156,30 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 		m_iCaptureConfigHeight, m_iCaptureConfigWidth, getCaptureDesiredFinalHeight(), getCaptureDesiredFinalWidth(), m_rScreen.top, m_rScreen.bottom, m_rScreen.left, m_rScreen.right, config_max_fps, m_bDeDupe, m_millisToSleepBeforePollForChanges, m_bReReadRegistry, m_iHwndToTrack);
 }
 
-char out[1000];
-// FIXME :  move these
-bool ever_started = false;
-boolean missed = false;
+CPushPinDesktop::~CPushPinDesktop()
+{
+	delete m_pDesktopCapture;
+	m_pDesktopCapture = nullptr;
+
+	delete m_pGDICapture;
+	m_pGDICapture = nullptr;
+
+	// They *should* call this...VLC does at least, correctly.
+
+	// Release the device context stuff
+	LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out;
+    logRotate();
+
+	// release desktop capture
+
+	if (hRawBitmap)
+		DeleteObject(hRawBitmap); // don't need those bytes anymore -- I think we are supposed to delete just this and not hOldBitmap
+
+	if (pOldData) {
+		free(pOldData);
+		pOldData = NULL;
+	}
+}
 
 void CPushPinDesktop::GetGameFromRegistry(void) {
 	DWORD size = 1024;
@@ -252,10 +249,35 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		}
 	}
 
+	size = sizeof(data);
+	if (RegGetBeboSZ(TEXT("CaptureExeFullName"), data, &size) == S_OK) {
+		LPWSTR old = m_pCaptureExeFullName;
+		m_pCaptureExeFullName = (LPWSTR) malloc(size * 2);
+		wsprintfW(m_pCaptureExeFullName, L"%s", data);
+		if (old == NULL || wcscmp(old, m_pCaptureExeFullName) != 0) {
+			info("m_pCaptureExeFullName: %S", m_pCaptureExeFullName);
+			if (old != NULL) {
+				free(old);
+			}
+		}
+	}
+
+	QWORD qout;
+	if (RegGetBeboQWord(TEXT("CaptureWindowHandle"), &qout) == S_OK) {
+		m_iCaptureHandle = qout;
+		info("CaptureWindowHandle: %ld", m_iCaptureHandle);
+	}
+
 	int oldAntiCheat = m_bCaptureAntiCheat;
 	m_bCaptureAntiCheat = read_config_setting(TEXT("CaptureAntiCheat"), 0, true) == 1;
 	if (oldAntiCheat != m_bCaptureAntiCheat) {
 		info("CaptureAntiCheat: %d", m_bCaptureAntiCheat);
+	}
+
+	int oldCaptureOnce = m_bCaptureOnce;
+	m_bCaptureOnce = read_config_setting(TEXT("CaptureOnce"), 0, true) == 1;
+	if (oldCaptureOnce != m_bCaptureOnce) {
+		info("CaptureOnce: %d", m_bCaptureOnce);
 	}
 	return;
 }
@@ -378,7 +400,6 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	return S_OK;
 }
 
-#if 1
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 {
 	__int64 startThisRound = StartCounter();
@@ -400,8 +421,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 		case CAPTURE_INJECT:
 			break;
 		case CAPTURE_GDI:
-			error("GDI CAPTURE IS NOT SUPPORTED YET");
-			break;
+			return FillBuffer_GDI(pSample);
 		case CAPTURE_DSHOW:
 			error("LIBDSHOW CAPTURE IS NOT SUPPRTED YET");
 			break;
@@ -526,116 +546,111 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	return S_OK;
 }
 
-
-# else
-HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
+HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 {
-	LocalOutput("video frame requested");
+	CheckPointer(pSample, E_POINTER);
+
+	while (!m_pGDICapture->IsReady()) {
+		debug("GDI Init - capture once: %d, handle: %ld, class name: %S, window name: %S, exe full name: %S", 
+			m_bCaptureOnce, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName);
+		HWND hwnd = FindCaptureWindows(m_bCaptureOnce, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName);
+		if (hwnd == NULL) {
+			error("Unable to initialize gdi capture. window not found.");
+			return S_FALSE;
+		}
+		m_pGDICapture->InitHDC(getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), hwnd);
+
+		globalStart = GetTickCount();
+		countMissed = 0;
+		sumMillisTook = 0;
+		fastestRoundMillis = LONG_MAX;
+		m_iFrameNumber = 0;
+		missed = true;
+		previousFrame = 0;
+		debug("frame_length: %d", m_rtFrameLength);
+	}
+
+	if (!m_pGDICapture->IsReady()) {
+		error("Unable to initialize gdi capture. Maximum retry exceeded.");
+		return S_FALSE;
+	}
 
 	__int64 startThisRound = StartCounter();
-	BYTE *pData;
 
-	CheckPointer(pSample, E_POINTER);
-	if (m_bReReadRegistry) {
-		reReadCurrentStartXY(1);
-	}
-
-
-	if (!ever_started) {
-		DbgBreak("!ever_started");
-
-		// allow it to startup until Run is called...so StreamTime can work see http://stackoverflow.com/questions/2469855/how-to-get-imediacontrol-run-to-start-a-file-playing-with-no-delay/2470548#2470548
-		// since StreamTime anticipates that the graph's start time has already been set
-		FILTER_STATE myState;
-		CSourceStream::m_pFilter->GetState(INFINITE, &myState);
-		while (myState != State_Running) {
-			// TODO accomodate for pausing better, we're single run only currently [does VLC do pausing even?]
-			Sleep(1);
-			LocalOutput("sleeping till graph running for audio...");
-			m_pParent->GetState(INFINITE, &myState);
+	long double millisThisRoundTook = 0;
+	CRefTime now;
+	now = 0;
+	
+	bool frame = false;
+	while (!frame) {
+		if (!active) {
+			info("inactive - fillbuffer_gdi");
+			return S_FALSE;
 		}
-		ever_started = true;
-	}
+		CSourceStream::m_pFilter->StreamTime(now);
+		if (now <= 0) {
+			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
+			debug("no reference graph clock - sleeping %d", dwMilliseconds);
+			Sleep(dwMilliseconds);
+		} else if (now < (previousFrame + m_rtFrameLength)) {
+			DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), m_rtFrameLength) / 10000L);
+			debug("sleeping - %d", dwMilliseconds);
+			Sleep(dwMilliseconds);
+		} else if (missed) {
+			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
+			debug("starting/missed - sleeping %d", dwMilliseconds);
+			Sleep(dwMilliseconds);
+			CSourceStream::m_pFilter->StreamTime(now);
+		} else if (now > (previousFrame + 2 * m_rtFrameLength)) {
+			int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
+			m_iFrameNumber += missed_nr;
+			countMissed += missed_nr;
+			warn("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
+				missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
+			previousFrame = previousFrame + missed_nr * m_rtFrameLength;
+			missed = true;
+		}
 
+		startThisRound = StartCounter();
+		frame = m_pGDICapture->GetFrame(pSample);
 
-	// Access the sample's data buffer
-	pSample->GetPointer(&pData);
-
-	// Make sure that we're still using video format
-	ASSERT_RETURN(m_mt.formattype == FORMAT_VideoInfo);
-
-	VIDEOINFOHEADER *pVih = (VIDEOINFOHEADER*)m_mt.pbFormat;
-
-	boolean gotNew = false; // dedupe stuff
-	while (!gotNew) {
-
-		CopyScreenToDataBlock(hScrDc, pData, (BITMAPINFO *) &(pVih->bmiHeader), pSample);
-
-		if (m_bDeDupe) {
-			if (memcmp(pData, pOldData, pSample->GetSize()) == 0) { // took desktop:  10ms for 640x1152, still 100 fps uh guess...
-				Sleep(m_millisToSleepBeforePollForChanges);
+		if (!frame) {
+			if (!IsWindow(m_pGDICapture->capturingHwnd())) {
+				info("window is no longer exists.");
+				return S_FALSE;
 			}
-			else {
-				gotNew = true;
-				memcpy( /* dest */ pOldData, pData, pSample->GetSize()); // took 4ms for 640x1152, but it's worth it LOL.
-				// LODO memcmp and memcpy in the same loop LOL.
+			/*
+			if (missed && now > (previousFrame + 10000000L / 5)) {
+				debug("fake frame");
+				countMissed += 1;
+				frame = m_pGDICapture->GetOldFrame(pSample);
 			}
+			*/
 		}
-		else {
-			// it's always new for everyone else (the typical case)
-			gotNew = true;
-		}
-	}
 
-	// capture some debug stats (how long it took) before we add in our own arbitrary delay to enforce fps...
-	long double millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
-	fastestRoundMillis = min(millisThisRoundTook, fastestRoundMillis); // keep stats :)
+		if (frame && previousFrame <= 0) {
+			frame = false;
+			previousFrame = now;
+			missed = false;
+			debug("skip first frame");
+		} 
+
+	}
+	missed = false;
+	millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
+	fastestRoundMillis = min(millisThisRoundTook, fastestRoundMillis);
 	sumMillisTook += millisThisRoundTook;
 
-	CRefTime now;
-	CRefTime endFrame;
-	now = 0;
-	CSourceStream::m_pFilter->StreamTime(now);
-	if ((now > 0) && (now < previousFrameEndTime)) { // now > 0 to accomodate for if there is no reference graph clock at all...also at boot strap time to ignore it XXXX can negatives even ever happen anymore though?
-		while (now < previousFrameEndTime) { // guarantees monotonicity too :P
-			LocalOutput("sleeping because %llu < %llu", now, previousFrameEndTime);
-			Sleep(1);
-			CSourceStream::m_pFilter->StreamTime(now);
-		}
-		// avoid a tidge of creep since we sleep until [typically] just past the previous end.
-		endFrame = previousFrameEndTime + m_rtFrameLength;
-		previousFrameEndTime = endFrame;
-
-	}
-	else {
-		// if there's no reference clock, it will "always" think it missed a frame
-		if (show_performance) {
-			if (now == 0)
-				LocalOutput("probable none reference clock, streaming fastly");
-			else
-				LocalOutput("it missed a frame--can't keep up %d %llu %llu", countMissed++, now, previousFrameEndTime); // we don't miss time typically I don't think, unless de-dupe is turned on, or aero, or slow computer, buffering problems downstream, etc.
-		}
-		// have to add a bit here, or it will always be "it missed a frame" for the next round...forever!
-		endFrame = now + m_rtFrameLength;
-		// most of this stuff I just made up because it "sounded right"
-		//LocalOutput("checking to see if I can catch up again now: %llu previous end: %llu subtr: %llu %i", now, previousFrameEndTime, previousFrameEndTime - m_rtFrameLength, previousFrameEndTime - m_rtFrameLength);
-		if (now > (previousFrameEndTime - (long long)m_rtFrameLength)) { // do I even need a long long cast?
-		  // let it pretend and try to catch up, it's not quite a frame behind
-			previousFrameEndTime = previousFrameEndTime + m_rtFrameLength;
-		}
-		else {
-			endFrame = now + m_rtFrameLength / 2; // ?? seems to not hurt, at least...I guess
-			previousFrameEndTime = endFrame;
-		}
-
-	}
-
 	// accomodate for 0 to avoid startup negatives, which would kill our math on the next loop...
-	previousFrameEndTime = max(0, previousFrameEndTime);
+	previousFrame = max(0, previousFrame);
+	// auto-correct drift
+	previousFrame = previousFrame + m_rtFrameLength;
 
-	pSample->SetTime((REFERENCE_TIME *)&now, (REFERENCE_TIME *)&endFrame);
-	//pSample->SetMediaTime((REFERENCE_TIME *)&now, (REFERENCE_TIME *) &endFrame); 
-	LocalOutput("timestamping video packet as %lld -> %lld", now, endFrame);
+	REFERENCE_TIME startFrame = m_iFrameNumber * m_rtFrameLength;
+	REFERENCE_TIME endFrame = startFrame + m_rtFrameLength;
+	pSample->SetTime((REFERENCE_TIME *)&startFrame, (REFERENCE_TIME *)&endFrame);
+	CSourceStream::m_pFilter->StreamTime(now);	
+	debug("timestamping (%11f) video packet %llf -> %llf length:(%11f) drift:(%llf)", 0.0001 * now, 0.0001 * startFrame, 0.0001 * endFrame, 0.0001 * (endFrame - startFrame), 0.0001 * (now - previousFrame));
 
 	m_iFrameNumber++;
 
@@ -645,18 +660,13 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	// only set discontinuous for the first...I think...
 	pSample->SetDiscontinuity(m_iFrameNumber <= 1);
 
-#ifdef _DEBUG
-	// the swprintf costs like 0.04ms (25000 fps LOL)
 	double m_fFpsSinceBeginningOfTime = ((double)m_iFrameNumber) / (GetTickCount() - globalStart) * 1000;
-	swprintf(out, L"done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed %d",
-		m_iFrameNumber, m_iCaptureConfigHeight, m_iCaptureConfigWidth, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0 * 1000 / millisThisRoundTook,
+	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed %d",
+		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0 * 1000 / millisThisRoundTook,
 		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed);
-	LocalOutput(out);
-	set_config_string_setting(L"frame_stats", out);
-#endif
+	debug(out);
 	return S_OK;
 }
-#endif
 
 float CPushPinDesktop::GetFps() {
 	return (float)(UNITS / m_rtFrameLength);
@@ -689,169 +699,6 @@ void CPushPinDesktop::reReadCurrentStartXY(int isReRead) {
 	}
 }
 
-CPushPinDesktop::~CPushPinDesktop()
-{
-	delete m_pDesktopCapture;
-	m_pDesktopCapture = nullptr;
-
-	// They *should* call this...VLC does at least, correctly.
-
-	// Release the device context stuff
-	::ReleaseDC(NULL, hScrDc);
-	::DeleteDC(hScrDc);
-	LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out;
-    logRotate();
-
-	// release desktop capture
-
-	if (hRawBitmap)
-		DeleteObject(hRawBitmap); // don't need those bytes anymore -- I think we are supposed to delete just this and not hOldBitmap
-
-	if (pOldData) {
-		free(pOldData);
-		pOldData = NULL;
-	}
-}
-
-void CPushPinDesktop::CopyScreenToDataBlock(HDC hScrDC, BYTE *pData, BITMAPINFO *pHeader, IMediaSample *pSample)
-{
-	debug("CPushPinDesktop::CopyScreenToDataBlock - start");
-	HDC         hMemDC;         // screen DC and memory DC
-	HBITMAP     hOldBitmap;    // handles to device-dependent bitmaps
-	int         nX, nY;       // coordinates of rectangle to grab
-	int         iFinalStretchHeight = getNegotiatedFinalHeight();
-	int         iFinalStretchWidth = getNegotiatedFinalWidth();
-
-	ASSERT_RAISE(!IsRectEmpty(&m_rScreen)); // that would be unexpected
-	// create a DC for the screen and create
-	// a memory DC compatible to screen DC   
-
-	hMemDC = CreateCompatibleDC(hScrDC); //  0.02ms Anything else to reuse, this one's pretty fast...?
-
-	// determine points of where to grab from it, though I think we control these with m_rScreen
-	nX = m_rScreen.left;
-	nY = m_rScreen.top;
-
-	// sanity checks--except we don't want it apparently, to allow upstream to dynamically change the size? Can it do that?
-	ASSERT_RAISE(m_rScreen.bottom - m_rScreen.top == iFinalStretchHeight);
-	ASSERT_RAISE(m_rScreen.right - m_rScreen.left == iFinalStretchWidth);
-
-	// select new bitmap into memory DC
-	hOldBitmap = (HBITMAP)SelectObject(hMemDC, hRawBitmap);
-
-	doJustBitBltOrScaling(hMemDC, m_iCaptureConfigWidth, m_iCaptureConfigHeight, iFinalStretchWidth, iFinalStretchHeight, hScrDC, nX, nY);
-
-	if (m_bCaptureMouse)
-		AddMouse(hMemDC, &m_rScreen, hScrDC, m_iHwndToTrack);
-
-	// select old bitmap back into memory DC and get handle to
-	// bitmap of the capture...whatever this even means...	
-	HBITMAP hRawBitmap2 = (HBITMAP)SelectObject(hMemDC, hOldBitmap);
-
-	BITMAPINFO tweakableHeader;
-	memcpy(&tweakableHeader, pHeader, sizeof(BITMAPINFO));
-
-	if (m_bConvertToI420) {
-		tweakableHeader.bmiHeader.biBitCount = 32;
-		tweakableHeader.bmiHeader.biCompression = BI_RGB;
-		tweakableHeader.bmiHeader.biHeight = -tweakableHeader.bmiHeader.biHeight; // prevent upside down conversion from i420...
-		tweakableHeader.bmiHeader.biSizeImage = GetBitmapSize(&tweakableHeader.bmiHeader);
-	}
-
-	if (m_bConvertToI420) {
-		// copy it to a temporary buffer first
-		doDIBits(hScrDC, hRawBitmap2, iFinalStretchHeight, pOldData, &tweakableHeader);
-		// memcpy(/* dest */ pOldData, pData, pSample->GetSize()); // 12.8ms for 1920x1080 desktop
-		// TODO smarter conversion/memcpy's here [?] we could combine scaling with rgb32_to_i420 for instance...
-		// or maybe we should integrate with libswscale here so they can request whatever they want LOL. (might be a higher quality i420 conversion...)
-		// now convert it to i420 into the "real" buffer
-		rgb32_to_i420(iFinalStretchWidth, iFinalStretchHeight, (const char *)pOldData, (char *)pData);// took 36.8ms for 1920x1080 desktop	
-	}
-	else {
-		doDIBits(hScrDC, hRawBitmap2, iFinalStretchHeight, pData, &tweakableHeader);
-
-		// if we're on vlc work around for odd pixel widths and 24 bit...<sigh>, like a width of 134 breaks vlc with 24bit. wow. see also GetMediaType comments
-		wchar_t buffer[MAX_PATH + 1]; // on the stack
-		GetModuleFileName(NULL, buffer, MAX_PATH);
-		if (wcsstr(buffer, L"vlc.exe") > 0) {
-			int bitCount = tweakableHeader.bmiHeader.biBitCount;
-			int stride = (iFinalStretchWidth * (bitCount / 8)) % 4; // see if lines have some padding at the end...
-			//int stride2 = (tweakableHeader.bmiHeader.biWidth * (tweakableHeader.bmiHeader.biBitCount / 8) + 3) & ~3; // ??
-			if (stride > 0) {
-				stride = 4 - stride; // they round up to 4 word boundary
-				// don't need to copy the first line :P
-				int lineSizeBytes = iFinalStretchWidth*(bitCount / 8);
-				int lineSizeTotal = lineSizeBytes + stride;
-				for (int line = 1; line < iFinalStretchHeight; line++) {
-					//*dst, *src, size
-					// memmove required since these overlap...
-					memmove(&pData[line*lineSizeBytes], &pData[line*lineSizeTotal], lineSizeBytes);
-				}
-			}
-		}
-	}
-
-	// clean up
-	DeleteDC(hMemDC);
-}
-
-void CPushPinDesktop::doJustBitBltOrScaling(HDC hMemDC, int nWidth, int nHeight, int iFinalWidth, int iFinalHeight, HDC hScrDC, int nX, int nY) {
-	__int64 start = StartCounter();
-
-	boolean notNeedStretching = (iFinalWidth == nWidth) && (iFinalHeight == nHeight);
-
-	if (m_iHwndToTrack != NULL)
-		ASSERT_RAISE(notNeedStretching); // we don't support HWND plus scaling...hmm... LODO move assertion LODO implement this (low prio since they probably are just needing that window, not with scaling too [?])
-
-	int captureType = SRCCOPY;
-	if (m_bUseCaptureBlt)
-		captureType = captureType | CAPTUREBLT; // CAPTUREBLT here [last param] is for layered (transparent) windows in non-aero I guess (which happens to include the mouse, but we do that elsewhere)
-
-	if (notNeedStretching) {
-
-		if (m_iHwndToTrack != NULL) {
-			// make sure we only capture 'not too much' i.e. not past the border of this HWND, for the case of Aero being turned off, it shows other windows that we don't want
-			// a bit confusing...
-			RECT p;
-			if (m_bHwndTrackDecoration)
-				GetWindowRectIncludingAero(m_iHwndToTrack, &p); // 0.05 ms
-			else
-				GetClientRect(m_iHwndToTrack, &p); // 0.005 ms
-
-			  //GetWindowRect(m_iHwndToTrack, &p); // 0.005 ms
-
-			nWidth = min(p.right - p.left, nWidth);
-			nHeight = min(p.bottom - p.top, nHeight);
-		}
-
-		// Bit block transfer from screen our compatible memory DC.	Apparently this is faster than stretching.
-		BitBlt(hMemDC, 0, 0, nWidth, nHeight, hScrDC, nX, nY, captureType);
-		// 9.3 ms 1920x1080 -> 1920x1080 (100 fps) (11 ms? 14? random?)
-	}
-	else {
-		if (m_iStretchMode == 0)
-		{
-			// low quality scaling -- looks terrible
-			SetStretchBltMode(hMemDC, COLORONCOLOR); // the SetStretchBltMode call itself takes 0.003ms
-			// COLORONCOLOR took 92ms for 1920x1080 -> 1000x1000, 69ms/80ms for 1920x1080 -> 500x500 aero
-			// 20 ms 1920x1080 -> 500x500 without aero
-			// LODO can we get better results with good speed? it is sooo ugly!
-		}
-		else
-		{
-			SetStretchBltMode(hMemDC, HALFTONE);
-			// high quality stretching
-			// HALFTONE took 160ms for 1920x1080 -> 1000x1000, 107ms/120ms for 1920x1080 -> 1000x1000
-			// 50 ms 1920x1080 -> 500x500 without aero
-			SetBrushOrgEx(hMemDC, 0, 0, 0); // MSDN says I should call this after using HALFTONE
-		}
-		StretchBlt(hMemDC, 0, 0, iFinalWidth, iFinalHeight, hScrDC, nX, nY, nWidth, nHeight, captureType);
-	}
-
-	if (show_performance)
-		info("%s took %.02f ms", notNeedStretching ? "bitblt" : "stretchblt", GetCounterSinceStartMillis(start));
-
-}
 
 int CPushPinDesktop::getNegotiatedFinalWidth() {
 	int iImageWidth = m_rScreen.right - m_rScreen.left;
@@ -885,17 +732,6 @@ int CPushPinDesktop::getCaptureDesiredFinalHeight() {
 		return m_iCaptureConfigHeight; // defaults to full/config static
 	}
 }
-
-void CPushPinDesktop::doDIBits(HDC hScrDC, HBITMAP hRawBitmap, int nHeightScanLines, BYTE *pData, BITMAPINFO *pHeader) {
-	__int64 start = StartCounter();
-
-	// Copy the bitmap data into the provided BYTE buffer, in the right format I guess.
-	GetDIBits(hScrDC, hRawBitmap, 0, nHeightScanLines, pData, pHeader, DIB_RGB_COLORS);  // just copies raw bits to pData, I guess, from an HBITMAP handle. "like" GetObject, but also does conversions [?]
-
-	if (show_performance)
-		info("doDiBits took %.02fms", GetCounterSinceStartMillis(start)); // took 1.1/3.8ms total, so this brings us down to 80fps compared to max 251...but for larger things might make more difference...
-}
-
 
 //
 // DecideBufferSize
@@ -1025,3 +861,91 @@ HRESULT CPushPinDesktop::OnThreadStartPlay() {
 	debug("CPushPinDesktop::OnThreadStartPlay()");
 	return NOERROR;
 };
+
+BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
+{
+	EnumWindowParams* p = reinterpret_cast<EnumWindowParams*>(param);
+	bool hwnd_match = (QWORD) hwnd == p->find_hwnd;
+	bool hwnd_must_match = p->find_hwnd_must_match; // capture type specify instance only TODO
+
+	if (!hwnd_match && hwnd_must_match) { 
+		return TRUE;
+	}
+
+	if (!IsWindowVisible(hwnd)) {
+		return TRUE;
+	}
+
+	HWND hwnd_try = GetAncestor(hwnd, GA_ROOTOWNER);
+	HWND hwnd_walk = NULL;
+	while (hwnd_try != hwnd_walk) {
+		hwnd_walk = hwnd_try;
+		hwnd_try = GetLastActivePopup(hwnd_walk);
+		if (IsWindowVisible(hwnd_try))
+			break;
+	}
+
+	if (hwnd_walk != hwnd) {
+		return TRUE;
+	}
+
+	TITLEBARINFO ti;
+	// the following removes some task tray programs and "Program Manager"
+	ti.cbSize = sizeof(ti);
+	GetTitleBarInfo(hwnd, &ti);
+	if (ti.rgstate[0] & STATE_SYSTEM_INVISIBLE && !(ti.rgstate[0] & STATE_SYSTEM_FOCUSABLE)) {
+		return TRUE;
+	}
+
+	// Tool windows should not be displayed either, these do not appear in the
+	// task bar.
+	if (GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) {
+		return TRUE;
+	}
+
+	const int buf_len = 1024;
+
+	TCHAR class_name[buf_len] = { 0 };
+	GetClassName(hwnd, class_name, buf_len);
+
+	// check if class match
+	bool class_match = lstrcmp(class_name, p->find_class_name) == 0;
+
+
+	// check exe match
+	bool exe_match = false;
+	DWORD pid;
+	GetWindowThreadProcessId(hwnd, &pid);
+	HANDLE handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
+	TCHAR exe_name[buf_len] = { 0 };
+
+	if (handle != NULL) {
+		GetModuleFileNameEx(handle, NULL, exe_name, buf_len);
+		exe_match = lstrcmp(exe_name, p->find_exe_name) == 0;
+		CloseHandle(handle);
+	}
+
+	bool found = exe_match && class_match;
+	if (found) {
+		p->to_capture_hwnd = hwnd;
+		p->to_window_found = true;
+	}
+
+	// debug("WindowsProcVerifier. HWND: %lld, class name: %S, exe name: %S, found: %d", hwnd, class_name, exe_name, found);
+
+	return !found;
+}
+
+HWND CPushPinDesktop::FindCaptureWindows(bool hwnd_must_match, QWORD capture_handle, LPWSTR capture_class, LPWSTR capture_name, LPWSTR capture_exe_name) {
+	EnumWindowParams cb;
+	cb.find_hwnd = capture_handle;
+	cb.find_class_name = capture_class;
+	cb.find_window_name = capture_name;
+	cb.find_exe_name = capture_exe_name;
+	cb.find_hwnd_must_match = hwnd_must_match;
+	cb.to_window_found = false;
+	cb.to_capture_hwnd = NULL;
+
+	EnumWindows(&WindowsProcVerifier, reinterpret_cast<LPARAM>(&cb));
+	return cb.to_capture_hwnd;
+}

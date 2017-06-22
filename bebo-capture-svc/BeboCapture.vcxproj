@@ -326,6 +326,7 @@
     <ClCompile Include="DesktopCapture.cpp" />
     <ClCompile Include="DibHelper.cpp" />
     <ClCompile Include="GameCapture.cpp" />
+    <ClCompile Include="GDICapture.cpp" />
     <ClCompile Include="load-graphics-offsets.c" />
     <ClCompile Include="Logging.cpp" />
     <ClCompile Include="parent.cpp" />
@@ -351,6 +352,7 @@
     <ClInclude Include="CaptureGuids.h" />
     <ClInclude Include="Capture.h" />
     <ClInclude Include="GameCapture.h" />
+    <ClInclude Include="GDICapture.h" />
     <ClInclude Include="IBeboCapture.h" />
     <ClInclude Include="Logging.h" />
   </ItemGroup>

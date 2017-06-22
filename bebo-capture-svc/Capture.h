@@ -5,10 +5,13 @@
 //
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------------------------
+#ifndef CAPTURE_H
+#define CAPTURE_H
 
 #include <strsafe.h>
 #include "DesktopCapture.h"
 #include "GameCapture.h"
+#include "GDICapture.h"
 #include "CommonTypes.h"
 
 /*
@@ -28,6 +31,7 @@ const REFERENCE_TIME FPS_1  = UNITS / 1;
 
 // Filter name strings
 #define g_wszPushDesktop    L"Bebo Game Capture Filter"
+typedef unsigned __int64 QWORD;
 
 const int CAPTURE_INJECT = 0;
 const int CAPTURE_GDI = 1;
@@ -98,6 +102,7 @@ protected:
 	int m_iCaptureConfigHeight;
 	LPWSTR m_pCaptureWindowName;
 	LPWSTR m_pCaptureWindowClassName;
+	LPWSTR m_pCaptureExeFullName;
 
 	HANDLE init_hooks_thread;
 
@@ -107,6 +112,7 @@ protected:
 	CGameCapture* m_pParent;
 
 	DesktopCapture* m_pDesktopCapture;
+	GDICapture* m_pGDICapture;
 
 	HDC hScrDc;
 	HBITMAP     hRawBitmap;
@@ -117,6 +123,7 @@ protected:
 	bool m_bConvertToI420;
 	bool m_bUseCaptureBlt;
 	bool m_bCaptureMouse;
+	bool m_bCaptureOnce;
 	volatile bool active;
 	//int m_iScreenBitDepth;
 	bool m_bCaptureAntiCheat;
@@ -128,9 +135,6 @@ protected:
 	int m_millisToSleepBeforePollForChanges;
 	HWND m_iHwndToTrack;
 	boolean m_bHwndTrackDecoration;
-	void CopyScreenToDataBlock(HDC hScrDc, BYTE *pData, BITMAPINFO *pHeader, IMediaSample *pSample);
-	void doJustBitBltOrScaling(HDC hMemDC, int nWidth, int nHeight,int nDestWidth,int nDestHeight, HDC hScrDC, int nX, int nY);
-	void doDIBits(HDC hScrDC, HBITMAP hRawBitmap, int nHeightScanLines, BYTE *pData, BITMAPINFO *pHeader);
 
     BYTE *pOldData;
 
@@ -143,9 +147,10 @@ protected:
 	int getCaptureDesiredFinalWidth();
 	int getCaptureDesiredFinalHeight();
 
+	QWORD m_iCaptureHandle;
 
 public:
-
+	
 	//CSourceStream overrrides
 	HRESULT OnThreadCreate(void);
 	HRESULT OnThreadDestroy(void);
@@ -153,6 +158,7 @@ public:
 	void GetGameFromRegistry(void);
 	HRESULT Inactive(void);
 	HRESULT Active(void);
+
 
     //////////////////////////////////////////////////////////////////////////
     //  IUnknown
@@ -178,6 +184,7 @@ public:
     HRESULT FillBuffer(IMediaSample *pSample);
 
     HRESULT FillBuffer_Desktop(IMediaSample *pSample);
+    HRESULT FillBuffer_GDI(IMediaSample *pSample);
 
     // Set the agreed media type and set up the necessary parameters
     HRESULT SetMediaType(const CMediaType *pMediaType);
@@ -205,5 +212,18 @@ public:
 
 private:
 	void reReadCurrentStartXY(int isReRead);
+	HWND FindCaptureWindows(bool hwnd_must_match, QWORD captureHandle, LPWSTR className, LPWSTR windowName, LPWSTR exeName);
 
 };
+
+struct EnumWindowParams {
+	bool find_hwnd_must_match;
+	QWORD find_hwnd;
+	LPWSTR find_class_name;
+	LPWSTR find_window_name;
+	LPWSTR find_exe_name;
+
+	bool to_window_found;
+	HWND to_capture_hwnd;
+};
+#endif
