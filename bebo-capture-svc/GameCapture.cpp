@@ -77,22 +77,21 @@ struct game_capture {
 	struct dstr                   klass;
 	struct dstr                   executable;
 	enum window_priority          priority;
-//	obs_hotkey_pair_id            hotkey_pair;
 	volatile long                 hotkey_window;
 	volatile bool                 deactivate_hook;
 	volatile bool                 activate_hook_now;
 	LONG64						  frame_interval;
-	bool                          wait_for_target_startup : 1;
-	bool                          showing : 1;
-	bool                          active : 1;
-	bool                          capturing : 1;
-	bool                          activate_hook : 1;
-	bool                          process_is_64bit : 1;
-	bool                          error_acquiring : 1;
-	bool                          dwm_capture : 1;
-	bool                          initial_config : 1;
-	bool                          convert_16bit : 1;
-	bool                          is_app : 1;
+	bool                          wait_for_target_startup;
+	bool                          showing;
+	bool                          active;
+	bool                          capturing;
+	bool                          activate_hook;
+	bool                          process_is_64bit;
+	bool                          error_acquiring;
+	bool                          dwm_capture;
+	bool                          initial_config;
+	bool                          convert_16bit;
+	bool                          is_app;
 
 	struct game_capture_config    config;
 
@@ -1460,13 +1459,6 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 			memcpy(line_out, line_in, best_pitch);
 		}
 	}
-
-#if 0 // FIXME
-	if (gs_texture_map(gc->texture, &data, &pitch)) {
-
-		gs_texture_unmap(gc->texture);
-	}
-#endif
 
 	ReleaseMutex(mutex);
 	return true;

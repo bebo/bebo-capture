@@ -47,8 +47,6 @@ static DWORD WINAPI init_hooks(LPVOID unused)
 // the default child constructor...
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	: CSourceStream(NAME("Push Source CPushPinDesktop child/pin"), phr, pFilter, L"Capture"),
-	m_bReReadRegistry(0),
-	m_bDeDupe(0),
 	m_iFrameNumber(0),
 	pOldData(NULL),
 	m_bConvertToI420(true),
@@ -65,8 +63,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
     m_iCaptureType(CAPTURE_INJECT),
 	m_pDesktopCapture(new DesktopCapture),
 	m_pGDICapture(new GDICapture),
-	m_iDesktopNumber(0),
-	m_iDesktopAdapterNumber(0),
+	m_iDesktopNumber(-1),
+	m_iDesktopAdapterNumber(-1),
 	m_iCaptureHandle(-1),
 	m_bCaptureOnce(0)
 {
@@ -84,12 +82,6 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 
 	// now read some custom settings...
 	WarmupCounter();
-	if (!m_iHwndToTrack) {
-		reReadCurrentStartXY(0);
-	}
-	else {
-		debug("ignoring startx, starty since hwnd was specified");
-	}
 
 	int config_width = read_config_setting(TEXT("MaxCaptureWidth"), 1920, true);
 	ASSERT_RAISE(config_width >= 0); // negatives not allowed...
@@ -127,14 +119,6 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_iCaptureConfigHeight = m_rScreen.bottom - m_rScreen.top;
 	ASSERT_RAISE(m_iCaptureConfigHeight > 0);
 
-	m_iStretchToThisConfigWidth = read_config_setting(TEXT("stretch_to_width"), 0, false);
-	m_iStretchToThisConfigHeight = read_config_setting(TEXT("stretch_to_height"), 0, false);
-	m_iStretchMode = read_config_setting(TEXT("stretch_mode_high_quality_if_1"), 0, true); // guess it's either stretch mode 0 or 1
-	ASSERT_RAISE(m_iStretchToThisConfigWidth >= 0 && m_iStretchToThisConfigHeight >= 0 && m_iStretchMode >= 0); // sanity checks
-
-	m_bUseCaptureBlt = read_config_setting(TEXT("capture_transparent_windows_including_mouse_in_non_aero_if_1_causes_annoying_mouse_flicker"), 0, true) == 1;
-	m_bCaptureMouse = read_config_setting(TEXT("capture_mouse_default_1"), 1, true) == 1;
-
 	// default 30 fps...hmm...
 	int config_max_fps = read_config_setting(TEXT("MaxCaptureFPS"), 60, false);
 	ASSERT_RAISE(config_max_fps > 0);	
@@ -143,17 +127,10 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	// m_rtFrameLength is also re-negotiated later...
 	m_rtFrameLength = UNITS / config_max_fps;
 
-	if (is_config_set_to_1(TEXT("track_new_x_y_coords_each_frame_if_1"))) {
-		m_bReReadRegistry = 1; // takes 0.416880ms, but I thought it took more when I made it off by default :P
-	}
-	if (is_config_set_to_1(TEXT("dedup_if_1"))) {
-		m_bDeDupe = 1; // takes 10 or 20ms...but useful to me! :)
-	}
-	m_millisToSleepBeforePollForChanges = read_config_setting(TEXT("millis_to_sleep_between_poll_for_dedupe_changes"), 10, true);
 	GetGameFromRegistry();
 
-	LOGF(INFO, "default/from reg read config as: %dx%d -> %dx%d (%d top %d bottom %d l %d r) %dfps, dedupe? %d, millis between dedupe polling %d, m_bReReadRegistry? %d hwnd:%d \n",
-		m_iCaptureConfigHeight, m_iCaptureConfigWidth, getCaptureDesiredFinalHeight(), getCaptureDesiredFinalWidth(), m_rScreen.top, m_rScreen.bottom, m_rScreen.left, m_rScreen.right, config_max_fps, m_bDeDupe, m_millisToSleepBeforePollForChanges, m_bReReadRegistry, m_iHwndToTrack);
+	LOGF(INFO, "default/from reg read config as: %dx%d -> %dx%d (%d top %d bottom %d l %d r) %dfps",
+		m_iCaptureConfigHeight, m_iCaptureConfigWidth, getCaptureDesiredFinalHeight(), getCaptureDesiredFinalWidth(), m_rScreen.top, m_rScreen.bottom, m_rScreen.left, m_rScreen.right, config_max_fps);
 }
 
 CPushPinDesktop::~CPushPinDesktop()
@@ -204,13 +181,15 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 	}
     
 	size = sizeof(data);
+	int oldAdapterId = m_iDesktopAdapterNumber;
+	int oldDesktopId = m_iDesktopNumber;
 	if (RegGetBeboSZ(TEXT("CaptureId"), data, &size) == S_OK) {
 		char text[1024];
 		sprintf(text, "%S", data);
 		char * typeName = strtok(text, ":");
 		char * adapterId = strtok(NULL, ":");
 		char * desktopId = strtok(NULL, ":");
-		info("CaptureId, %s:%s:%s", typeName, adapterId, desktopId);
+
 		if (adapterId != NULL) {
 			if (strcmp(typeName, "desktop") == 0) {
 				m_iDesktopAdapterNumber = atoi(adapterId);
@@ -220,6 +199,11 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 			if (strcmp(typeName, "desktop") == 0) {
 				m_iDesktopNumber = atoi(desktopId);
 			}
+		}
+
+		if (oldAdapterId != m_iDesktopAdapterNumber ||
+			oldDesktopId != m_iDesktopNumber) {
+			info("CaptureId: %s:%s:%s", typeName, adapterId, desktopId);
 		}
 	}
 
@@ -263,9 +247,12 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 	}
 
 	QWORD qout;
+	QWORD oldCaptureHandle = m_iCaptureHandle;
 	if (RegGetBeboQWord(TEXT("CaptureWindowHandle"), &qout) == S_OK) {
 		m_iCaptureHandle = qout;
-		info("CaptureWindowHandle: %ld", m_iCaptureHandle);
+		if (oldCaptureHandle != m_iCaptureHandle) {
+			info("CaptureWindowHandle: %ld", m_iCaptureHandle);
+		}
 	}
 
 	int oldAntiCheat = m_bCaptureAntiCheat;
@@ -405,9 +392,6 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	__int64 startThisRound = StartCounter();
 
 	CheckPointer(pSample, E_POINTER);
-	if (m_bReReadRegistry) {
-		reReadCurrentStartXY(1);
-	}	
 
 	long double millisThisRoundTook = 0;
 	CRefTime now;
@@ -605,7 +589,7 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 			int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
 			m_iFrameNumber += missed_nr;
 			countMissed += missed_nr;
-			warn("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
+			debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
 				missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
 			previousFrame = previousFrame + missed_nr * m_rtFrameLength;
 			missed = true;
@@ -672,34 +656,6 @@ float CPushPinDesktop::GetFps() {
 	return (float)(UNITS / m_rtFrameLength);
 }
 
-void CPushPinDesktop::reReadCurrentStartXY(int isReRead) {
-	__int64 start = StartCounter();
-
-	// assume 0 means not set...negative ignore :)
-	// TODO no overflows, that's a bad value too... they cause a crash, I think! [position youtube too far bottom right, track it...]
-	int old_x = m_rScreen.left;
-	int old_y = m_rScreen.top;
-
-	int config_start_x = read_config_setting(TEXT("start_x"), m_rScreen.left, true);
-	m_rScreen.left = config_start_x;
-
-	// is there a better way to do this registry stuff?
-	int config_start_y = read_config_setting(TEXT("start_y"), m_rScreen.top, true);
-	m_rScreen.top = config_start_y;
-	if (old_x != m_rScreen.left || old_y != m_rScreen.top) {
-		if (isReRead) {
-			m_rScreen.right = m_rScreen.left + m_iCaptureConfigWidth;
-			m_rScreen.bottom = m_rScreen.top + m_iCaptureConfigHeight;
-		}
-	}
-
-	if (show_performance) {
-		//swprintf(out, 1000, L"new screen pos from reg: %d %d\n", config_start_x, config_start_y);
-		info("[re]readCurrentPosition (including swprintf call) took %.02fms", GetCounterSinceStartMillis(start)); // takes 0.42ms (2000 fps)
-	}
-}
-
-
 int CPushPinDesktop::getNegotiatedFinalWidth() {
 	int iImageWidth = m_rScreen.right - m_rScreen.left;
 	ASSERT_RAISE(iImageWidth > 0);
@@ -715,22 +671,12 @@ int CPushPinDesktop::getNegotiatedFinalHeight() {
 
 int CPushPinDesktop::getCaptureDesiredFinalWidth() {
 	debug("getCaptureDesiredFinalWidth: %d", m_iCaptureConfigWidth);
-	if (m_iStretchToThisConfigWidth > 0) {
-		return m_iStretchToThisConfigWidth;
-	}
-	else {
-		return m_iCaptureConfigWidth; // full/config setting, static
-	}
+	return m_iCaptureConfigWidth; // full/config setting, static
 }
 
 int CPushPinDesktop::getCaptureDesiredFinalHeight() {
 	debug("getCaptureDesiredFinalHeight: %d", m_iCaptureConfigHeight);
-	if (m_iStretchToThisConfigHeight > 0) {
-		return m_iStretchToThisConfigHeight;
-	}
-	else {
-		return m_iCaptureConfigHeight; // defaults to full/config static
-	}
+	return m_iCaptureConfigHeight; // defaults to full/config static
 }
 
 //

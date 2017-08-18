@@ -130,17 +130,8 @@ protected:
 
 	float GetFps();
 
-	boolean m_bReReadRegistry;
-	boolean m_bDeDupe;
-	int m_millisToSleepBeforePollForChanges;
-	HWND m_iHwndToTrack;
-	boolean m_bHwndTrackDecoration;
-
     BYTE *pOldData;
 
-	int m_iStretchToThisConfigWidth;
-    int m_iStretchToThisConfigHeight;
-    int m_iStretchMode;
 	int m_iCaptureType;
 	int m_iDesktopNumber;
 	int m_iDesktopAdapterNumber;
@@ -211,7 +202,6 @@ public:
     HRESULT STDMETHODCALLTYPE QuerySupported(REFGUID guidPropSet, DWORD dwPropID, DWORD *pTypeSupport);
 
 private:
-	void reReadCurrentStartXY(int isReRead);
 	HWND FindCaptureWindows(bool hwnd_must_match, QWORD captureHandle, LPWSTR className, LPWSTR windowName, LPWSTR exeName);
 
 };
