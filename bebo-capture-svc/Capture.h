@@ -37,6 +37,7 @@ const int CAPTURE_INJECT = 0;
 const int CAPTURE_GDI = 1;
 const int CAPTURE_DESKTOP = 2;
 const int CAPTURE_DSHOW = 3;
+const int MAX_FPS = 60;
 
 class CPushPinDesktop;
 
@@ -90,8 +91,6 @@ protected:
 	// float m_fFps; use the method to get this now
 	REFERENCE_TIME previousFrame;
 
-    RECT m_rScreen;                     // Rect containing screen coordinates we are currently "capturing"
-
     int getNegotiatedFinalWidth();
     int getNegotiatedFinalHeight();                   
 
@@ -129,6 +128,7 @@ protected:
 	bool m_bCaptureAntiCheat;
 
 	float GetFps();
+	float GetMaxFps() { return MAX_FPS; };
 
     BYTE *pOldData;
 
@@ -147,6 +147,7 @@ public:
 	HRESULT OnThreadDestroy(void);
 	HRESULT OnThreadStartPlay(void);
 	void GetGameFromRegistry(void);
+	void GetConstraintsFromRegistry(void);
 	HRESULT Inactive(void);
 	HRESULT Active(void);
 

@@ -24,8 +24,8 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 //
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 1, 0, 0, 0
-PRODUCTVERSION 1, 0, 0, 0
+FILEVERSION 1, 0, 7, 2
+PRODUCTVERSION 1, 0, 7, 2
 FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
 FILEFLAGS 0x9L
@@ -42,12 +42,12 @@ BLOCK "040904b0"
 BEGIN
 VALUE "CompanyName", "Pigs in Flight, Inc. (Bebo)"
 VALUE "FileDescription", "Bebo Game Capture"
-VALUE "FileVersion", "1.0.0.0"
+VALUE "FileVersion", "1.0.7.2"
 VALUE "InternalName", "BeboGameCapture.dll"
 VALUE "LegalCopyright", "Copyright (C) Bebo, 2017"
 VALUE "OriginalFilename", "BeboGameCapture.dll"
 VALUE "ProductName", "Bebo Game capture"
-VALUE "ProductVersion", "1.0.0.0"
+VALUE "ProductVersion", "1.0.7.2"
 END
 END
 BLOCK "VarFileInfo"

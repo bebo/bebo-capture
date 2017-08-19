@@ -75,62 +75,27 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 
 	init_hooks_thread = CreateThread(NULL, 0, init_hooks, NULL, 0, NULL);
 
-	// Get the dimensions of the main desktop window as the default
-	m_rScreen.left = m_rScreen.top = 0;
-	m_rScreen.right = GetDeviceCaps(hScrDc, HORZRES); // NB this *fails* for dual monitor support currently... but we just get the wrong width by default, at least with aero windows 7 both can capture both monitors
-	m_rScreen.bottom = GetDeviceCaps(hScrDc, VERTRES);
-
 	// now read some custom settings...
 	WarmupCounter();
 
-	int config_width = read_config_setting(TEXT("MaxCaptureWidth"), 1920, true);
-	ASSERT_RAISE(config_width >= 0); // negatives not allowed...
-	info("MaxCaptureWidth: %d", config_width);
-	int config_height = read_config_setting(TEXT("MaxCaptureHeight"), 1080, true);
-	ASSERT_RAISE(config_height >= 0); // negatives not allowed, if it's set :)
-	info("MaxCaptureHeight: %d", config_height);
+	m_iCaptureConfigWidth = read_config_setting(TEXT("CaptureWidth"), 1280, true);
+	ASSERT_RAISE(m_iCaptureConfigWidth >= 0); // negatives not allowed...
+	info("CaptureWidth: %d", m_iCaptureConfigWidth);
 
-	if (config_width > 0) {
-		int desired = m_rScreen.left + config_width;
-		//int max_possible = m_rScreen.right; // disabled check until I get dual monitor working. or should I allow off screen captures anyway?
-		//if(desired < max_possible)
-		m_rScreen.right = desired;
-		//else
-		//	m_rScreen.right = max_possible;
-	}
-	else {
-		// leave full screen
-	}
+	m_iCaptureConfigHeight = read_config_setting(TEXT("CaptureHeight"), 720, true);
+	ASSERT_RAISE(m_iCaptureConfigHeight >= 0); // negatives not allowed, if it's set :)
+	info("CaptureHeight: %d", m_iCaptureConfigHeight);
 
-	m_iCaptureConfigWidth = m_rScreen.right - m_rScreen.left;
-	ASSERT_RAISE(m_iCaptureConfigWidth > 0);
+	int config_fps = read_config_setting(TEXT("CaptureFPS"), 30, false);
+	ASSERT_RAISE(config_fps > 0);	
+	info("CaptureFPS: %d", config_fps);
 
-	if (config_height > 0) {
-		int desired = m_rScreen.top + config_height;
-		//int max_possible = m_rScreen.bottom; // disabled, see above.
-		//if(desired < max_possible)
-		m_rScreen.bottom = desired;
-		//else
-		//	m_rScreen.bottom = max_possible;
-	}
-	else {
-		// leave full screen
-	}
-	m_iCaptureConfigHeight = m_rScreen.bottom - m_rScreen.top;
-	ASSERT_RAISE(m_iCaptureConfigHeight > 0);
-
-	// default 30 fps...hmm...
-	int config_max_fps = read_config_setting(TEXT("MaxCaptureFPS"), 60, false);
-	ASSERT_RAISE(config_max_fps > 0);	
-	info("MaxCaptureFPS: %d", config_max_fps);
-
-	// m_rtFrameLength is also re-negotiated later...
-	m_rtFrameLength = UNITS / config_max_fps;
+	m_rtFrameLength = UNITS / config_fps;
 
 	GetGameFromRegistry();
 
-	LOGF(INFO, "default/from reg read config as: %dx%d -> %dx%d (%d top %d bottom %d l %d r) %dfps",
-		m_iCaptureConfigHeight, m_iCaptureConfigWidth, getCaptureDesiredFinalHeight(), getCaptureDesiredFinalWidth(), m_rScreen.top, m_rScreen.bottom, m_rScreen.left, m_rScreen.right, config_max_fps);
+	LOGF(INFO, "default/from reg read config as: %dx%d -> %dx%d %dfps",
+		m_iCaptureConfigHeight, m_iCaptureConfigWidth, getCaptureDesiredFinalHeight(), getCaptureDesiredFinalWidth(), config_fps);
 }
 
 CPushPinDesktop::~CPushPinDesktop()
@@ -158,9 +123,34 @@ CPushPinDesktop::~CPushPinDesktop()
 	}
 }
 
+void CPushPinDesktop::GetConstraintsFromRegistry(void) {
+	int oldCaptureConfigWidth = m_iCaptureConfigWidth;
+	int newCaptureConfigWidth = read_config_setting(TEXT("CaptureWidth"), 1280, true);
+	if (oldCaptureConfigWidth != newCaptureConfigWidth) {
+		m_iCaptureConfigWidth = newCaptureConfigWidth;
+		info("CaptureWidth: %d", m_iCaptureConfigWidth);
+	}
+
+	int oldCaptureConfigHeight = m_iCaptureConfigHeight;
+	int newCaptureConfigHeight = read_config_setting(TEXT("CaptureHeight"), 720, true);
+	if (oldCaptureConfigHeight != newCaptureConfigHeight) {
+		m_iCaptureConfigHeight = newCaptureConfigHeight;
+		info("CaptureHeight: %d", m_iCaptureConfigHeight);
+	}
+
+	int oldCaptureFPS = GetFps();
+	int newCaptureFPS = read_config_setting(TEXT("CaptureFPS"), 30, false);
+	if (oldCaptureFPS != newCaptureFPS) {
+		m_rtFrameLength = UNITS / newCaptureFPS;
+		info("CaptureFPS: %d", newCaptureFPS);
+	}
+}
+
 void CPushPinDesktop::GetGameFromRegistry(void) {
 	DWORD size = 1024;
 	BYTE data[1024];
+
+	GetConstraintsFromRegistry();
 
 	if (RegGetBeboSZ(TEXT("CaptureType"), data, &size) == S_OK) {
 		int old = m_iCaptureType;
@@ -266,6 +256,7 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 	if (oldCaptureOnce != m_bCaptureOnce) {
 		info("CaptureOnce: %d", m_bCaptureOnce);
 	}
+
 	return;
 }
 
@@ -657,14 +648,14 @@ float CPushPinDesktop::GetFps() {
 }
 
 int CPushPinDesktop::getNegotiatedFinalWidth() {
-	int iImageWidth = m_rScreen.right - m_rScreen.left;
+	int iImageWidth = m_iCaptureConfigWidth;
 	ASSERT_RAISE(iImageWidth > 0);
 	return iImageWidth;
 }
 
 int CPushPinDesktop::getNegotiatedFinalHeight() {
 	// might be smaller than the "getCaptureDesiredFinalWidth" if they tell us to give them an even smaller setting...
-	int iImageHeight = m_rScreen.bottom - m_rScreen.top;
+	int iImageHeight = m_iCaptureConfigHeight;
 	ASSERT_RAISE(iImageHeight > 0);
 	return iImageHeight;
 }

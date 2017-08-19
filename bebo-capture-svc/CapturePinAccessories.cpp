@@ -278,7 +278,6 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 	HRESULT hr = CSourceStream::SetMediaType(pMediaType); // assigns our local m_mt via m_mt.Set(*pmt) ... 
 	m_bConvertToI420 = false; // in case we are re-negotiating the type and it was set to i420 before...
 
-
 	if (!SUCCEEDED(hr)) {
 		error_pmt("SetMediaType - SetMediaType failed", pMediaType);
 		return hr;
@@ -316,9 +315,6 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
         m_rtFrameLength = pvi->AvgTimePerFrame; // allow them to set whatever fps they request, i.e. if it's less than the max default.  VLC command line can specify this, for instance...
         set_fps(&game_context, m_rtFrameLength * 100);
     }
-    // also setup scaling here, as WFMLE and ffplay and VLC all get here...
-	m_rScreen.right = m_rScreen.left + pvi->bmiHeader.biWidth; // allow them to set whatever "scaling size" they want [set m_rScreen is negotiated right here]
-	m_rScreen.bottom = m_rScreen.top + pvi->bmiHeader.biHeight;
 
     char debug_buffer[1024];
     if (hr == S_OK) {
@@ -429,7 +425,9 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetNumberOfCapabilities(int *piCount,
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TYPE **pmt, BYTE *pSCC)
 {
     CAutoLock cAutoLock(m_pFilter->pStateLock());
+
 	HRESULT hr = GetMediaType(iIndex, &m_mt); // ensure setup/re-use m_mt ...
+
 	// some are indeed shared, apparently.
     if(FAILED(hr))
     {
@@ -437,12 +435,13 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TY
         return hr;
     }
 
+
     *pmt = CreateMediaType(&m_mt); // a windows lib method, also does a copy for us
 	if (*pmt == NULL) {
 		error("GetStreamCaps p: %d - E_OUTOFMEMORY", iIndex);
 		return E_OUTOFMEMORY;
 	}
-	
+
     DECLARE_PTR(VIDEO_STREAM_CONFIG_CAPS, pvscc, pSCC);
 	
     /*
@@ -619,6 +618,7 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
 	//DebugBreak();
 	CheckPointer(pmt, E_POINTER);
 	CAutoLock cAutoLock(m_pFilter->pStateLock());
+
 	char debug_buffer[1024];
 	//info("GameCapture::GetMediaType position:%d", iPosition);
 	if (m_bFormatAlreadySet) {
