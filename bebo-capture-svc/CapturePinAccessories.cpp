@@ -311,10 +311,17 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 	}
     
     // The frame rate at which your filter should produce data is determined by the AvgTimePerFrame field of VIDEOINFOHEADER
-    if (pvi->AvgTimePerFrame) { // or should Set Format accept this? hmm...
+	
+	// Workaround: an issue which WebRTC GetUserMedia would fail on going from 30fps -> 60 fps.
+	// We set 60 (MaxFPS) on GetMediaType, for some reason, webrtc would always negotiate whatever
+	// what given at GetMediaType and not necessarily based on the GetUserMedia constraints
+	// Thusm we're going to ignore what's being asked, but just used what's in the registry. 
+	/*
+	if (pvi->AvgTimePerFrame) { // or should Set Format accept this? hmm...
         m_rtFrameLength = pvi->AvgTimePerFrame; // allow them to set whatever fps they request, i.e. if it's less than the max default.  VLC command line can specify this, for instance...
         set_fps(&game_context, m_rtFrameLength * 100);
     }
+	*/
 
     char debug_buffer[1024];
     if (hr == S_OK) {
@@ -480,7 +487,7 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TY
 	pvscc->MaxFrameInterval = 500000000; // 0.02 fps :) [though it could go lower, really...]
 
     pvscc->MinBitsPerSecond = (LONG) 1*1*8*GetFps(); // if in 8 bit mode 1x1. I guess.
-    pvscc->MaxBitsPerSecond = (LONG) getCaptureDesiredFinalWidth()*getCaptureDesiredFinalHeight()*32*GetFps() + 44; // + 44 header size? + the palette?
+    pvscc->MaxBitsPerSecond = (LONG) getCaptureDesiredFinalWidth()*getCaptureDesiredFinalHeight()*32*GetMaxFps() + 44; // + 44 header size? + the palette?
 
 	char debug_buffer[1024];
 	snprintf(debug_buffer, 1024, "GetStreamCaps S_OK p:%d", iIndex);
@@ -749,14 +756,14 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
 
     // Now adjust some parameters that are the same for all formats
     pvi->bmiHeader.biSize       = sizeof(BITMAPINFOHEADER);
-    pvi->bmiHeader.biWidth      = getCaptureDesiredFinalWidth();
-    pvi->bmiHeader.biHeight     = getCaptureDesiredFinalHeight();
+	pvi->bmiHeader.biWidth		= getCaptureDesiredFinalWidth();
+	pvi->bmiHeader.biHeight		= getCaptureDesiredFinalHeight();
     pvi->bmiHeader.biPlanes     = 1;
 	pvi->bmiHeader.biSizeImage = GetBitmapSize(&pvi->bmiHeader); // calculates the size for us, after we gave it the width and everything else we already chucked into it
     pmt->SetSampleSize(pvi->bmiHeader.biSizeImage); // use the above size
 
 	pvi->bmiHeader.biClrImportant = 0;
-	pvi->AvgTimePerFrame = m_rtFrameLength; // from our config or default
+	pvi->AvgTimePerFrame = (UNITS / GetMaxFps());
 
     SetRectEmpty(&(pvi->rcSource)); // we want the whole image area rendered.
     SetRectEmpty(&(pvi->rcTarget)); // no particular destination rectangle
