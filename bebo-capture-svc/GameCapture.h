@@ -28,3 +28,7 @@ void * hook(void **data, LPCWSTR windowClassName, LPCWSTR windowName, game_captu
 boolean get_game_frame(void ** data, boolean missed, IMediaSample *pSample);
 boolean stop_game_capture(void ** data);
 void set_fps(void **data, uint64_t frame_interval);
+
+int ABGR10ToI420(const uint8_t* src_argb, int src_stride_argb, uint8_t* dst_y, int dst_stride_y, uint8_t* dst_u,int dst_stride_u, uint8_t* dst_v, int dst_stride_v, int width, int height);
+void ABGR10ToYRow_C(const uint8_t* src_argb0, uint8_t* dst_y, int width);
+void ABGR10ToUVRow_C(const uint8_t* src_rgb0, int src_stride_rgb, uint8_t* dst_u, uint8_t* dst_v, int width);

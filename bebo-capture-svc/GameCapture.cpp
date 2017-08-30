@@ -1,4 +1,4 @@
-#include "GameCapture.h"
+﻿#include "GameCapture.h"
 
 #include "Logging.h"
 #include <dshow.h>
@@ -1372,7 +1372,7 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 		int err = NULL;
 		if (gc->global_hook_info->format == DXGI_FORMAT_R8G8B8A8_UNORM) {
 			// Overwatch
-			err = libyuv::ABGRToI420(src_frame,
+			err = libyuv::ARGBToI420(src_frame,
 				src_stride_frame,
 				dst_y,
 				dst_stride_y,
@@ -1409,25 +1409,7 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 				height);
 		} else if (gc->global_hook_info->format == DXGI_FORMAT_R10G10B10A2_UNORM) {
 			// unreal engine, pubg
-			uint32 *src = (uint32*)src_frame;
-			uint8 *dst8 = (uint8*)malloc(width * height * 4);
-			uint32 *dst = (uint32*)dst8;
-			int pxl_count = width * height;
-
-			for (int i = 0; i < pxl_count;  i++) {
-				uint32 currentPixel = src[i];
-
-				//AABBBBBB BBBBGGGG GGGGGGRR RRRRRRRR
-				uint32 a = (currentPixel & 0xC0000000);
-				uint32 b = (currentPixel & 0x3FC00000) >> 6;
-				uint32 g = (currentPixel & 0xFF000) >> 4;
-				uint32 r = (currentPixel & 0x3FC) >> 2;
-
-				uint32 rgba = a | b | g | r;
-				dst[i] = rgba;
-			}
-
-			err = libyuv::ABGRToI420(dst8,
+			err = ABGR10ToI420(src_frame,
 				src_stride_frame,
 				dst_y,
 				dst_stride_y,
@@ -1437,8 +1419,7 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 				dst_stride_v,
 				width,
 				height);
-			free(dst8);
-
+				
 		} else {
 			warn("Unknown DXGI FORMAT %d", gc->global_hook_info->format);
 		}
@@ -1634,3 +1615,124 @@ boolean stop_game_capture(void **data) {
 	stop_capture(gc);
 	return true;
 }
+
+
+// color conversion
+static __inline int RGBToY(uint8_t r, uint8_t g, uint8_t b) {
+	return (66 * r + 129 * g + 25 * b + 0x1080) >> 8;
+}
+
+static __inline int RGBToU(uint8_t r, uint8_t g, uint8_t b) {
+	return (112 * b - 74 * g - 38 * r + 0x8080) >> 8;
+}
+static __inline int RGBToV(uint8_t r, uint8_t g, uint8_t b) {
+	return (112 * r - 94 * g - 18 * b + 0x8080) >> 8;
+}
+
+void ABGR10ToYRow_C(const uint8_t* src_argb0, uint8_t* dst_y, int width) {
+	int x;
+	for (x = 0; x < width; ++x) {
+		uint8_t r = (src_argb0[0] & 0xFC) >> 2 | (src_argb0[1] & 0x3) << 6;
+		uint8_t g = (src_argb0[1] & 0xF0) >> 4 | (src_argb0[2] & 0xF) << 4;
+		uint8_t b = (src_argb0[2] & 0xC0) >> 6 | (src_argb0[3] & 0x3F) << 2;
+		dst_y[0] = RGBToY(r, g, b);
+		src_argb0 += 4;
+		dst_y += 1;
+	}
+}
+
+
+void ABGR10ToUVRow_C(const uint8_t* src_rgb0, int src_stride_rgb,
+	uint8_t* dst_u, uint8_t* dst_v, int width) {
+	const uint8_t* src_rgb1 = src_rgb0 + src_stride_rgb;
+	int x;
+	for (x = 0; x < width - 1; x += 2) {
+		uint8_t r0 = (src_rgb0[0] & 0xFC) >> 2 | (src_rgb0[1] & 0x3) << 6;
+		uint8_t g0 = (src_rgb0[1] & 0xF0) >> 4 | (src_rgb0[2] & 0xF) << 4;
+		uint8_t b0 = (src_rgb0[2] & 0xC0) >> 6 | (src_rgb0[3] & 0x3F) << 2;
+
+		uint8_t r1 = (src_rgb0[4] & 0xFC) >> 2 | (src_rgb0[5] & 0x3) << 6;
+		uint8_t g1 = (src_rgb0[5] & 0xF0) >> 4 | (src_rgb0[6] & 0xF) << 4;
+		uint8_t b1 = (src_rgb0[6] & 0xC0) >> 6 | (src_rgb0[7] & 0x3F) << 2;
+
+		uint8_t r2 = (src_rgb1[0] & 0xFC) >> 2 | (src_rgb1[1] & 0x3) << 6;
+		uint8_t g2 = (src_rgb1[1] & 0xF0) >> 4 | (src_rgb1[2] & 0xF) << 4;
+		uint8_t b2 = (src_rgb1[2] & 0xC0) >> 6 | (src_rgb1[3] & 0x3F) << 2;
+
+		uint8_t r3 = (src_rgb1[4] & 0xFC) >> 2 | (src_rgb1[5] & 0x3) << 6;
+		uint8_t g3 = (src_rgb1[5] & 0xF0) >> 4 | (src_rgb1[6] & 0xF) << 4;
+		uint8_t b3 = (src_rgb1[6] & 0xC0) >> 6 | (src_rgb1[7] & 0x3F) << 2;
+
+		uint8_t ab = (b0 + b1 + b2 + b3) >> 2;
+		uint8_t ag = (g0 + g1 + g2 + g3) >> 2;
+		uint8_t ar = (r0 + r1 + r2 + r3) >> 2;
+
+		dst_u[0] = RGBToU(ar, ag, ab);
+		dst_v[0] = RGBToV(ar, ag, ab);
+		src_rgb0 += 4 * 2;
+		src_rgb1 += 4 * 2;
+		dst_u += 1;
+		dst_v += 1;
+	}
+	if (width & 1) {
+		uint8_t r0 = (src_rgb0[0] & 0xFC) >> 2 | (src_rgb0[1] & 0x3) << 6;
+		uint8_t g0 = (src_rgb0[1] & 0xF0) >> 4 | (src_rgb0[2] & 0xF) << 4;
+		uint8_t b0 = (src_rgb0[2] & 0xC0) >> 6 | (src_rgb0[3] & 0x3F) << 2;
+
+		uint8_t r2 = (src_rgb1[0] & 0xFC) >> 2 | (src_rgb1[1] & 0x3) << 6;
+		uint8_t g2 = (src_rgb1[1] & 0xF0) >> 4 | (src_rgb1[2] & 0xF) << 4;
+		uint8_t b2 = (src_rgb1[2] & 0xC0) >> 6 | (src_rgb1[3] & 0x3F) << 2;
+
+		uint8_t ab = (b0 + b2) >> 1;
+		uint8_t ag = (g0 + g2) >> 1;
+		uint8_t ar = (r0 + r2) >> 1;
+
+		dst_u[0] = RGBToU(ar, ag, ab);
+		dst_v[0] = RGBToV(ar, ag, ab);
+	}
+}
+
+int ABGR10ToI420(const uint8_t* src_argb,
+	int src_stride_argb,
+	uint8_t* dst_y,
+	int dst_stride_y,
+	uint8_t* dst_u,
+	int dst_stride_u,
+	uint8_t* dst_v,
+	int dst_stride_v,
+	int width,
+	int height) {
+	int y;
+	void(*ARGBToUVRow)(const uint8_t* src_argb0, int src_stride_argb, uint8_t* dst_u,
+		uint8_t* dst_v, int width) = ABGR10ToUVRow_C;
+	void(*ARGBToYRow)(const uint8_t* src_argb, uint8_t* dst_y, int width) = ABGR10ToYRow_C;
+
+	if (!src_argb || !dst_y || !dst_u || !dst_v || width <= 0 || height == 0) {
+		return -1;
+	}
+
+	// Negative height means invert the image.
+	if (height < 0) {
+		height = -height;
+		src_argb = src_argb + (height - 1) * src_stride_argb;
+		src_stride_argb = -src_stride_argb;
+	}
+
+	for (y = 0; y < height - 1; y += 2) {
+		ARGBToUVRow(src_argb, src_stride_argb, dst_u, dst_v, width);
+		ARGBToYRow(src_argb, dst_y, width);
+		ARGBToYRow(src_argb + src_stride_argb, dst_y + dst_stride_y, width);
+		src_argb += src_stride_argb * 2;
+		dst_y += dst_stride_y * 2;
+		dst_u += dst_stride_u;
+		dst_v += dst_stride_v;
+	}
+
+	if (height & 1) {
+		ARGBToUVRow(src_argb, 0, dst_u, dst_v, width);
+		ARGBToYRow(src_argb, dst_y, width);
+	}
+	return 0;
+}
+
+
