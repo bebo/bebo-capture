@@ -1372,7 +1372,7 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 		int err = NULL;
 		if (gc->global_hook_info->format == DXGI_FORMAT_R8G8B8A8_UNORM) {
 			// Overwatch
-			err = libyuv::ARGBToI420(src_frame,
+			err = libyuv::ABGRToI420(src_frame,
 				src_stride_frame,
 				dst_y,
 				dst_stride_y,
