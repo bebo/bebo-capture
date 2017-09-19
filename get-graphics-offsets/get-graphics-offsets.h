@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "graphics-hook-info.h"
+#include "../util/graphics-hook-info.h"
 
 #define DUMMY_WNDCLASS "get_addrs_wndclass"
 

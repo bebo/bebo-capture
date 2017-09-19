@@ -1,10 +1,9 @@
-#include "pch.h"
 #include <d3d11.h>
 #include <dxgi.h>
 
 #include "dxgi-helpers.hpp"
 #include "graphics-hook.h"
-#include "funchook.h"
+#include "./funchook.h"
 
 struct d3d11_data {
 	ID3D11Device                   *device; /* do not release */
@@ -14,9 +13,9 @@ struct d3d11_data {
 	uint32_t                       cx;
 	uint32_t                       cy;
 	DXGI_FORMAT                    format;
-	bool                           using_shtex : 1;
-	bool                           using_scale : 1;
-	bool                           multisampled : 1;
+	bool                           using_shtex;
+	bool                           using_scale;
+	bool                           multisampled;
 
 	ID3D11Texture2D                *scale_tex;
 	ID3D11ShaderResourceView       *scale_resource;
@@ -59,7 +58,6 @@ static struct d3d11_data data = {};
 
 void d3d11_free(void)
 {
-	DbgOut("d3d11_free");
 	if (data.scale_tex)
 		data.scale_tex->Release();
 	if (data.scale_resource)
@@ -446,7 +444,6 @@ static bool d3d11_init_scaling(void)
 
 static bool d3d11_shmem_init_buffers(size_t idx)
 {
-	DbgOut("d3d11_shmem_init_buffers");
 	bool success;
 
 	success = create_d3d11_stage_surface(&data.copy_surfaces[idx]);
@@ -483,7 +480,6 @@ static bool d3d11_shmem_init_buffers(size_t idx)
 
 static bool d3d11_shmem_init(HWND window)
 {
-	DbgOut("d3d11_shmem_init");
 	data.using_shtex = false;
 
 	for (size_t i = 0; i < NUM_BUFFERS; i++) {
@@ -503,7 +499,6 @@ static bool d3d11_shmem_init(HWND window)
 
 static bool d3d11_shtex_init(HWND window)
 {
-	DbgOut("d3d11_shtex_init");
 	ID3D11ShaderResourceView *resource = nullptr;
 	bool success;
 
@@ -530,7 +525,6 @@ static bool d3d11_shtex_init(HWND window)
 
 static void d3d11_init(IDXGISwapChain *swap)
 {
-	DbgOut("d3d11_init");
 	bool success = true;
 	HWND window;
 	HRESULT hr;
@@ -748,7 +742,6 @@ static inline void d3d11_scale_texture(ID3D11RenderTargetView *target,
 static inline void d3d11_copy_texture(ID3D11Resource *dst, ID3D11Resource *src)
 {
 	if (data.multisampled) {
-		DbgOut("data.multisampled");
 		data.context->ResolveSubresource(dst, 0, src, 0, data.format);
 	} else {
 		data.context->CopyResource(dst, src);

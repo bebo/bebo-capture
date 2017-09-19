@@ -4,8 +4,8 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <stdbool.h>
-#include "obfuscate.h"
-#include "inject-library.h"
+#include "../util/obfuscate.h"
+#include "../util/inject-library.h"
 
 #if defined(_MSC_VER) && !defined(inline)
 #define inline __inline
@@ -101,6 +101,7 @@ int main(int argc, char *argv_ansi[])
 	LPWSTR *argv;
 	int ret = INJECT_ERROR_INVALID_PARAMS;
 
+	SetErrorMode(SEM_FAILCRITICALERRORS);
 	load_debug_privilege();
 
 	pCommandLineW = GetCommandLineW();

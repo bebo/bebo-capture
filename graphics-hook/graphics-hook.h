@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "graphics-hook-config.h"
 
@@ -7,10 +7,9 @@
 #pragma warning(disable: 4152)
 #endif
 
-#include "graphics-hook-info.h"
-#include "../third_party/ipc-util/ipc-util/pipe.h"
+#include "../util/graphics-hook-info.h"
+#include <ipc-util/pipe.h>
 #include <psapi.h>
-#include "../util/platform.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,13 +19,6 @@ extern "C" {
 #endif
 #endif
 
-#define DEBUG_OUTPUT 1
-#ifdef DEBUG_OUTPUT
-#define DbgOut(x) OutputDebugStringA(x)
-#else
-#define DbgOut(x)
-#endif
-
 #define NUM_BUFFERS 3
 
 extern void hlog(const char *format, ...);
@@ -34,7 +26,7 @@ extern void hlog_hr(const char *text, HRESULT hr);
 static inline const char *get_process_name(void);
 static inline HMODULE get_system_module(const char *module);
 static inline HMODULE load_system_library(const char *module);
-//extern uint64_t os_gettime_ns(void);
+extern uint64_t os_gettime_ns(void);
 
 static inline bool capture_active(void);
 static inline bool capture_ready(void);
@@ -151,7 +143,13 @@ static inline HMODULE load_system_library(const char *name)
 
 static inline bool capture_alive(void)
 {
-	return !!FindWindowW(keepalive_name, NULL);
+	HANDLE handle = OpenMutexW(SYNCHRONIZE, false, keepalive_name);
+	CloseHandle(handle);
+
+	if (handle)
+		return true;
+
+	return GetLastError() != ERROR_FILE_NOT_FOUND;
 }
 
 static inline bool capture_active(void)
@@ -220,8 +218,7 @@ extern bool init_pipe(void);
 
 static inline bool capture_should_init(void)
 {
-	bool restarted = capture_restarted();
-	if (!capture_active() && restarted) {
+	if (!capture_active() && capture_restarted()) {
 		if (capture_alive()) {
 			if (!ipc_pipe_client_valid(&pipe)) {
 				init_pipe();

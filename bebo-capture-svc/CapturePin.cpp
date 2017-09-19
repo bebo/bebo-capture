@@ -35,12 +35,14 @@ int show_performance = 1;
 int show_performance = 0;
 #endif
 
+volatile bool initialized = false;
+
 static DWORD WINAPI init_hooks(LPVOID unused)
 {
-	//	 if (USE_HOOK_ADDRESS_CACHE &&
-	//		 cached_versions_match() &&
-	load_graphics_offsets(true);
-	load_graphics_offsets(false);
+	info("init_hooks: load graphics offsets start");
+	bool x32 = load_graphics_offsets(true);
+	bool x64 = load_graphics_offsets(false);
+	info("init_hooks: load graphics offsets complete - is32bit: %d, is64bit: %d", x32, x64);
 	return 0;
 }
 
@@ -66,29 +68,32 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_iDesktopNumber(-1),
 	m_iDesktopAdapterNumber(-1),
 	m_iCaptureHandle(-1),
-	m_bCaptureOnce(0)
+	m_bCaptureOnce(0),
+	init_hooks_thread(NULL)
 {
 	info("CPushPinDesktop");
 	// Get the device context of the main display, just to get some metrics for it...
 	config = (struct game_capture_config*) malloc(sizeof game_capture_config);
 	memset(config, 0, sizeof game_capture_config);
 
-	init_hooks_thread = CreateThread(NULL, 0, init_hooks, NULL, 0, NULL);
+	if (!initialized) {
+		init_hooks_thread = CreateThread(NULL, 0, init_hooks, NULL, 0, NULL);
+		DWORD result = WaitForSingleObject(init_hooks_thread, INFINITE);
+		initialized = true;
+		info("init_hooks_thread result: 0x%08x", result);
+	}
 
 	// now read some custom settings...
 	WarmupCounter();
 
 	m_iCaptureConfigWidth = read_config_setting(TEXT("CaptureWidth"), 1280, true);
 	ASSERT_RAISE(m_iCaptureConfigWidth >= 0); // negatives not allowed...
-	info("CaptureWidth: %d", m_iCaptureConfigWidth);
 
 	m_iCaptureConfigHeight = read_config_setting(TEXT("CaptureHeight"), 720, true);
 	ASSERT_RAISE(m_iCaptureConfigHeight >= 0); // negatives not allowed, if it's set :)
-	info("CaptureHeight: %d", m_iCaptureConfigHeight);
 
 	int config_fps = read_config_setting(TEXT("CaptureFPS"), 30, false);
 	ASSERT_RAISE(config_fps > 0);	
-	info("CaptureFPS: %d", config_fps);
 
 	m_rtFrameLength = UNITS / config_fps;
 
@@ -110,7 +115,6 @@ CPushPinDesktop::~CPushPinDesktop()
 
 	// Release the device context stuff
 	LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out;
-    logRotate();
 
 	// release desktop capture
 
@@ -410,7 +414,6 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 		}
 
 		if (!isReady(&game_context)) {
-
 			config->scale_cx = m_iCaptureConfigWidth;
 			config->scale_cy = m_iCaptureConfigHeight;
 			config->force_scaling = 1;
@@ -786,7 +789,7 @@ HRESULT CPushPinDesktop::OnThreadCreate() {
 }
 
 HRESULT CPushPinDesktop::OnThreadDestroy() {
-	debug("CPushPinDesktop::OnThreadDestroy()");
+	info("CPushPinDesktop::OnThreadDestroy");
 	if (game_context) {
 		stop_game_capture(&game_context);
 		game_context = NULL;

@@ -1,6 +1,5 @@
 #define PSAPI_VERSION 1
-// #include <obs.h>
-#include "dstr.h"
+#include "./dstr.h"
 
 #include <windows.h>
 #include <psapi.h>
@@ -23,13 +22,13 @@ static inline char *decode_str(const char *src)
 }
 
 extern void build_window_strings(const char *str,
-		char **class,
+		char **klass,
 		char **title,
 		char **exe)
 {
 	char **strlist;
 
-	*class = NULL;
+	*klass = NULL;
 	*title = NULL;
 	*exe   = NULL;
 
@@ -41,7 +40,7 @@ extern void build_window_strings(const char *str,
 
 	if (strlist && strlist[0] && strlist[1] && strlist[2]) {
 		*title = decode_str(strlist[0]);
-		*class = decode_str(strlist[1]);
+		*klass = decode_str(strlist[1]);
 		*exe   = decode_str(strlist[2]);
 	}
 
@@ -119,13 +118,13 @@ void get_window_title(struct dstr *name, HWND hwnd)
 	free(temp);
 }
 
-void get_window_class(struct dstr *class, HWND hwnd)
+void get_window_class(struct dstr *klass, HWND hwnd)
 {
 	wchar_t temp[256];
 
 	temp[0] = 0;
 	if (GetClassNameW(hwnd, temp, sizeof(temp) / sizeof(wchar_t)))
-		dstr_from_wcs(class, temp);
+		dstr_from_wcs(klass, temp);
 }
 
 /* not capturable or internal windows */
@@ -257,8 +256,8 @@ HWND get_uwp_actual_window(HWND parent)
 	return NULL;
 }
 
-static inline HWND next_window(HWND window, enum window_search_mode mode,
-		HWND *parent)
+static HWND next_window(HWND window, enum window_search_mode mode,
+		HWND *parent, bool use_findwindowex)
 {
 	if (*parent) {
 		window = *parent;
@@ -266,7 +265,12 @@ static inline HWND next_window(HWND window, enum window_search_mode mode,
 	}
 
 	while (true) {
-		window = FindWindowEx(GetDesktopWindow(), window, NULL, NULL);
+		if (use_findwindowex)
+			window = FindWindowEx(GetDesktopWindow(), window, NULL,
+					NULL);
+		else
+			window = GetNextWindow(window, GW_HWNDNEXT);
+
 		if (!window || check_window_valid(window, mode))
 			break;
 	}
@@ -282,14 +286,32 @@ static inline HWND next_window(HWND window, enum window_search_mode mode,
 	return window;
 }
 
-static inline HWND first_window(enum window_search_mode mode, HWND *parent)
+static HWND first_window(enum window_search_mode mode, HWND *parent,
+		bool *use_findwindowex)
 {
 	HWND window = FindWindowEx(GetDesktopWindow(), NULL, NULL, NULL);
 
+	if (!window) {
+		*use_findwindowex = false;
+		window = GetWindow(GetDesktopWindow(), GW_CHILD);
+	} else {
+		*use_findwindowex = true;
+	}
+
 	*parent = NULL;
 
-	if (!check_window_valid(window, mode))
-		window = next_window(window, mode, parent);
+	if (!check_window_valid(window, mode)) {
+		window = next_window(window, mode, parent, *use_findwindowex);
+
+		if (!window && *use_findwindowex) {
+			*use_findwindowex = false;
+
+			window = GetWindow(GetDesktopWindow(), GW_CHILD);
+			if (!check_window_valid(window, mode))
+				window = next_window(window, mode, parent,
+						*use_findwindowex);
+		}
+	}
 
 	if (is_uwp_window(window)) {
 		HWND child = get_uwp_actual_window(window);
@@ -307,18 +329,20 @@ void fill_window_list(obs_property_t *p, enum window_search_mode mode,
 		add_window_cb callback)
 {
 	HWND parent;
-	HWND window = first_window(mode, &parent);
+	bool use_findwindowex = false;
+
+	HWND window = first_window(mode, &parent, &use_findwindowex);
 
 	while (window) {
 		add_window(p, window, callback);
-		window = next_window(window, mode, &parent);
+		window = next_window(window, mode, &parent, use_findwindowex);
 	}
 }
 #endif
 
 static int window_rating(HWND window,
 		enum window_priority priority,
-		const char *class,
+		const char *klass,
 		const char *title,
 		const char *exe,
 		bool uwp_window)
@@ -326,68 +350,72 @@ static int window_rating(HWND window,
 	struct dstr cur_class = {0};
 	struct dstr cur_title = {0};
 	struct dstr cur_exe   = {0};
-	int         class_val = 1;
-	int         title_val = 1;
-	int         exe_val   = 0;
-	int         total     = 0;
+	int val = 0x7FFFFFFF;
 
 	if (!get_window_exe(&cur_exe, window))
-		return 0;
+		return 0x7FFFFFFF;
 	get_window_title(&cur_title, window);
 	get_window_class(&cur_class, window);
 
-	if (priority == WINDOW_PRIORITY_CLASS)
-		class_val += 3;
-	else if (priority == WINDOW_PRIORITY_TITLE)
-		title_val += 3;
-	else
-		exe_val += 3;
+	bool class_matches = dstr_cmpi(&cur_class, klass) == 0;
+	bool exe_matches = dstr_cmpi(&cur_exe, exe) == 0;
+	int title_val = abs(dstr_cmpi(&cur_title, title));
 
+	/* always match by name with UWP windows */
 	if (uwp_window) {
-		if (dstr_cmpi(&cur_title, title) == 0 &&
-		    dstr_cmpi(&cur_exe, exe) == 0)
-			total += exe_val + title_val + class_val;
-	} else {
-		if (dstr_cmpi(&cur_class, class) == 0)
-			total += class_val;
-		if (dstr_cmpi(&cur_title, title) == 0)
-			total += title_val;
-		if (dstr_cmpi(&cur_exe, exe) == 0)
-			total += exe_val;
+		if (priority == WINDOW_PRIORITY_EXE && !exe_matches)
+			val = 0x7FFFFFFF;
+		else
+			val = title_val == 0 ? 0 : 0x7FFFFFFF;
+
+	} else if (priority == WINDOW_PRIORITY_CLASS) {
+		val = class_matches ? title_val : 0x7FFFFFFF;
+		if (val != 0x7FFFFFFF && !exe_matches)
+			val += 0x1000;
+
+	} else if (priority == WINDOW_PRIORITY_TITLE) {
+		val = title_val == 0 ? 0 : 0x7FFFFFFF;
+
+	} else if (priority == WINDOW_PRIORITY_EXE) {
+		val = exe_matches ? title_val : 0x7FFFFFFF;
 	}
 
 	dstr_free(&cur_class);
 	dstr_free(&cur_title);
 	dstr_free(&cur_exe);
 
-	return total;
+	return val;
 }
 
 HWND find_window(enum window_search_mode mode,
 		enum window_priority priority,
-		const char *class,
+		const char *klass,
 		const char *title,
 		const char *exe)
 {
 	HWND parent;
-	HWND window      = first_window(mode, &parent);
-	HWND best_window = NULL;
-	int  best_rating = 0;
+	bool use_findwindowex = false;
 
-	if (!class)
+	HWND window      = first_window(mode, &parent, &use_findwindowex);
+	HWND best_window = NULL;
+	int  best_rating = 0x7FFFFFFF;
+
+	if (!klass)
 		return NULL;
 
-	bool uwp_window  = strcmp(class, "Windows.UI.Core.CoreWindow") == 0;
+	bool uwp_window  = strcmp(klass, "Windows.UI.Core.CoreWindow") == 0;
 
 	while (window) {
-		int rating = window_rating(window, priority, class, title, exe,
+		int rating = window_rating(window, priority, klass, title, exe,
 				uwp_window);
-		if (rating > best_rating) {
+		if (rating < best_rating) {
 			best_rating = rating;
 			best_window = window;
+			if (rating == 0)
+				break;
 		}
 
-		window = next_window(window, mode, &parent);
+		window = next_window(window, mode, &parent, use_findwindowex);
 	}
 
 	return best_window;

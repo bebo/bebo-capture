@@ -8,19 +8,20 @@
 
 struct game_capture_config {
 	char                          *title;
-	char                          *klass;
+	char                         *klass;
 	char                          *executable;
 	enum window_priority          priority;
 	enum capture_mode             mode;
 	uint32_t                      scale_cx;
 	uint32_t                      scale_cy;
-	bool                          cursor : 1;
-	bool                          force_shmem : 1;
-	bool                          force_scaling : 1;
-	bool                          allow_transparency : 1;
-	bool                          limit_framerate : 1;
-	bool                          capture_overlays : 1;
-	bool                          anticheat_hook : 1;
+	bool                          cursor;
+	bool                          force_shmem;
+	bool                          force_scaling;
+	bool                          allow_transparency;
+	bool                          limit_framerate;
+	bool                          capture_overlays;
+	bool                          anticheat_hook;
+	HWND						  window;
 };
 
 boolean isReady(void ** data);

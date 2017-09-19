@@ -11,7 +11,7 @@
 
 #include "gl-decs.h"
 #include "graphics-hook.h"
-#include "funchook.h"
+#include "./funchook.h"
 
 #define DUMMY_WINDOW_CLASS_NAME L"graphics_hook_gl_dummy_window"
 
@@ -35,9 +35,9 @@ struct gl_data {
 	uint32_t                       cy;
 	DXGI_FORMAT                    format;
 	GLuint                         fbo;
-	bool                           using_shtex : 1;
-	bool                           using_scale : 1;
-	bool                           shmem_fallback : 1;
+	bool                           using_shtex;
+	bool                           using_scale;
+	bool                           shmem_fallback;
 
 	union {
 		/* shared texture */

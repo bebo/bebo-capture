@@ -20,7 +20,6 @@ using namespace DirectX;
 #include "inject-library.h"
 #include "DibHelper.h"
 #include "window-helpers.h"
-#include "ipc-util/pipe.h"
 #include "libyuv/convert.h"
 #include "libyuv/scale_argb.h"
 #include "CommonTypes.h"
@@ -31,8 +30,6 @@ using namespace DirectX;
         "settings of the security software you are using."
 
 struct desktop_capture {
-	DWORD                         process_id;
-	ipc_pipe_server_t             pipe;
 };
 
 DesktopCapture::DesktopCapture() : m_Device(nullptr),
@@ -515,26 +512,6 @@ void DesktopCapture::CopyDirty(FrameData* data, INT offsetX, INT offsetY)
 	}
 }
 
-static void pipe_log(void *param, uint8_t *data, size_t size)
-{
-	//	struct desktop_capture *gc = param;
-	if (data && size)
-		info("%s", data);
-}
-
-static inline bool init_pipe(struct desktop_capture *gc)
-{
-	char name[64];
-	sprintf(name, "%s%lu", PIPE_NAME, gc->process_id);
-
-	if (!ipc_pipe_server_start(&gc->pipe, name, pipe_log, gc)) {
-		warn("init_pipe: failed to start pipe");
-		return false;
-	}
-
-	return true;
-}
-
 // unused atm
 static bool start_desktop_capture(struct desktop_capture *gc)
 {
@@ -545,7 +522,6 @@ static bool start_desktop_capture(struct desktop_capture *gc)
 // unused atm
 static void stop_desktop_capture(struct desktop_capture *gc)
 {
-	ipc_pipe_server_free(&gc->pipe);
 }
 
 // unused atm

@@ -220,7 +220,8 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 		} else {
 		  OLECHAR* bstrGuid;
 		  StringFromCLSID(SubType2, &bstrGuid);
-		  LOG(WARN) << "CheckMediaType - E_INVALIDARG - Invalid SubType2: " << bstrGuid;
+		  // FIXME: this always shows up, so setting to info instead of warn
+		  LOG(INFO) << "CheckMediaType - E_INVALIDARG - Invalid SubType2: " << bstrGuid;
 		  ::CoTaskMemFree(bstrGuid);
           return E_INVALIDARG;
 		  // sometimes FLME asks for YV12 {32315659-0000-0010-8000-00AA00389B71}, or  
@@ -239,7 +240,8 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 			info("CheckMediaType - S_OK - format already set to th same type");
 			return S_OK;
 		} else {
-			warn("CheckMediaType - VFW_E_TYPE_NOT_ACCEPTED format already set to different type");
+			// FIXME: this always shows up, so setting to info instead of warn
+			info("CheckMediaType - VFW_E_TYPE_NOT_ACCEPTED format already set to different type");
   		    return VFW_E_TYPE_NOT_ACCEPTED;
 		}
 	}
@@ -422,11 +424,23 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetFormat(AM_MEDIA_TYPE **ppmt)
 
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetNumberOfCapabilities(int *piCount, int *piSize)
 {
-    *piCount = 1; // FPN
+    *piCount = 1; 
     *piSize = sizeof(VIDEO_STREAM_CONFIG_CAPS); // VIDEO_STREAM_CONFIG_CAPS is an MS struct
 	info("GetNumberOfCapabilities - %d size:%d", *piCount, *piSize);
     return S_OK;
 }
+
+/*
+const int PIN_SIZE = 9;
+const int PIN_FPS_SIZE = 3;
+const int PIN_WIDTH[PIN_SIZE] = { 640, 854, 21:9, // 4:3, 16:9, 21:9
+								  960, 1280, 1680, 
+								  1440, 1920, 2560 };
+const int PIN_HEIGHT[PIN_SIZE] = { 480, 480, 480, 
+								   720, 720, 720, 
+								   1080, 1080, 1080 };
+const REFERENCE_TIME PIN_FPS[PIN_FPS_SIZE] = {30fps, 45fps, 60fps};
+*/
 
 // returns the "range" of fps, etc. for this index
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TYPE **pmt, BYTE *pSCC)
@@ -518,6 +532,8 @@ STDMETHODIMP CGameCapture::Stop(){
 
 	//Reset pin resources
 	m_pPin->m_iFrameNumber = 0;
+
+	logRotate();
 	return hr;
 }
 

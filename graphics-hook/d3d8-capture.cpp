@@ -1,10 +1,8 @@
-#include "pch.h"
-
 #include <dxgi.h>
 
-#include "../third_party/d3d8-api/d3d8.h"
+#include "../d3d8-api/d3d8.h"
 #include "graphics-hook.h"
-#include "funchook.h"
+#include "./funchook.h"
 
 typedef HRESULT(STDMETHODCALLTYPE *reset_t)(IDirect3DDevice8*,
 		D3DPRESENT_PARAMETERS*);
@@ -144,7 +142,7 @@ static bool d3d8_shmem_init(IDirect3DDevice8 *device)
 		return false;
 	}
 
-	hlog("d3d8 memory capture successfull");
+	hlog("d3d8 memory capture successful");
 	return true;
 }
 

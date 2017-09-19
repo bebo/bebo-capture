@@ -42,6 +42,8 @@ struct d3d9_offsets {
 struct dxgi_offsets {
 	uint32_t present;
 	uint32_t resize;
+
+	uint32_t present1;
 };
 
 struct ddraw_offsets {
@@ -67,7 +69,7 @@ struct shtex_data {
 
 enum capture_type {
 	CAPTURE_TYPE_MEMORY,
-	CAPTURE_TYPE_TEXTURE
+	CAPTURE_TYPE_TEXTURE,
 };
 
 struct graphics_offsets {

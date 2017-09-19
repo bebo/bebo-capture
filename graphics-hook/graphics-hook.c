@@ -1,9 +1,16 @@
 #include <windows.h>
 #include <psapi.h>
 #include "graphics-hook.h"
-#include "obfuscate.h"
-#include "funchook.h"
+#include "../util/obfuscate.h"
+#include "./funchook.h"
 
+#define DEBUG_OUTPUT
+
+#ifdef DEBUG_OUTPUT
+#define DbgOut(x) OutputDebugStringA(x)
+#else
+#define DbgOut(x)
+#endif
 
 struct thread_data {
 	CRITICAL_SECTION       mutexes[NUM_BUFFERS];
@@ -85,7 +92,6 @@ static HANDLE init_mutex(const wchar_t *name, DWORD pid)
 
 static inline bool init_signals(void)
 {
-	DbgOut("[graphics-hook] init_signals");
 	DWORD pid = GetCurrentProcessId();
 
 	signal_restart = init_event(EVENT_CAPTURE_RESTART, pid);
@@ -118,7 +124,6 @@ static inline bool init_signals(void)
 
 static inline bool init_mutexes(void)
 {
-	DbgOut("[graphics-hook] init_mutexes");
 	DWORD pid = GetCurrentProcessId();
 
 	tex_mutexes[0] = init_mutex(MUTEX_TEXTURE1, pid);
@@ -136,7 +141,6 @@ static inline bool init_mutexes(void)
 
 static inline bool init_system_path(void)
 {
-	DbgOut("[graphics-hook] init_system_path");
 	UINT ret = GetSystemDirectoryA(system_path, MAX_PATH);
 	if (!ret) {
 		hlog("Failed to get windows system path: %lu", GetLastError());
@@ -160,7 +164,6 @@ static inline void log_current_process(void)
 
 static inline bool init_hook_info(void)
 {
-	DbgOut("[graphics-hook] init_hook_info");
 	filemap_hook_info = create_hook_info(GetCurrentProcessId());
 	if (!filemap_hook_info) {
 		hlog("Failed to create hook info file mapping: %lu",
@@ -230,19 +233,16 @@ static inline void init_dummy_window_thread(void)
 
 static inline bool init_hook(HANDLE thread_handle)
 {
-	DbgOut("[graphics-hook] init_hook");
 	wait_for_dll_main_finish(thread_handle);
-	DbgOut("[graphics-hook] init_hook - wait_for_dll_main_finish complete");
 
-	_snwprintf(keepalive_name, sizeof(keepalive_name), L"%s%lu",
-			WINDOW_HOOK_KEEPALIVE, GetCurrentProcessId());
+	_snwprintf(keepalive_name, sizeof(keepalive_name) / sizeof(wchar_t),
+			L"%s%lu", WINDOW_HOOK_KEEPALIVE, GetCurrentProcessId());
 
 	init_pipe();
 
 	init_dummy_window_thread();
 	log_current_process();
 
-	DbgOut("[graphics_hook] init_hook - signal_restart");
 	SetEvent(signal_restart);
 	return true;
 }
@@ -257,8 +257,6 @@ static inline void close_handle(HANDLE *handle)
 
 static void free_hook(void)
 {
-	DbgOut("free_hook");
-
 	if (filemap_hook_info) {
 		CloseHandle(filemap_hook_info);
 		filemap_hook_info = NULL;
@@ -309,7 +307,6 @@ static inline bool dxgi_hookable(void)
 
 static inline bool attempt_hook(void)
 {
-	DbgOut("attempt_hook\n");
 	//static bool ddraw_hooked = false;
 	static bool d3d8_hooked  = false;
 	static bool d3d9_hooked  = false;
@@ -376,9 +373,7 @@ static inline bool attempt_hook(void)
 
 static inline void capture_loop(void)
 {
-	DbgOut("capture_loop - waiting for signal_init\n");
 	WaitForSingleObject(signal_init, INFINITE);
-	DbgOut("capture_loop - got signal_init\n");
 
 	while (!attempt_hook())
 		Sleep(40);
@@ -393,9 +388,8 @@ static inline void capture_loop(void)
 
 static DWORD WINAPI main_capture_thread(HANDLE thread_handle)
 {
-	DbgOut("[graphics-hook] main_capture_thread");
 	if (!init_hook(thread_handle)) {
-		DbgOut("[graphics-hook] main_capture_thread - Failed to init hook");
+		DbgOut("Failed to init hook\n");
 		free_hook();
 		return 0;
 	}
@@ -457,7 +451,6 @@ static inline uint64_t get_clockfreq(void)
 	return clock_freq.QuadPart;
 }
 
-#if 0
 uint64_t os_gettime_ns(void)
 {
 	LARGE_INTEGER current_time;
@@ -470,7 +463,6 @@ uint64_t os_gettime_ns(void)
 
 	return (uint64_t)time_val;
 }
-#endif
 
 static inline int try_lock_shmem_tex(int id)
 {
@@ -494,7 +486,6 @@ static inline void unlock_shmem_tex(int id)
 
 static inline bool init_shared_info(size_t size)
 {
-	DbgOut("init_shared_info\n");
 	wchar_t name[64];
 	_snwprintf(name, 64, L"%s%ld", SHMEM_TEXTURE, ++shmem_id_counter);
 
@@ -521,7 +512,6 @@ bool capture_init_shtex(struct shtex_data **data, HWND window,
 		uint32_t base_cx, uint32_t base_cy, uint32_t cx, uint32_t cy,
 		uint32_t format, bool flip, uintptr_t handle)
 {
-	DbgOut("capture_init_shtex\n");
 	if (!init_shared_info(sizeof(struct shtex_data))) {
 		hlog("capture_init_shtex: Failed to initialize memory");
 		return false;
@@ -553,7 +543,6 @@ bool capture_init_shtex(struct shtex_data **data, HWND window,
 
 static DWORD CALLBACK copy_thread(LPVOID unused)
 {
-	DbgOut("copy_thread\n");
 	uint32_t pitch = thread_data.pitch;
 	uint32_t cy = thread_data.cy;
 	HANDLE events[2] = {NULL, NULL};
@@ -653,7 +642,6 @@ void shmem_texture_data_unlock(int idx)
 
 static inline bool init_shmem_thread(uint32_t pitch, uint32_t cy)
 {
-	DbgOut("init_shmem_thread\n");
 	struct shmem_data *data = shmem_info;
 
 	thread_data.pitch = pitch;
@@ -699,7 +687,6 @@ bool capture_init_shmem(struct shmem_data **data, HWND window,
 		uint32_t base_cx, uint32_t base_cy, uint32_t cx, uint32_t cy,
 		uint32_t pitch, uint32_t format, bool flip)
 {
-	DbgOut("capture_init_shmem");
 	uint32_t  tex_size       = cy * pitch;
 	uint32_t  aligned_header = ALIGN(sizeof(struct shmem_data), 32);
 	uint32_t  aligned_tex    = ALIGN(tex_size, 32);
@@ -775,7 +762,6 @@ static inline void thread_data_free(void)
 
 void capture_free(void)
 {
-	DbgOut("capture_free");
 	thread_data_free();
 
 	if (shmem_info) {
@@ -792,8 +778,6 @@ void capture_free(void)
 BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 {
 	if (reason == DLL_PROCESS_ATTACH) {
-		DbgOut("[graphics-hook] DllMain - DLL_PROCESS_ATTACH");
-
 		wchar_t name[MAX_PATH];
 
 		dll_inst = hinst;
@@ -806,8 +790,6 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 
 		if (!success)
 			DbgOut("Failed to get current thread handle");
-
-		DbgOut("[graphics-hook] DllMain - DuplicateHandle OK");
 
 		if (!init_signals()) {
 			return false;
@@ -834,10 +816,8 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 			CloseHandle(cur_thread);
 			return false;
 		}
-	    DbgOut("[graphics-hook] DllMain - DLL_PROCESS_ATTACH success");
 
 	} else if (reason == DLL_PROCESS_DETACH) {
-		DbgOut("[graphics-hook] DllMain - DLL_PROCESS_DETACH");
 		if (capture_thread) {
 			stop_loop = true;
 			WaitForSingleObject(capture_thread, 300);
@@ -854,10 +834,9 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 __declspec(dllexport) LRESULT CALLBACK dummy_debug_proc(int code,
 		WPARAM wparam, LPARAM lparam)
 {
-	DbgOut("dummy_debug_proc\n");
 	static bool hooking = true;
 	MSG *msg = (MSG*)lparam;
-	DebugBreak();
+
 	if (hooking && msg->message == (WM_USER + 432)) {
 		HMODULE user32 = GetModuleHandleW(L"USER32");
 		BOOL (WINAPI *unhook_windows_hook_ex)(HHOOK) = NULL;

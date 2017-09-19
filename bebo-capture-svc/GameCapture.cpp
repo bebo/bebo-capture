@@ -1,5 +1,6 @@
 ﻿#include "GameCapture.h"
 
+#include <chrono>
 #include "Logging.h"
 #include <dshow.h>
 #include <strsafe.h>
@@ -21,7 +22,6 @@
 #include "libyuv/convert.h"
 #include "libyuv/scale.h"
 #include "CommonTypes.h"
-
 
 #define STOP_BEING_BAD \
 	    "This is most likely due to security software" \
@@ -46,6 +46,7 @@ extern "C" {
 	}
 	struct graphics_offsets offsets32 = {0};
 	struct graphics_offsets offsets64 = {0};
+	
 }
 
 
@@ -59,7 +60,6 @@ enum capture_mode {
 
 struct game_capture {
 	int                           last_tex;
-//	obs_source_t                  *source;
 
 //	struct cursor_data            cursor_data;
 	HANDLE                        injector_process;
@@ -96,10 +96,8 @@ struct game_capture {
 	struct game_capture_config    config;
 
 	ipc_pipe_server_t             pipe;
-//	gs_texture_t                  *texture;
 	struct hook_info              *global_hook_info;
-	HANDLE                        keepalive_thread;
-	DWORD                         keepalive_thread_id;
+	HANDLE                        keepalive_mutex;
 	HANDLE                        hook_init;
 	HANDLE                        hook_restart;
 	HANDLE                        hook_stop;
@@ -124,6 +122,16 @@ struct game_capture {
 
 	boolean (*copy_texture)(struct game_capture*, IMediaSample *pSample);
 };
+
+static inline int uninject_library(HANDLE process, const wchar_t *dll)
+{
+	return inject_library_obf(process, dll,
+			"D|hkqkW`kl{k\\osofj", 0xa178ef3655e5ade7,
+			"[uawaRzbhh{tIdkj~~", 0x561478dbd824387c,
+			"[fr}pboIe`dlN}", 0x395bfbc9833590fd,
+			"\\`zs}gmOzhhBq", 0x12897dd89168789a,
+			"GbfkDaezbp~X", 0x76aff7238788f7db);
+}
 
 static inline int inject_library(HANDLE process, const wchar_t *dll)
 {
@@ -194,12 +202,6 @@ static struct game_capture *game_capture_create(game_capture_config *config, uin
 {
 	struct game_capture *gc = (struct game_capture*) bzalloc(sizeof(*gc));
 
-	// TODO: smart pointers? or free:
-
-	gc->config.title = config->title;
-	gc->config.klass = config->klass;
-	gc->config.executable = config->executable;
-
 	gc->config.priority = config->priority;
 	gc->config.mode = config->mode;
 	gc->config.scale_cx = config->scale_cx;
@@ -214,18 +216,11 @@ static struct game_capture *game_capture_create(game_capture_config *config, uin
 	gc->frame_interval = frame_interval;
 	gc->last_tex = -1;
 
-//	wait_for_hook_initialization();
-
-	//gc->source = source;
 	gc->initial_config = true;
-// 	gc->retry_interval = DEFAULT_RETRY_INTERVAL;
-// 	gc->hotkey_pair = obs_hotkey_pair_register_source(
-// 		gc->source,
-// 		HOTKEY_START, TEXT_HOTKEY_START,
-// 		HOTKEY_STOP, TEXT_HOTKEY_STOP,
-// 		hotkey_start, hotkey_stop, gc, gc);
-// 
-// 	game_capture_update(gc, settings);
+	gc->priority = config->priority;
+	gc->wait_for_target_startup = false;
+	gc->window = config->window;
+
 	return gc;
 }
 
@@ -414,9 +409,13 @@ static const char *blacklisted_exes[] = {
 	"origin",
 	"devenv",
 	"taskmgr",
+	"chrome",
+	"firefox",
 	"systemsettings",
 	"applicationframehost",
 	"cmd",
+	"bebo",
+	"epicgameslauncher",
 	"shellexperiencehost",
 	"winstore.app",
 	"searchui",
@@ -472,7 +471,7 @@ static inline bool is_64bit_process(HANDLE process)
 static inline bool open_target_process(struct game_capture *gc)
 {
 	gc->target_process = open_process(
-			PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+			PROCESS_QUERY_INFORMATION | SYNCHRONIZE,
 			false, gc->process_id);
 	if (!gc->target_process) {
 		warn("could not open process: %s", gc->config.executable);
@@ -614,78 +613,17 @@ cleanup:
 	return success;
 }
 
-struct keepalive_data {
-	struct game_capture *gc;
-	HANDLE initialized;
-};
-
-#define DEF_FLAGS (WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS)
-
-static DWORD WINAPI keepalive_window_thread(struct keepalive_data *data)
-{
-	HANDLE initialized = data->initialized;
-	struct game_capture *gc = data->gc;
-	wchar_t new_name[64];
-	WNDCLASSW wc;
-	HWND window;
-	MSG msg;
-
-	_snwprintf(new_name, sizeof(new_name), L"%s%lu",
-			WINDOW_HOOK_KEEPALIVE, gc->process_id);
-
-	memset(&wc, 0, sizeof(wc));
-	wc.style = CS_OWNDC;
-	wc.hInstance = GetModuleHandleW(NULL);
-	wc.lpfnWndProc = (WNDPROC)DefWindowProc;
-	wc.lpszClassName = new_name;
-
-	if (!RegisterClass(&wc)) {
-		warn("Failed to create keepalive window class: %lu",
-				GetLastError());
-		return 0;
-	}
-
-	window = CreateWindowExW(0, new_name, NULL, DEF_FLAGS, 0, 0, 1, 1,
-			NULL, NULL, wc.hInstance, NULL);
-	if (!window) {
-		warn("Failed to create keepalive window: %lu",
-				GetLastError());
-		return 0;
-	}
-
-	SetEvent(initialized);
-
-	while (GetMessage(&msg, NULL, 0, 0)) {
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
-	}
-
-	DestroyWindow(window);
-	UnregisterClassW(new_name, wc.hInstance);
-
-	return 0;
-}
-
 static inline bool init_keepalive(struct game_capture *gc)
 {
-	struct keepalive_data data;
-	HANDLE initialized = CreateEvent(NULL, false, false, NULL);
+	wchar_t new_name[64];
+	_snwprintf(new_name, 64, L"%s%lu", WINDOW_HOOK_KEEPALIVE,
+		gc->process_id);
 
-	data.gc = gc;
-	data.initialized = initialized;
-
-	gc->keepalive_thread = CreateThread(NULL, 0,
-			(LPTHREAD_START_ROUTINE)keepalive_window_thread,
-			&data, 0, &gc->keepalive_thread_id);
-	if (!gc->keepalive_thread) {
-		warn("Failed to create keepalive window thread: %lu",
-				GetLastError());
+	gc->keepalive_mutex = CreateMutexW(NULL, false, new_name);
+	if (!gc->keepalive_mutex) {
+		warn("Failed to create keepalive mutex: %lu", GetLastError());
 		return false;
 	}
-
-	WaitForSingleObject(initialized, INFINITE);
-	CloseHandle(initialized);
-
 	return true;
 }
 
@@ -720,7 +658,10 @@ static void pipe_log(void *param, uint8_t *data, size_t size)
 static inline bool init_pipe(struct game_capture *gc)
 {
 	char name[64];
+
 	sprintf(name, "%s%lu", PIPE_NAME, gc->process_id);
+
+	info("process_id: %lu", gc->process_id);
 
 	if (!ipc_pipe_server_start(&gc->pipe, name, pipe_log, gc)) {
 		warn("init_pipe: failed to start pipe");
@@ -755,24 +696,12 @@ static inline bool init_hook_info(struct game_capture *gc)
 
 	gc->global_hook_info->offsets = gc->process_is_64bit ?  offsets64 : offsets32;
 	gc->global_hook_info->capture_overlay = gc->config.capture_overlays;
-	//gc->global_hook_info->force_shmem = gc->config.force_shmem;
 	gc->global_hook_info->force_shmem = true;
 	gc->global_hook_info->use_scale = gc->config.force_scaling;
 	gc->global_hook_info->cx = gc->config.scale_cx;
 	gc->global_hook_info->cy = gc->config.scale_cy;
 	reset_frame_interval(gc);
 
-#if 0 // FIXME
-	obs_enter_graphics();
-	if (!gs_shared_texture_available())
-		gc->global_hook_info->force_shmem = true;
-	obs_leave_graphics();
-
-	obs_enter_graphics();
-	if (!gs_shared_texture_available())
-		gc->global_hook_info->force_shmem = true;
-	obs_leave_graphics();
-#endif
 	return true;
 }
 
@@ -829,48 +758,35 @@ static inline bool init_events(struct game_capture *gc)
 /* if there's already a hook in the process, then signal and start */
 static inline bool attempt_existing_hook(struct game_capture *gc)
 {
-	gc->hook_restart = open_event_gc(gc, EVENT_CAPTURE_RESTART);
-	if (gc->hook_restart) {
+	gc->hook_stop = open_event_gc(gc, EVENT_CAPTURE_STOP);
+	if (gc->hook_stop) {
 		info("existing hook found, signaling process: %s",
 			gc->config.executable);
-		SetEvent(gc->hook_restart);
+		SetEvent(gc->hook_stop);
 		return true;
 	}
 
 	return false;
 }
 
-char previousExe[1024];
-char blackListedExe[1024];
-
 static bool init_hook(struct game_capture *gc)
 {
 	struct dstr exe = {0};
 	bool blacklisted_process = false;
 
-	if (gc->config.mode == CAPTURE_MODE_ANY) {
+	if (0 && gc->config.mode == CAPTURE_MODE_ANY) {
 		if (get_window_exe(&exe, gc->next_window)) {
-			if (strncmp(previousExe, exe.array, exe.len) != 0) {
-				info("attempting to hook fullscreen process: %s",
-					exe.array);
-				if (exe.len < 1024) {
-					strncpy(previousExe, exe.array, exe.len);
-				}
-			}
+			info("attempting to hook fullscreen process: %s", exe.array);
 		}
-	} else {
-		if (get_window_exe(&exe, gc->next_window)) {
-			info("attempting to hook process: %s", exe.array);
-		}
+	}
+	else {
+		info("attempting to hook process: %s", gc->executable.array);
+		dstr_copy_dstr(&exe, &gc->executable);
 	}
 
 	blacklisted_process = is_blacklisted_exe(exe.array);
-	if (blacklisted_process && strncmp(blackListedExe, exe.array, exe.len) != 0) {
+	if (blacklisted_process)
 		info("cannot capture %s due to being blacklisted", exe.array);
-		if (exe.len < 1024) {
-			strncpy(blackListedExe, exe.array, exe.len);
-		}
-	}
 	dstr_free(&exe);
 
 	if (blacklisted_process) {
@@ -931,12 +847,6 @@ static void stop_capture(struct game_capture *gc)
 		gc->data = NULL;
 	}
 
-	if (gc->keepalive_thread) {
-		PostThreadMessage(gc->keepalive_thread_id, WM_QUIT, 0, 0);
-		WaitForSingleObject(gc->keepalive_thread, 300);
-		close_handle(&gc->keepalive_thread);
-	}
-
 	if (gc->app_sid) {
 		LocalFree(gc->app_sid);
 		gc->app_sid = NULL;
@@ -948,17 +858,11 @@ static void stop_capture(struct game_capture *gc)
 	close_handle(&gc->hook_exit);
 	close_handle(&gc->hook_init);
 	close_handle(&gc->hook_data_map);
+	close_handle(&gc->keepalive_mutex);
 	close_handle(&gc->global_hook_info_map);
 	close_handle(&gc->target_process);
 	close_handle(&gc->texture_mutexes[0]);
 	close_handle(&gc->texture_mutexes[1]);
-
-//	if (gc->texture) {
-//		obs_enter_graphics();
-//		gs_texture_destroy(gc->texture);
-//		obs_leave_graphics();
-//		gc->texture = NULL;
-//	}
 
 	if (gc->active)
 		info("capture stopped");
@@ -983,7 +887,7 @@ static void try_hook(struct game_capture *gc)
 
 	if (gc->next_window) {
 		if (gc->next_window != dbg_last_window) {
-			info("hooking next window: %X, %S, %S", gc->next_window, gc->config.title, gc->config.klass);
+			info("hooking next window: %X, %s, %s", gc->next_window, gc->config.title, gc->config.klass);
 			dbg_last_window = gc->next_window;
 		}
 		gc->thread_id = GetWindowThreadProcessId(gc->next_window, &gc->process_id);
@@ -1015,12 +919,12 @@ boolean isReady(void ** data) {
 	}
 	struct game_capture *gc = (game_capture *) *data;
 //	debug("isReady - data active: %d && retrying %d - %d", gc->active, gc->retrying, gc->active && gc->capturing);
-	return  gc->active && ! gc->retrying;
+	return gc->active && ! gc->retrying;
 }
 
 void set_fps(void **data, uint64_t frame_interval) {
-
 	struct game_capture *gc = (game_capture *) *data;
+
 	if (gc == NULL) {
 		debug("set_fps: gc==NULL");
 		return;
@@ -1033,8 +937,6 @@ void * hook(void **data, LPCWSTR windowClassName, LPCWSTR windowName, game_captu
 {
 	struct game_capture *gc = (game_capture *) *data;
 	if (gc == NULL) {
-		// FIXME log out captured game info DebugBreak();
-//		DebugBreak();
 		HWND hwnd = NULL;
 		if (windowClassName != NULL && lstrlenW(windowClassName) > 0) {
 			hwnd = FindWindowW(windowClassName, windowName);
@@ -1047,10 +949,23 @@ void * hook(void **data, LPCWSTR windowClassName, LPCWSTR windowName, game_captu
 		if (hwnd == NULL) {
 			hwnd = FindWindow(NULL, windowName);
 		}
+
+		config->window = hwnd;
+
 		gc = game_capture_create(config, frame_interval);
-		struct dstr * klass = &gc->klass;
+
+		struct dstr *klass = &gc->klass;
+		struct dstr *title = &gc->title;
+		struct dstr *exe = &gc->executable;
 		get_window_class(klass, hwnd);
+		get_window_exe(exe, hwnd);
+		get_window_title(title, hwnd);
+
+		gc->config.executable = strdup(exe->array);
+		gc->config.title = strdup(title->array);
+		gc->config.klass = strdup(klass->array);
 	}
+
 	try_hook(gc);
 	if (gc->active || gc->retrying) {
 		return gc;
@@ -1447,43 +1362,18 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 
 static inline bool init_shmem_capture(struct game_capture *gc)
 {
-//	enum gs_color_format format;
-//
 	gc->texture_buffers[0] = (uint8_t*)gc->data + gc->shmem_data->tex1_offset;
 	gc->texture_buffers[1] = (uint8_t*)gc->data + gc->shmem_data->tex2_offset;
-//
 	gc->convert_16bit = is_16bit_format(gc->global_hook_info->format);
-//	DebugBreak();
-//	format = gc->convert_16bit ?  GS_BGRA : convert_format(gc->global_hook_info->format);
-//
-//	obs_enter_graphics();
-//	gs_texture_destroy(gc->texture);
-//	gc->texture = gs_texture_create(gc->cx, gc->cy, format, 1, NULL, GS_DYNAMIC);
-//	obs_leave_graphics();
-//
-//	if (!gc->texture) {
-//		warn("init_shmem_capture: failed to create texture");
-//		return false;
-//	}
-//
 	gc->copy_texture = copy_shmem_tex;
 	return true;
 }
 
 static inline bool init_shtex_capture(struct game_capture *gc)
 {
-//	obs_enter_graphics();
-//	gs_texture_destroy(gc->texture);
-//	gc->texture = gs_texture_open_shared(gc->shtex_data->tex_handle);
-//	obs_leave_graphics();
-//
-//	if (!gc->texture) {
-//		warn("init_shtex_capture: failed to open shared handle");
-//		return false;
-//	}
-
-	return true;
+	return false;
 }
+
 static bool start_capture(struct game_capture *gc)
 {
 	debug("Starting capture");
@@ -1529,10 +1419,7 @@ boolean get_game_frame(void **data, boolean missed, IMediaSample *pSample) {
 	 * the only thing we can trigger off is the last_tex id, which is 0 or 1
 	 *
 	 * So we sample at 2 times fps, if last_text_id changes -> we have a new sample
-	 
 	 * If the mutex is locked - we use the other sample
-
-
 	 * 
 	 * If we are late we need to get both frames and check 
 	 * If we are late

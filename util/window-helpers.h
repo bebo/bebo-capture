@@ -1,7 +1,7 @@
 #pragma once
 
-#include "windows.h"
 #include "dstr.h"
+#include "windows.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,31 +19,31 @@ enum window_search_mode {
 	EXCLUDE_MINIMIZED
 };
 
-bool get_window_exe(struct dstr *name, HWND window);
-void get_window_title(struct dstr *name, HWND hwnd);
-void get_window_class(struct dstr *klass, HWND hwnd);
-bool is_uwp_window(HWND hwnd);
-HWND get_uwp_actual_window(HWND parent);
+extern bool get_window_exe(struct dstr *name, HWND window);
+extern void get_window_title(struct dstr *name, HWND hwnd);
+extern void get_window_class(struct dstr *klass, HWND hwnd);
+extern bool is_uwp_window(HWND hwnd);
+extern HWND get_uwp_actual_window(HWND parent);
 
-typedef bool (*add_window_cb)(const char *title, const char *klass, const char *exe);
+typedef bool (*add_window_cb)(const char *title, const char *klass,
+		const char *exe);
 
 #if 0
 void fill_window_list(obs_property_t *p, enum window_search_mode mode,
 		add_window_cb callback);
 #endif
 
-void build_window_strings(const char *str,
+extern void build_window_strings(const char *str,
 		char **klass,
 		char **title,
 		char **exe);
 
-HWND find_window(enum window_search_mode mode,
+extern HWND find_window(enum window_search_mode mode,
 		enum window_priority priority,
 		const char *klass,
 		const char *title,
 		const char *exe);
 
-
 #ifdef __cplusplus
-}
+ }
 #endif

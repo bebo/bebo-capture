@@ -3,7 +3,7 @@
 
 #include "dxgi-helpers.hpp"
 #include "graphics-hook.h"
-#include "funchook.h"
+#include "./funchook.h"
 
 struct d3d10_data {
 	ID3D10Device                   *device; /* do not release */
@@ -12,9 +12,9 @@ struct d3d10_data {
 	uint32_t                       cx;
 	uint32_t                       cy;
 	DXGI_FORMAT                    format;
-	bool                           using_shtex : 1;
-	bool                           using_scale : 1;
-	bool                           multisampled : 1;
+	bool                           using_shtex;
+	bool                           using_scale;
+	bool                           multisampled;
 
 	ID3D10Texture2D                *scale_tex;
 	ID3D10ShaderResourceView       *scale_resource;
