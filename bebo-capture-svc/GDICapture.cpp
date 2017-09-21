@@ -17,7 +17,6 @@
 GDICapture::GDICapture():
 	negotiated_width(0),
 	negotiated_height(0),
-	initialized(false),
 	capture_foreground(false),
 	capture_screen(false),
 	capture_decoration(false),
@@ -38,12 +37,19 @@ GDICapture::~GDICapture() {
 	}
 }
 
-void GDICapture::InitHDC(int width, int height, HWND hwnd) {
-	initialized = true;
+void GDICapture::SetSize(int width, int height) {
 	negotiated_width = width;
 	negotiated_height = height;
-	capture_hwnd = hwnd;
+
+	if (negotiated_argb_buffer) {
+		delete[] negotiated_argb_buffer;
+	}
+
 	negotiated_argb_buffer = new BYTE[4 * negotiated_width * negotiated_height];
+}
+
+void GDICapture::SetCaptureHandle(HWND handle) {
+	capture_hwnd = handle;
 }
 
 GDIFrame* GDICapture::CaptureFrame()
@@ -57,7 +63,6 @@ GDIFrame* GDICapture::CaptureFrame()
 	}
 
 	if ((IsIconic(capture_hwnd) || !IsWindowVisible(capture_hwnd)) && last_frame) {
-		debug("Window not visible, returning last frame");
 		return last_frame;
 	}
 
@@ -78,8 +83,6 @@ GDIFrame* GDICapture::CaptureFrame()
 		return NULL;
 	}
 
-	// debug("frame wh: %dx%d - xy: %d,%d - cxy: %d,%d - xy: %d,%d", frame->width(), frame->height(), frame->x(), frame->y(), cx, cy);
-
 	int cx = GetSystemMetrics(SM_CXSIZEFRAME);
 	int cy = GetSystemMetrics(SM_CYSIZEFRAME);
 	BitBlt(mem_hdc, 0, 0, 
@@ -97,8 +100,6 @@ GDIFrame* GDICapture::CaptureFrame()
 
 bool GDICapture::GetFrame(IMediaSample *pSample)
 {
-	debug("CopyScreenToDataBlock - start");
-
 	GDIFrame* frame = CaptureFrame();
 	if (frame == NULL) {
 		return false;

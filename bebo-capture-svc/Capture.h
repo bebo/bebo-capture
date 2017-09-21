@@ -37,7 +37,7 @@ const int CAPTURE_INJECT = 0;
 const int CAPTURE_GDI = 1;
 const int CAPTURE_DESKTOP = 2;
 const int CAPTURE_DSHOW = 3;
-const int MAX_FPS = 60;
+const float MAX_FPS = 60;
 
 class CPushPinDesktop;
 

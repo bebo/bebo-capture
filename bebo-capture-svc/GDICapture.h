@@ -52,15 +52,15 @@ public:
 	GDICapture();
 	~GDICapture();
 
-	void InitHDC(int width, int height, HWND hwnd);
+	void SetSize(int width, int height);
+	void SetCaptureHandle(HWND hwnd);
+	bool IsReady() { return capture_hwnd != NULL; }
 	bool GetFrame(IMediaSample *pSample);
-	bool IsReady() const { return initialized; }
-	HWND capturingHwnd() const { return capture_hwnd; }
+	HWND GetCaptureHandle() const { return capture_hwnd; }
 
 private:
 	int negotiated_width;
 	int negotiated_height;
-	bool initialized;
 
 	bool capture_foreground;
 	bool capture_screen;
@@ -70,7 +70,6 @@ private:
 
 	BYTE* negotiated_argb_buffer;
 	GDIFrame* last_frame;
-
 
 	GDIFrame* CaptureFrame();
 };

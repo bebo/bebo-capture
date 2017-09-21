@@ -528,31 +528,6 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 {
 	CheckPointer(pSample, E_POINTER);
 
-	while (!m_pGDICapture->IsReady()) {
-		debug("GDI Init - capture once: %d, handle: %ld, class name: %S, window name: %S, exe full name: %S", 
-			m_bCaptureOnce, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName);
-		HWND hwnd = FindCaptureWindows(m_bCaptureOnce, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName);
-		if (hwnd == NULL) {
-			error("Unable to initialize gdi capture. window not found.");
-			return S_FALSE;
-		}
-		m_pGDICapture->InitHDC(getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), hwnd);
-
-		globalStart = GetTickCount();
-		countMissed = 0;
-		sumMillisTook = 0;
-		fastestRoundMillis = LONG_MAX;
-		m_iFrameNumber = 0;
-		missed = true;
-		previousFrame = 0;
-		debug("frame_length: %d", m_rtFrameLength);
-	}
-
-	if (!m_pGDICapture->IsReady()) {
-		error("Unable to initialize gdi capture. Maximum retry exceeded.");
-		return S_FALSE;
-	}
-
 	__int64 startThisRound = StartCounter();
 
 	long double millisThisRoundTook = 0;
@@ -565,6 +540,31 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 			info("inactive - fillbuffer_gdi");
 			return S_FALSE;
 		}
+
+		if (!m_pGDICapture->IsReady()) {
+			HWND hwnd = FindCaptureWindows(m_bCaptureOnce, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName);
+
+			if (!hwnd) {
+				Sleep(50);
+				GetGameFromRegistry();
+				continue;
+			}
+
+			info("GDI - window_handle: 0x%016x (%ld), class_name: %S, window_name: %S, exe_name: %S, capture_once: %d",
+				m_iCaptureHandle, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName, m_bCaptureOnce);
+
+			m_pGDICapture->SetSize(getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
+			m_pGDICapture->SetCaptureHandle(hwnd);
+
+			globalStart = GetTickCount();
+			countMissed = 0;
+			sumMillisTook = 0;
+			fastestRoundMillis = LONG_MAX;
+			m_iFrameNumber = 0;
+			missed = true;
+			previousFrame = 0;
+		}
+
 		CSourceStream::m_pFilter->StreamTime(now);
 		if (now <= 0) {
 			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
@@ -593,17 +593,10 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 		frame = m_pGDICapture->GetFrame(pSample);
 
 		if (!frame) {
-			if (!IsWindow(m_pGDICapture->capturingHwnd())) {
-				info("window is no longer exists.");
-				return S_FALSE;
+			if (!IsWindow(m_pGDICapture->GetCaptureHandle())) {
+				info("capturing window is no longer alive"); // TODO: instead of dying - maybe retrying
+				m_pGDICapture->SetCaptureHandle(NULL);
 			}
-			/*
-			if (missed && now > (previousFrame + 10000000L / 5)) {
-				debug("fake frame");
-				countMissed += 1;
-				frame = m_pGDICapture->GetOldFrame(pSample);
-			}
-			*/
 		}
 
 		if (frame && previousFrame <= 0) {
@@ -612,7 +605,6 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 			missed = false;
 			debug("skip first frame");
 		} 
-
 	}
 	missed = false;
 	millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
@@ -851,18 +843,22 @@ BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
 	// check if class match
 	bool class_match = lstrcmp(class_name, p->find_class_name) == 0;
 
-
 	// check exe match
 	bool exe_match = false;
-	DWORD pid;
-	GetWindowThreadProcessId(hwnd, &pid);
-	HANDLE handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
-	TCHAR exe_name[buf_len] = { 0 };
 
-	if (handle != NULL) {
-		GetModuleFileNameEx(handle, NULL, exe_name, buf_len);
-		exe_match = lstrcmp(exe_name, p->find_exe_name) == 0;
-		CloseHandle(handle);
+	if (p->find_exe_name && wcslen(p->find_exe_name) > 0) {
+		DWORD pid;
+		GetWindowThreadProcessId(hwnd, &pid);
+		HANDLE handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
+		TCHAR exe_name[buf_len] = { 0 };
+
+		if (handle != NULL) {
+			GetModuleFileNameEx(handle, NULL, exe_name, buf_len);
+			exe_match = lstrcmp(exe_name, p->find_exe_name) == 0;
+			CloseHandle(handle);
+		}
+	} else {
+		exe_match = true;
 	}
 
 	bool found = exe_match && class_match;
