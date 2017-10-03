@@ -233,7 +233,7 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		m_pCaptureExeFullName = (LPWSTR) malloc(size * 2);
 		wsprintfW(m_pCaptureExeFullName, L"%s", data);
 		if (old == NULL || wcscmp(old, m_pCaptureExeFullName) != 0) {
-			info("m_pCaptureExeFullName: %S", m_pCaptureExeFullName);
+			info("CaptureExeFullName: %S", m_pCaptureExeFullName);
 			if (old != NULL) {
 				free(old);
 			}

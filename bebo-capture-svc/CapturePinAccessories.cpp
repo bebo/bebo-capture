@@ -50,8 +50,8 @@ int sprintf_pmt(char *buffer, size_t count, char *label, const AM_MEDIA_TYPE *pm
 
 	cnt += snprintf(&buffer[cnt], count - cnt, "%s -", label);
 
-	char * temporalCompression = (pmtIn->bTemporalCompression) ? "Temporally compressed" : "Not temporally compressed";
-	cnt += snprintf(&buffer[cnt], count - cnt, " [%s]", temporalCompression);
+	// char * temporalCompression = (pmtIn->bTemporalCompression) ? "Temporally compressed" : "Not temporally compressed";
+	// cnt += snprintf(&buffer[cnt], count - cnt, " [%s]", temporalCompression);
 
 	if (pmtIn->bFixedSizeSamples) {
 		cnt += snprintf(&buffer[cnt], count - cnt, " [Sample Size %d]", pmtIn->lSampleSize);
@@ -64,58 +64,29 @@ int sprintf_pmt(char *buffer, size_t count, char *label, const AM_MEDIA_TYPE *pm
 	StringFromGUID2(pmtIn->majortype, major_uuid, 64);
 	StringFromGUID2(pmtIn->subtype, sub_uuid, 64);
 
-	cnt += snprintf(&buffer[cnt], count - cnt, " [%S/%S]",
-		major_uuid,
-		sub_uuid);
+	// cnt += snprintf(&buffer[cnt], count - cnt, " [%S/%S]",
+	//	major_uuid,
+	//	sub_uuid);
 
 	if (pmtIn->formattype == FORMAT_VideoInfo) {
 
 		VIDEOINFOHEADER *pVideoInfo = (VIDEOINFOHEADER *)pmtIn->pbFormat;
 
-		cnt += snprintf(&buffer[cnt], count - cnt, " srcRect:");
-		cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo->rcSource);
-		cnt += snprintf(&buffer[cnt], count - cnt, " dstRect:");
-		cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo->rcTarget);
+		// cnt += snprintf(&buffer[cnt], count - cnt, " srcRect:");
+		// cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo->rcSource);
+		// cnt += snprintf(&buffer[cnt], count - cnt, " dstRect:");
+		// cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo->rcTarget);
         cnt += DisplayBITMAPINFO(&buffer[cnt], count - cnt, HEADER(pmtIn->pbFormat));
 
 	} else if (pmtIn->formattype == FORMAT_VideoInfo2) {
 
 		VIDEOINFOHEADER2 *pVideoInfo2 = (VIDEOINFOHEADER2 *)pmtIn->pbFormat;
 
-		cnt += snprintf(&buffer[cnt], count - cnt, " srcRect:");
-		cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo2->rcSource);
-		cnt += snprintf(&buffer[cnt], count - cnt, " dstRect:");
-		cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo2->rcTarget);
+		// cnt += snprintf(&buffer[cnt], count - cnt, " srcRect:");
+		// cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo2->rcSource);
+		// cnt += snprintf(&buffer[cnt], count - cnt, " dstRect:");
+		// cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo2->rcTarget);
 		cnt += DisplayBITMAPINFO(&buffer[cnt], count - cnt, &pVideoInfo2->bmiHeader);
-	} else if (pmtIn->majortype == MEDIATYPE_Audio) {
-		WCHAR format_uuid[64];
-		WCHAR subtype_uuid[64];
-		StringFromGUID2(pmtIn->formattype, format_uuid, 64);
-		StringFromGUID2(pmtIn->subtype, subtype_uuid, 64);
-		cnt += snprintf(&buffer[cnt], count - cnt, " audio format type %S subType %S",
-			format_uuid, subtype_uuid);
-
-		if ((pmtIn->subtype != MEDIASUBTYPE_MPEG1Packet) && (pmtIn->cbFormat >= sizeof(PCMWAVEFORMAT)))
-		{
-			/* Dump the contents of the WAVEFORMATEX type-specific format structure */
-
-			WAVEFORMATEX *pwfx = (WAVEFORMATEX *)pmtIn->pbFormat;
-			cnt += snprintf(&buffer[cnt], count - cnt,
-				"wFormatTag %u, nChannels %u, nSamplesPerSec %lu, nAvgBytesPerSec %lu, nBlockAlign %u, wBitsPerSample %u",
-				pwfx->wFormatTag,
-				pwfx->nChannels,
-				pwfx->nSamplesPerSec,
-				pwfx->nAvgBytesPerSec,
-				pwfx->nBlockAlign,
-				pwfx->wBitsPerSample);
-
-			/* PCM uses a WAVEFORMAT and does not have the extra size field */
-
-			if (pmtIn->cbFormat >= sizeof(WAVEFORMATEX)) {
-				cnt += snprintf(&buffer[cnt], count - cnt, " cbSize %u", pwfx->cbSize);
-			}
-		}
-
 	} else {
 		WCHAR format_uuid[64];
 		StringFromGUID2(pmtIn->formattype, format_uuid, 64);
@@ -191,53 +162,52 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 	  return E_INVALIDARG; // usually never this...
 	}
 
-
 	// graphedit comes in with a really large one and then we set it (no good)
 	if (pvi->bmiHeader.biHeight > m_iCaptureConfigHeight || pvi->bmiHeader.biWidth > m_iCaptureConfigWidth) {
 		warn("CheckMediaType - E_INVALIDARG %d > %d || %d > %d",
-			pvi->bmiHeader.biHeight,
-			m_iCaptureConfigHeight,
-			pvi->bmiHeader.biWidth,
-			m_iCaptureConfigWidth);
+			pvi->bmiHeader.biHeight, m_iCaptureConfigHeight,
+			pvi->bmiHeader.biWidth, m_iCaptureConfigWidth);
         return E_INVALIDARG;
 	}
 
-    if(    (SubType2 != MEDIASUBTYPE_RGB8) // these are all the same value? But maybe the pointers are different. Hmm.
+    if((SubType2 != MEDIASUBTYPE_RGB8) // these are all the same value? But maybe the pointers are different. Hmm.
         && (SubType2 != MEDIASUBTYPE_RGB565)
         && (SubType2 != MEDIASUBTYPE_RGB555)
         && (SubType2 != MEDIASUBTYPE_RGB24)
         && (SubType2 != MEDIASUBTYPE_RGB32)
-		&& (SubType2 != GUID_NULL) // means "anything", I guess...
-		)
-    {
-		if(SubType2 == WMMEDIASUBTYPE_I420) { // 30323449-0000-0010-8000-00AA00389B71 MEDIASUBTYPE_I420 == WMMEDIASUBTYPE_I420
-			if(pvi->bmiHeader.biBitCount == 12) { // biCompression 808596553 == 0x30323449
+		&& (SubType2 != GUID_NULL)) {
+
+		if (SubType2 == WMMEDIASUBTYPE_I420) { // 30323449-0000-0010-8000-00AA00389B71 MEDIASUBTYPE_I420 == WMMEDIASUBTYPE_I420
+			if (pvi->bmiHeader.biBitCount == 12) { // biCompression 808596553 == 0x30323449
 				// 12 is correct for i420 -- WFMLE uses this, VLC *can* also use it, too
-			}else {
-			  warn("CheckMediaType - E_INVALIDARG invalid bit count: %d", pvi->bmiHeader.biBitCount);
-			  return E_INVALIDARG;
+			}
+			else {
+				warn("CheckMediaType - E_INVALIDARG invalid bit count: %d", pvi->bmiHeader.biBitCount);
+				return E_INVALIDARG;
 			}
 		} else {
-		  OLECHAR* bstrGuid;
-		  StringFromCLSID(SubType2, &bstrGuid);
-		  // FIXME: this always shows up, so setting to info instead of warn
-		  LOG(INFO) << "CheckMediaType - E_INVALIDARG - Invalid SubType2: " << bstrGuid;
-		  ::CoTaskMemFree(bstrGuid);
-          return E_INVALIDARG;
-		  // sometimes FLME asks for YV12 {32315659-0000-0010-8000-00AA00389B71}, or  
-		  // 32595559-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_YUY2, which is apparently "identical format" to I420
-		  // 43594448-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_HDYC
-		  // 59565955-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_UYVY
-		  // 56555949-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_IYUV # dunno if I actually get this one
+			if (SubType2 != MEDIASUBTYPE_YUY2 && SubType2 != MEDIASUBTYPE_UYVY) {
+				OLECHAR* bstrGuid;
+				StringFromCLSID(SubType2, &bstrGuid);
+				// note: Chrome always asks for YUV2 and UYVY, we only support I420
+				// 32595559-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_YUY2, which is apparently "identical format" to I420
+				// 59565955-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_UYVY
+				warn("CheckMediaType - E_INVALIDARG - Invalid SubType2: %S", bstrGuid);
+				::CoTaskMemFree(bstrGuid);
+			}
+			// sometimes FLME asks for YV12 {32315659-0000-0010-8000-00AA00389B71}, or  
+			// 43594448-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_HDYC
+			// 56555949-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_IYUV # dunno if I actually get this one
+			return E_INVALIDARG;
 		}
-    } else {
+	} else {
 		 // RGB's -- our default -- WFMLE doesn't get here, VLC does :P
 	}
 
 	if(m_bFormatAlreadySet) {
 		// then it must be the same as our current...see SetFormat msdn
 	    if(m_mt == *pMediaType) {
-			info("CheckMediaType - S_OK - format already set to th same type");
+			info("CheckMediaType - S_OK - format already set to the same type");
 			return S_OK;
 		} else {
 			// FIXME: this always shows up, so setting to info instead of warn
