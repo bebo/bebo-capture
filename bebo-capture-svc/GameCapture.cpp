@@ -34,10 +34,14 @@ extern "C" {
 		DWORD size = 1024;
 		BYTE data[1024];
 		HRESULT r;
-		r = RegGetBeboSZ(key, data, &size);
+		r = RegMachineGetBeboSZ(key, data, &size);
 		if (r != S_OK) {
-			warn("can not find registry key: %S", key);
-			return NULL;
+			warn("can not find registry key in HKLM, fallback to HKCU: %S", key);
+			r = RegGetBeboSZ(key, data, &size);
+			if (r != S_OK) {
+				warn("can not find registry key in HKCU either: %S", key);
+				return NULL;
+			}
 		}
 		CHAR * result = (CHAR *)bmalloc(strlen(file) + size);
 		wsprintfA(result, "%S\\%s", data, file);

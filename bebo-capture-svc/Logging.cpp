@@ -1,27 +1,35 @@
 #include "Logging.h"
 #include "windows.h"
 
+#define SIZE 2048
+
 extern HMODULE g_hModule;
 extern HRESULT RegGetBeboSZ(LPCTSTR szValueName, LPBYTE data, LPDWORD datasize);
 
 std::unique_ptr<g2LogWorker> logworker = NULL;
 
+void getLogsPath(CHAR *filename) {
+	DWORD size = SIZE;
+	BYTE data[SIZE];
+
+	memset(data, 0, size);
+	memset(filename, 0, size);
+
+	if (RegGetBeboSZ(TEXT("Logs"), data, &size) == S_OK) {
+		wsprintfA(filename, "%S\\", data);
+	} else {
+		GetTempPathA(SIZE, filename);
+	}
+}
+
 void logRotate() {
 	if (logworker == NULL) {
 		return;
 	}
-	const DWORD SIZE = 2048;
-	DWORD size = SIZE;
-	BYTE data[SIZE];
-	CHAR c_filename[SIZE];
-	memset(data, 0, size);
-	memset(c_filename, 0, size);
-	if (RegGetBeboSZ(TEXT("Logs"), data, &size) == S_OK) {
-		wsprintfA(c_filename, "%S\\", data);
-	} else {
-		GetTempPathA(SIZE, c_filename);
-	}
+	CHAR *c_filename = new CHAR[SIZE];
+	getLogsPath(c_filename);
 	logworker->changeLogFile(c_filename);
+	delete[] c_filename;
 }
 
 void PrintFileVersion(TCHAR *pszFilePath)
@@ -68,17 +76,9 @@ void PrintFileVersion(TCHAR *pszFilePath)
 
 void setupLogging() {
 	if (logworker == NULL || &*logworker == NULL) {
-		const DWORD SIZE = 2048;
-		DWORD size = SIZE;
-		BYTE data[SIZE];
-		CHAR c_filename[SIZE];
-		memset(data, 0, size);
-		memset(c_filename, 0, size);
-		if (RegGetBeboSZ(TEXT("Logs"), data, &size) == S_OK) {
-			wsprintfA(c_filename, "%S\\", data);
-		} else {
-			GetTempPathA(SIZE, c_filename);
-		}
+		CHAR *c_filename = new CHAR[SIZE];
+		getLogsPath(c_filename);
+
 		std::unique_ptr<g2LogWorker> g2log(new g2LogWorker("sarlacc", c_filename));
 		logworker = std::move(g2log);
 		g2::initializeLogging(&*logworker);
@@ -89,5 +89,7 @@ void setupLogging() {
 		wchar_t filename[4096];
 		GetModuleFileName(NULL, filename, 4096);
 		info("Executable: %S", filename);
+
+		delete[] c_filename;
 	}
 }

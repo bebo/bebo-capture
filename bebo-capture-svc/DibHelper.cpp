@@ -171,6 +171,24 @@ HRESULT RegGetBeboSZ(LPCTSTR szValueName, LPBYTE data, LPDWORD datasize) {
 	return NOERROR;
 }
 
+HRESULT RegMachineGetBeboSZ(LPCTSTR szValueName, LPBYTE data, LPDWORD datasize) {
+	HKEY hKey;
+	LONG i;
+	i = RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Bebo\\GameCapture", 0, KEY_READ, &hKey);
+
+	if (i != ERROR_SUCCESS) {
+		return E_INVALIDARG;
+	}
+	HRESULT hr = RegGetSZ(hKey, szValueName, data, datasize);
+	RegCloseKey(hKey);
+	if (FAILED(hr)) {
+		// key doesn't exist in the reg at all...
+		return E_INVALIDARG;
+	}
+	debug("Registry key: %S value: %ld (REG_SZ)", szValueName, data);
+	return NOERROR;
+}
+
 HRESULT RegGetBeboQWord(LPCTSTR szValueName, QWORD * data) {
 	HKEY hKey;
 	LONG i;
