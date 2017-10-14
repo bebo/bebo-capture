@@ -512,25 +512,6 @@ void DesktopCapture::CopyDirty(FrameData* data, INT offsetX, INT offsetY)
 	}
 }
 
-// unused atm
-static bool start_desktop_capture(struct desktop_capture *gc)
-{
-	debug("Starting capture");
-	return true;
-}
-
-// unused atm
-static void stop_desktop_capture(struct desktop_capture *gc)
-{
-}
-
-// unused atm
-boolean stop_desktop_capture(void **data) {
-	struct desktop_capture *gc = (desktop_capture *)*data;
-	stop_desktop_capture(gc);
-	return true;
-}
-
 static inline int getI420BufferSize(int width, int height) {
 	int half_width = (width + 1) >> 1;
 	int half_height = (height + 1) >> 1;
@@ -765,6 +746,12 @@ HRESULT DesktopCapture::ProcessFrameMetaData(FrameData* Data) {
 
 	return Ret;
 }
+
+void DesktopCapture::Cleanup() 
+{
+	CleanRefs();
+}
+
 //
 // Get next frame and write it into Data
 //

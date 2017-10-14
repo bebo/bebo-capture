@@ -52,6 +52,7 @@ public:
 	GDICapture();
 	~GDICapture();
 
+	void Cleanup();
 	void SetSize(int width, int height);
 	void SetCaptureHandle(HWND hwnd);
 	bool IsReady() { return capture_hwnd != NULL; }

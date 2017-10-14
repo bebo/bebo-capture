@@ -14,6 +14,7 @@
 #include <Psapi.h>
 
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
+#define EVENT_READ_REGISTRY "Global\\BEBO_CAPTURE_READ_REGISTRY"
 
 extern "C" {
 	extern bool load_graphics_offsets(bool is32bit);
@@ -69,6 +70,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_iDesktopAdapterNumber(-1),
 	m_iCaptureHandle(-1),
 	m_bCaptureOnce(0),
+	readRegistryEvent(NULL),
 	init_hooks_thread(NULL)
 {
 	info("CPushPinDesktop");
@@ -80,7 +82,20 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 		init_hooks_thread = CreateThread(NULL, 0, init_hooks, NULL, 0, NULL);
 		DWORD result = WaitForSingleObject(init_hooks_thread, INFINITE);
 		initialized = true;
-		info("init_hooks_thread result: 0x%08x", result);
+		info("init_hooks_thread result: 0x%08x", result);	
+	}
+
+	if (!readRegistryEvent) {
+		readRegistryEvent = CreateEvent(NULL,
+			TRUE,
+			FALSE,
+			TEXT(EVENT_READ_REGISTRY));
+
+		if (readRegistryEvent == NULL) {
+			error("read_registry_event: NULL. MAYBE SHOULD OPEN EVENT INSTEAD?"); 
+		} else {
+			info("read_registry_event: %lld", readRegistryEvent);
+		}
 	}
 
 	// now read some custom settings...
@@ -125,14 +140,21 @@ CPushPinDesktop::~CPushPinDesktop()
 		free(pOldData);
 		pOldData = NULL;
 	}
+
+	if (readRegistryEvent) {
+		CloseHandle(readRegistryEvent);
+	}
 }
 
-void CPushPinDesktop::GetConstraintsFromRegistry(void) {
+int CPushPinDesktop::GetConstraintsFromRegistry(void) {
+	int numberOfChanges = 0;
+
 	int oldCaptureConfigWidth = m_iCaptureConfigWidth;
 	int newCaptureConfigWidth = read_config_setting(TEXT("CaptureWidth"), 1280, true);
 	if (oldCaptureConfigWidth != newCaptureConfigWidth) {
 		m_iCaptureConfigWidth = newCaptureConfigWidth;
 		info("CaptureWidth: %d", m_iCaptureConfigWidth);
+		numberOfChanges++;
 	}
 
 	int oldCaptureConfigHeight = m_iCaptureConfigHeight;
@@ -140,6 +162,7 @@ void CPushPinDesktop::GetConstraintsFromRegistry(void) {
 	if (oldCaptureConfigHeight != newCaptureConfigHeight) {
 		m_iCaptureConfigHeight = newCaptureConfigHeight;
 		info("CaptureHeight: %d", m_iCaptureConfigHeight);
+		numberOfChanges++;
 	}
 
 	int oldCaptureFPS = GetFps();
@@ -147,14 +170,17 @@ void CPushPinDesktop::GetConstraintsFromRegistry(void) {
 	if (oldCaptureFPS != newCaptureFPS) {
 		m_rtFrameLength = UNITS / newCaptureFPS;
 		info("CaptureFPS: %d", newCaptureFPS);
+		numberOfChanges++;
 	}
+	return numberOfChanges;
 }
 
-void CPushPinDesktop::GetGameFromRegistry(void) {
+int CPushPinDesktop::GetGameFromRegistry(void) {
 	DWORD size = 1024;
 	BYTE data[1024];
+	int numberOfChanges = 0;
 
-	GetConstraintsFromRegistry();
+	numberOfChanges += GetConstraintsFromRegistry();
 
 	if (RegGetBeboSZ(TEXT("CaptureType"), data, &size) == S_OK) {
 		int old = m_iCaptureType;
@@ -171,6 +197,7 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		}
 		if (old != m_iCaptureType) {
 			info("CaptureType: %s (%d)", type, m_iCaptureType);
+			numberOfChanges++;
 		}
 	}
     
@@ -198,6 +225,7 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		if (oldAdapterId != m_iDesktopAdapterNumber ||
 			oldDesktopId != m_iDesktopNumber) {
 			info("CaptureId: %s:%s:%s", typeName, adapterId, desktopId);
+			numberOfChanges++;
 		}
 	}
 
@@ -208,6 +236,7 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		wsprintfW(m_pCaptureWindowName, L"%s", data);
 		if (old == NULL || wcscmp(old, m_pCaptureWindowName) != 0) {
 			info("CaptureWindowName: %S", m_pCaptureWindowName);
+			numberOfChanges++;
 			if (old != NULL) {
 				free(old);
 			}
@@ -221,6 +250,7 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		wsprintfW(m_pCaptureWindowClassName, L"%s", data);
 		if (old == NULL || wcscmp(old, m_pCaptureWindowClassName) != 0) {
 			info("CaptureWindowClassName: %S", m_pCaptureWindowClassName);
+			numberOfChanges++;
 			if (old != NULL) {
 				free(old);
 			}
@@ -234,6 +264,7 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		wsprintfW(m_pCaptureExeFullName, L"%s", data);
 		if (old == NULL || wcscmp(old, m_pCaptureExeFullName) != 0) {
 			info("CaptureExeFullName: %S", m_pCaptureExeFullName);
+			numberOfChanges++;
 			if (old != NULL) {
 				free(old);
 			}
@@ -246,6 +277,7 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 		m_iCaptureHandle = qout;
 		if (oldCaptureHandle != m_iCaptureHandle) {
 			info("CaptureWindowHandle: %ld", m_iCaptureHandle);
+			numberOfChanges++;
 		}
 	}
 
@@ -253,15 +285,17 @@ void CPushPinDesktop::GetGameFromRegistry(void) {
 	m_bCaptureAntiCheat = read_config_setting(TEXT("CaptureAntiCheat"), 0, true) == 1;
 	if (oldAntiCheat != m_bCaptureAntiCheat) {
 		info("CaptureAntiCheat: %d", m_bCaptureAntiCheat);
+		numberOfChanges++;
 	}
 
 	int oldCaptureOnce = m_bCaptureOnce;
 	m_bCaptureOnce = read_config_setting(TEXT("CaptureOnce"), 0, true) == 1;
 	if (oldCaptureOnce != m_bCaptureOnce) {
 		info("CaptureOnce: %d", m_bCaptureOnce);
+		numberOfChanges++;
 	}
 
-	return;
+	return numberOfChanges;
 }
 
 
@@ -274,6 +308,29 @@ HRESULT CPushPinDesktop::Active(void) {
 	active = true;
 	return CSourceStream::Active();
 };
+
+void CPushPinDesktop::CleanupCapture() {
+	if (game_context) {
+		stop_game_capture(&game_context);
+		game_context = NULL;
+	}
+
+	if (m_pDesktopCapture) {
+		m_pDesktopCapture->Cleanup();
+	}
+
+	if (m_pGDICapture) {
+		m_pGDICapture->SetCaptureHandle(NULL);
+	}
+
+	globalStart = GetTickCount();
+	countMissed = 0;
+	sumMillisTook = 0;
+	fastestRoundMillis = LONG_MAX;
+	m_iFrameNumber = 0;
+	missed = true;
+	previousFrame = 0;
+}
 
 HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	CheckPointer(pSample, E_POINTER);
@@ -394,6 +451,16 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 	boolean gotFrame = false;
 	while (!gotFrame) {
+		DWORD result = WaitForSingleObject(readRegistryEvent, 0);
+		if (result == WAIT_OBJECT_0) {
+			int changeCount = GetGameFromRegistry();
+			info("Received re-read registry event, number of changes in registry: %d", changeCount);
+			if (changeCount > 0) {
+
+			}
+
+			ResetEvent(readRegistryEvent);
+		}
 		switch (m_iCaptureType) {
 		case CAPTURE_DESKTOP:
 			return FillBuffer_Desktop(pSample);

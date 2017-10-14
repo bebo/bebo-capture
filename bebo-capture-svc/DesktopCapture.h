@@ -39,6 +39,7 @@ public:
 	~DesktopCapture();
 	void Init(int adapterId, int desktopId, int width, int height);
 	
+	void Cleanup();
 	bool GetFrame(IMediaSample *pSimple, bool captureMouse, REFERENCE_TIME now);
 	bool GetOldFrame(IMediaSample *pSimple, bool captureMouse);
 	bool DoneWithFrame();
