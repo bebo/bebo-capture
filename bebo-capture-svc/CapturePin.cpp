@@ -92,9 +92,16 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 			TEXT(EVENT_READ_REGISTRY));
 
 		if (readRegistryEvent == NULL) {
-			error("read_registry_event: NULL. MAYBE SHOULD OPEN EVENT INSTEAD?"); 
+			warn("Failed to create read registry signal event. Attempting to open event.");
+			readRegistryEvent = OpenEvent(EVENT_ALL_ACCESS,
+				FALSE,
+				TEXT(EVENT_READ_REGISTRY));
+
+			if (readRegistryEvent == NULL) {
+				error("Failed to open registry signal event, after attempted to create it. We should die here.");
+			}
 		} else {
-			info("read_registry_event: %lld", readRegistryEvent);
+			info("Created read registry signal event. Handle: %lld", readRegistryEvent);
 		}
 	}
 
