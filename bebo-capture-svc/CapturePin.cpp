@@ -463,7 +463,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			int changeCount = GetGameFromRegistry();
 			info("Received re-read registry event, number of changes in registry: %d", changeCount);
 			if (changeCount > 0) {
-
+				CleanupCapture();
 			}
 
 			ResetEvent(readRegistryEvent);
