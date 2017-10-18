@@ -22,6 +22,7 @@
 #include "libyuv/convert.h"
 #include "libyuv/scale.h"
 #include "CommonTypes.h"
+#include "registry.h"
 
 #define STOP_BEING_BAD \
 	    "This is most likely due to security software" \
@@ -30,29 +31,32 @@
 
 extern "C" {
 	char *bebo_find_file(const char *file) {
+		RegKey machine_registry(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Bebo\\GameCapture", KEY_READ);
+
 		LPCTSTR key = L"Directory";
-		DWORD size = 1024;
-		BYTE data[1024];
 		HRESULT r;
-		r = RegMachineGetBeboSZ(key, data, &size);
-		if (r != S_OK) {
+		std::wstring out;
+
+		if (machine_registry.HasValue(key)) {
+			machine_registry.ReadValue(key, &out);
+		}
+		else {
 			warn("can not find registry key in HKLM, fallback to HKCU: %S", key);
-			r = RegGetBeboSZ(key, data, &size);
-			if (r != S_OK) {
-				warn("can not find registry key in HKCU either: %S", key);
+			RegKey local_registry(HKEY_CURRENT_USER, L"Software\\Bebo\\GameCapture", KEY_READ);
+			if (!local_registry.HasValue(key)) {
 				return NULL;
 			}
+			local_registry.ReadValue(key, &out);
 		}
-		CHAR * result = (CHAR *)bmalloc(strlen(file) + size);
-		wsprintfA(result, "%S\\%s", data, file);
-		info("RegGetBeboSZ %S, %S, %d, %s", key, data, size, result);
+
+		CHAR * result = (CHAR *)bmalloc(wcslen(out.c_str()) + strlen(file) + 1);
+		wsprintfA(result, "%S\\%s", out.c_str(), file);
+		info("RegGetBeboSZ %S, %S, %s", key, out.c_str(), result);
 		return result;
 	}
-	struct graphics_offsets offsets32 = {0};
-	struct graphics_offsets offsets64 = {0};
-	
+	struct graphics_offsets offsets32 = { 0 };
+	struct graphics_offsets offsets64 = { 0 };
 }
-
 
 enum capture_mode {
 	CAPTURE_MODE_ANY,

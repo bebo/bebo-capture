@@ -51,12 +51,8 @@ static DWORD WINAPI init_hooks(LPVOID unused)
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	: CSourceStream(NAME("Push Source CPushPinDesktop child/pin"), phr, pFilter, L"Capture"),
 	m_iFrameNumber(0),
-	pOldData(NULL),
-	m_bConvertToI420(true),
 	m_pParent(pFilter),
 	m_bFormatAlreadySet(false),
-	hRawBitmap(NULL),
-	m_bUseCaptureBlt(false),
 	previousFrame(0),
 	active(false),
 	m_pCaptureWindowName(NULL),
@@ -70,10 +66,29 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_iDesktopAdapterNumber(-1),
 	m_iCaptureHandle(-1),
 	m_bCaptureOnce(0),
+	m_iCaptureConfigWidth(0),
+	m_iCaptureConfigHeight(0),
+	m_rtFrameLength(UNITS / 30),
 	readRegistryEvent(NULL),
 	init_hooks_thread(NULL)
 {
 	info("CPushPinDesktop");
+
+	switch (m_iCaptureType) {
+	case CAPTURE_INJECT:
+		registry.Open(HKEY_CURRENT_USER, L"Software\\Bebo\\GameCapture", KEY_READ);
+		break;
+	case CAPTURE_DESKTOP:
+		registry.Open(HKEY_CURRENT_USER, L"Software\\Bebo\\DesktopCapture", KEY_READ);
+		break;
+	case CAPTURE_GDI:
+		registry.Open(HKEY_CURRENT_USER, L"Software\\Bebo\\GdiCapture", KEY_READ);
+		break;
+	default:
+		registry.Open(HKEY_CURRENT_USER, L"Software\\Bebo\\GameCapture", KEY_READ);
+		break;
+	}
+
 	// Get the device context of the main display, just to get some metrics for it...
 	config = (struct game_capture_config*) malloc(sizeof game_capture_config);
 	memset(config, 0, sizeof game_capture_config);
@@ -108,98 +123,70 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	// now read some custom settings...
 	WarmupCounter();
 
-	m_iCaptureConfigWidth = read_config_setting(TEXT("CaptureWidth"), 1280, true);
-	ASSERT_RAISE(m_iCaptureConfigWidth >= 0); // negatives not allowed...
-
-	m_iCaptureConfigHeight = read_config_setting(TEXT("CaptureHeight"), 720, true);
-	ASSERT_RAISE(m_iCaptureConfigHeight >= 0); // negatives not allowed, if it's set :)
-
-	int config_fps = read_config_setting(TEXT("CaptureFPS"), 30, false);
-	ASSERT_RAISE(config_fps > 0);	
-
-	m_rtFrameLength = UNITS / config_fps;
-
 	GetGameFromRegistry();
-
-	LOGF(INFO, "default/from reg read config as: %dx%d -> %dx%d %dfps",
-		m_iCaptureConfigHeight, m_iCaptureConfigWidth, getCaptureDesiredFinalHeight(), getCaptureDesiredFinalWidth(), config_fps);
 }
 
 CPushPinDesktop::~CPushPinDesktop()
 {
-	delete m_pDesktopCapture;
-	m_pDesktopCapture = nullptr;
+	if (m_pDesktopCapture) {
+		delete m_pDesktopCapture;
+		m_pDesktopCapture = nullptr;
+	}
 
-	delete m_pGDICapture;
-	m_pGDICapture = nullptr;
-
-	// They *should* call this...VLC does at least, correctly.
-
-	// Release the device context stuff
-	LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out;
-
-	// release desktop capture
-
-	if (hRawBitmap)
-		DeleteObject(hRawBitmap); // don't need those bytes anymore -- I think we are supposed to delete just this and not hOldBitmap
-
-	if (pOldData) {
-		free(pOldData);
-		pOldData = NULL;
+	if (m_pGDICapture) {
+		delete m_pGDICapture;
+		m_pGDICapture = nullptr;
 	}
 
 	if (readRegistryEvent) {
 		CloseHandle(readRegistryEvent);
 	}
+
+	LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out;
 }
 
 int CPushPinDesktop::GetConstraintsFromRegistry(void) {
 	int numberOfChanges = 0;
 
-	int oldCaptureConfigWidth = m_iCaptureConfigWidth;
-	int newCaptureConfigWidth = read_config_setting(TEXT("CaptureWidth"), 1280, true);
-	if (oldCaptureConfigWidth != newCaptureConfigWidth) {
-		m_iCaptureConfigWidth = newCaptureConfigWidth;
-		info("CaptureWidth: %d", m_iCaptureConfigWidth);
-		numberOfChanges++;
+	DWORD oldCaptureFPS = GetFps();
+	DWORD newCaptureFPS = -1;
+
+	if (registry.HasValue(TEXT("CaptureFPS"))) {
+		registry.ReadValueDW(TEXT("CaptureFPS"), &newCaptureFPS);
+
+		if (oldCaptureFPS != newCaptureFPS) {
+			m_rtFrameLength = UNITS / newCaptureFPS;
+			info("CaptureFPS: %d", newCaptureFPS);
+			numberOfChanges++;
+		}
 	}
 
-	int oldCaptureConfigHeight = m_iCaptureConfigHeight;
-	int newCaptureConfigHeight = read_config_setting(TEXT("CaptureHeight"), 720, true);
-	if (oldCaptureConfigHeight != newCaptureConfigHeight) {
-		m_iCaptureConfigHeight = newCaptureConfigHeight;
-		info("CaptureHeight: %d", m_iCaptureConfigHeight);
-		numberOfChanges++;
-	}
-
-	int oldCaptureFPS = GetFps();
-	int newCaptureFPS = read_config_setting(TEXT("CaptureFPS"), 30, false);
-	if (oldCaptureFPS != newCaptureFPS) {
-		m_rtFrameLength = UNITS / newCaptureFPS;
-		info("CaptureFPS: %d", newCaptureFPS);
-		numberOfChanges++;
-	}
 	return numberOfChanges;
 }
 
 int CPushPinDesktop::GetGameFromRegistry(void) {
-	DWORD size = 1024;
-	BYTE data[1024];
 	int numberOfChanges = 0;
 
 	numberOfChanges += GetConstraintsFromRegistry();
 
-	if (RegGetBeboSZ(TEXT("CaptureType"), data, &size) == S_OK) {
+	if (registry.HasValue(TEXT("CaptureType"))) {
+		std::wstring data;
+		registry.ReadValue(TEXT("CaptureType"), &data);
+
 		int old = m_iCaptureType;
 		char type[1024];
-		sprintf(type, "%S", data);
+		sprintf(type, "%S", data.c_str());
+
 		if (strcmp(type, "desktop") == 0) {
 			m_iCaptureType = CAPTURE_DESKTOP;
-		} else if (strcmp(type, "inject") == 0) {
+		}
+		else if (strcmp(type, "inject") == 0) {
 			m_iCaptureType = CAPTURE_INJECT;
-		} else if (strcmp(type, "gdi") == 0) {
+		}
+		else if (strcmp(type, "gdi") == 0) {
 			m_iCaptureType = CAPTURE_GDI;
-		} else if (strcmp(type, "dshow") == 0) {
+		}
+		else if (strcmp(type, "dshow") == 0) {
 			m_iCaptureType = CAPTURE_DSHOW;
 		}
 		if (old != m_iCaptureType) {
@@ -207,13 +194,16 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 			numberOfChanges++;
 		}
 	}
-    
-	size = sizeof(data);
+
 	int oldAdapterId = m_iDesktopAdapterNumber;
 	int oldDesktopId = m_iDesktopNumber;
-	if (RegGetBeboSZ(TEXT("CaptureId"), data, &size) == S_OK) {
+	if (registry.HasValue(TEXT("CaptureId"))) {
+		std::wstring data;
+		registry.ReadValue(TEXT("CaptureId"), &data);
+
 		char text[1024];
-		sprintf(text, "%S", data);
+		sprintf(text, "%S", data.c_str());
+
 		char * typeName = strtok(text, ":");
 		char * adapterId = strtok(NULL, ":");
 		char * desktopId = strtok(NULL, ":");
@@ -236,12 +226,14 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		}
 	}
 
-	size = sizeof(data);
-	if (RegGetBeboSZ(TEXT("CaptureWindowName"), data, &size) == S_OK) {
-		LPWSTR old = m_pCaptureWindowName;
-		m_pCaptureWindowName = (LPWSTR) malloc(size*2);
-		wsprintfW(m_pCaptureWindowName, L"%s", data);
+	if (registry.HasValue(TEXT("CaptureWindowName"))) {
+		std::wstring data;
+		LPWSTR old = wcsdup(m_pCaptureWindowName);
+
+		registry.ReadValue(TEXT("CaptureWindowName"), &data);
+
 		if (old == NULL || wcscmp(old, m_pCaptureWindowName) != 0) {
+			m_pCaptureWindowName = wcsdup(data.c_str());
 			info("CaptureWindowName: %S", m_pCaptureWindowName);
 			numberOfChanges++;
 			if (old != NULL) {
@@ -250,12 +242,14 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		}
 	}
 
-	size = sizeof(data);
-	if (RegGetBeboSZ(TEXT("CaptureWindowClassName"), data, &size) == S_OK) {
-		LPWSTR old = m_pCaptureWindowClassName;
-		m_pCaptureWindowClassName = (LPWSTR) malloc(size * 2);
-		wsprintfW(m_pCaptureWindowClassName, L"%s", data);
+	if (registry.HasValue(TEXT("CaptureWindowClassName"))) {
+		std::wstring data;
+		LPWSTR old = wcsdup(m_pCaptureWindowClassName);
+
+		registry.ReadValue(TEXT("CaptureWindowClassName"), &data);
+
 		if (old == NULL || wcscmp(old, m_pCaptureWindowClassName) != 0) {
+			m_pCaptureWindowClassName = wcsdup(data.c_str());
 			info("CaptureWindowClassName: %S", m_pCaptureWindowClassName);
 			numberOfChanges++;
 			if (old != NULL) {
@@ -264,12 +258,14 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		}
 	}
 
-	size = sizeof(data);
-	if (RegGetBeboSZ(TEXT("CaptureExeFullName"), data, &size) == S_OK) {
-		LPWSTR old = m_pCaptureExeFullName;
-		m_pCaptureExeFullName = (LPWSTR) malloc(size * 2);
-		wsprintfW(m_pCaptureExeFullName, L"%s", data);
+	if (registry.HasValue(TEXT("CaptureExeFullName"))) {
+		std::wstring data;
+		LPWSTR old = wcsdup(m_pCaptureExeFullName);
+
+		registry.ReadValue(TEXT("CaptureExeFullName"), &data);
+
 		if (old == NULL || wcscmp(old, m_pCaptureExeFullName) != 0) {
+			m_pCaptureExeFullName = wcsdup(data.c_str());
 			info("CaptureExeFullName: %S", m_pCaptureExeFullName);
 			numberOfChanges++;
 			if (old != NULL) {
@@ -278,9 +274,11 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		}
 	}
 
-	QWORD qout;
-	QWORD oldCaptureHandle = m_iCaptureHandle;
-	if (RegGetBeboQWord(TEXT("CaptureWindowHandle"), &qout) == S_OK) {
+	if (registry.HasValue(TEXT("CaptureWindowHandle"))) {
+		int64_t qout;
+		int64_t oldCaptureHandle = m_iCaptureHandle;
+		registry.ReadInt64(TEXT("CaptureWindowHandle"), &qout);
+
 		m_iCaptureHandle = qout;
 		if (oldCaptureHandle != m_iCaptureHandle) {
 			info("CaptureWindowHandle: %ld", m_iCaptureHandle);
@@ -288,18 +286,28 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		}
 	}
 
-	int oldAntiCheat = m_bCaptureAntiCheat;
-	m_bCaptureAntiCheat = read_config_setting(TEXT("CaptureAntiCheat"), 0, true) == 1;
-	if (oldAntiCheat != m_bCaptureAntiCheat) {
-		info("CaptureAntiCheat: %d", m_bCaptureAntiCheat);
-		numberOfChanges++;
+	if (registry.HasValue(TEXT("CaptureAntiCheat"))) {
+		DWORD qout;
+		int oldAntiCheat = m_bCaptureAntiCheat;
+
+		registry.ReadValueDW(TEXT("CaptureAntiCheat"), &qout);
+		m_bCaptureAntiCheat = (qout == 1);
+		if (oldAntiCheat != m_bCaptureAntiCheat) {
+			info("CaptureAntiCheat: %d", m_bCaptureAntiCheat);
+			numberOfChanges++;
+		}
 	}
 
-	int oldCaptureOnce = m_bCaptureOnce;
-	m_bCaptureOnce = read_config_setting(TEXT("CaptureOnce"), 0, true) == 1;
-	if (oldCaptureOnce != m_bCaptureOnce) {
-		info("CaptureOnce: %d", m_bCaptureOnce);
-		numberOfChanges++;
+	if (registry.HasValue(TEXT("CaptureOnce"))) {
+		DWORD qout;
+		int oldCaptureOnce = m_bCaptureOnce;
+
+		registry.ReadValueDW(TEXT("CaptureOnce"), &qout);
+		m_bCaptureOnce = (qout == 1);
+		if (oldCaptureOnce != m_bCaptureAntiCheat) {
+			info("CaptureOnce: %d", m_bCaptureAntiCheat);
+			numberOfChanges++;
+		}
 	}
 
 	return numberOfChanges;
@@ -768,10 +776,7 @@ HRESULT CPushPinDesktop::DecideBufferSize(IMemAllocator *pAlloc,
 	int bytesPerLine;
 	// there may be a windows method that would do this for us...GetBitmapSize(&header); but might be too small for VLC? LODO try it :)
 	// some pasted code...
-	int bytesPerPixel = (header.biBitCount / 8);
-	if (m_bConvertToI420) {
-		bytesPerPixel = 32 / 8; // we convert from a 32 bit to i420, so need more space in this case
-	}
+	int bytesPerPixel = 32 / 8; // we convert from a 32 bit to i420, so need more space in this case
 
 	bytesPerLine = header.biWidth * bytesPerPixel;
 	/* round up to a dword boundary for stride */
@@ -786,11 +791,7 @@ HRESULT CPushPinDesktop::DecideBufferSize(IMemAllocator *pAlloc,
 	// NB that we are adding in space for a final "pixel array" (http://en.wikipedia.org/wiki/BMP_file_format#DIB_Header_.28Bitmap_Information_Header.29) even though we typically don't need it, this seems to fix the segfaults
 	// maybe somehow down the line some VLC thing thinks it might be there...weirder than weird.. LODO debug it LOL.
 	int bitmapSize = 14 + header.biSize + (long)(bytesPerLine)*(header.biHeight) + bytesPerLine*header.biHeight;
-	pProperties->cbBuffer = bitmapSize;
-	//pProperties->cbBuffer = max(pProperties->cbBuffer, m_mt.GetSampleSize()); // didn't help anything
-	if (m_bConvertToI420) {
-		pProperties->cbBuffer = header.biHeight * header.biWidth * 3 / 2; // necessary to prevent an "out of memory" error for FMLE. Yikes. Oh wow yikes.
-	}
+	pProperties->cbBuffer = header.biHeight * header.biWidth * 3 / 2; // necessary to prevent an "out of memory" error for FMLE. Yikes. Oh wow yikes.
 
 	pProperties->cBuffers = 1; // 2 here doesn't seem to help the crashes...
 
@@ -809,36 +810,6 @@ HRESULT CPushPinDesktop::DecideBufferSize(IMemAllocator *pAlloc,
 	{
 		return E_FAIL;
 	}
-
-	// now some "once per run" setups
-
-	// LODO reset aer with each run...somehow...somehow...Stop method or something...
-	OSVERSIONINFOEX version;
-	ZeroMemory(&version, sizeof(OSVERSIONINFOEX));
-	version.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
-	GetVersionEx((LPOSVERSIONINFO)&version);
-	if (version.dwMajorVersion >= 6) { // meaning vista +
-		if (read_config_setting(TEXT("disable_aero_for_vista_plus_if_1"), 0, true) == 1) {
-			printf("turning aero off/disabling aero");
-			turnAeroOn(false);
-		}
-		else {
-			printf("leaving aero on");
-			turnAeroOn(true);
-		}
-	}
-
-	if (pOldData) {
-		free(pOldData);
-		pOldData = NULL;
-	}
-	pOldData = (BYTE *)malloc(max(pProperties->cbBuffer*pProperties->cBuffers, bitmapSize)); // we convert from a 32 bit to i420, so need more space, hence max
-	memset(pOldData, 0, pProperties->cbBuffer*pProperties->cBuffers); // reset it just in case :P	
-
-	// create a bitmap compatible with the screen DC
-	if (hRawBitmap)
-		DeleteObject(hRawBitmap); // delete the old one in case it exists...
-	hRawBitmap = CreateCompatibleBitmap(hScrDc, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
 
 	previousFrame = 0; // reset
 	m_iFrameNumber = 0;

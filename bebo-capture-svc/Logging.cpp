@@ -1,22 +1,24 @@
 #include "Logging.h"
 #include "windows.h"
+#include "registry.h"
 
 #define SIZE 2048
 
 extern HMODULE g_hModule;
-extern HRESULT RegGetBeboSZ(LPCTSTR szValueName, LPBYTE data, LPDWORD datasize);
 
 std::unique_ptr<g2LogWorker> logworker = NULL;
 
+
 void getLogsPath(CHAR *filename) {
 	DWORD size = SIZE;
-	BYTE data[SIZE];
-
-	memset(data, 0, size);
 	memset(filename, 0, size);
 
-	if (RegGetBeboSZ(TEXT("Logs"), data, &size) == S_OK) {
-		wsprintfA(filename, "%S\\", data);
+	RegKey registry(HKEY_CURRENT_USER, L"Software\\Bebo\\GameCapture", KEY_READ);
+
+	if (registry.HasValue(L"Logs")) {
+		std::wstring data;
+		registry.ReadValue(L"Logs", &data);
+		wsprintfA(filename, "%S\\", data.c_str());
 	} else {
 		GetTempPathA(SIZE, filename);
 	}

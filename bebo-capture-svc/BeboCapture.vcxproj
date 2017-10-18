@@ -332,6 +332,7 @@
     <ClCompile Include="parent.cpp" />
     <ClCompile Include="CapturePin.cpp" />
     <ClCompile Include="CapturePinAccessories.cpp" />
+    <ClCompile Include="registry.cpp" />
     <ClCompile Include="setup.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -355,6 +356,7 @@
     <ClInclude Include="GDICapture.h" />
     <ClInclude Include="IBeboCapture.h" />
     <ClInclude Include="Logging.h" />
+    <ClInclude Include="registry.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Capture.rc" />

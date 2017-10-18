@@ -13,6 +13,7 @@
 #include "GameCapture.h"
 #include "GDICapture.h"
 #include "CommonTypes.h"
+#include "registry.h"
 
 /*
 // UNITS = 10 ^ 7  
@@ -85,6 +86,7 @@ public:
     long m_iFrameNumber;
 
 protected:
+	RegKey registry;
 
     //int m_FramesWritten;				// To track where we are
     REFERENCE_TIME m_rtFrameLength; // also used to get the fps
@@ -105,32 +107,18 @@ protected:
 
 	HANDLE init_hooks_thread;
 
-    //CMediaType m_MediaType;
-    //CImageDisplay m_Display;            // Figures out our media type for us
-	
 	CGameCapture* m_pParent;
 
 	DesktopCapture* m_pDesktopCapture;
 	GDICapture* m_pGDICapture;
 
-	HDC hScrDc;
-	HBITMAP     hRawBitmap;
-
-	//CCritSec m_cSharedState;            // Protects our internal state use CAutoLock cAutoLock(m_pFilter->pStateLock()); instead
-
 	bool m_bFormatAlreadySet;
-	bool m_bConvertToI420;
-	bool m_bUseCaptureBlt;
-	bool m_bCaptureMouse;
 	bool m_bCaptureOnce;
 	volatile bool active;
-	//int m_iScreenBitDepth;
 	bool m_bCaptureAntiCheat;
 
 	float GetFps();
 	float GetMaxFps() { return MAX_FPS; };
-
-    BYTE *pOldData;
 
 	int m_iCaptureType;
 	int m_iDesktopNumber;

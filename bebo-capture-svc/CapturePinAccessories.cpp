@@ -6,45 +6,55 @@
 #include "Logging.h"
 
 #include <dvdmedia.h>
-
 #include <wmsdkidl.h>
+
+const int PIN_RESOLUTION_SIZE = 9;
+const int PIN_FPS_SIZE = 1;
+const int PIN_WIDTH[PIN_RESOLUTION_SIZE] = { 640, 854, 1120, // 4:3, 16:9, 21:9
+					960, 1280, 1680,
+					1440, 1920, 2560 };
+const int PIN_HEIGHT[PIN_RESOLUTION_SIZE] = { 480, 480, 480,
+					720, 720, 720,
+					1080, 1080, 1080 };
+const REFERENCE_TIME PIN_FPS[PIN_FPS_SIZE] = { UNITS / 60 };
 
 // logging stuff
 int DisplayRECT(char *buffer, size_t count, const RECT& rc)
 {
 	return snprintf(buffer, count, "%dx%d[%d:%d]",
-            rc.right - rc.left,
-            rc.top - rc.bottom,
-            rc.right,
-            rc.bottom);
+		rc.right - rc.left,
+		rc.top - rc.bottom,
+		rc.right,
+		rc.bottom);
 }
 
 int DisplayBITMAPINFO(char *buffer, size_t count, const BITMAPINFOHEADER* pbmi)
 {
-    if (pbmi->biCompression < 256) {
+	if (pbmi->biCompression < 256) {
 		return snprintf(buffer, count, "[bitmap: %dx%dx%d bit  (%d)] size:%d (%d/%d)",
 			pbmi->biWidth,
 			pbmi->biHeight,
-            pbmi->biBitCount,
+			pbmi->biBitCount,
 			pbmi->biCompression,
 			pbmi->biSizeImage,
 			pbmi->biPlanes,
 			pbmi->biClrUsed);
-    } else {
+	}
+	else {
 		// TOOD cant test the biCompression oddity and compiler complains
 		//return snprintf(buffer, count, "[bitmap: %dx%dx%d bit '%4.4hx' size:%d (%d/%d)",
 		return snprintf(buffer, count, "[bitmap: %dx%dx%d bit '?' size:%d (%d/%d)",
-            pbmi->biWidth,
+			pbmi->biWidth,
 			pbmi->biHeight,
-            pbmi->biBitCount,
+			pbmi->biBitCount,
 			//&pbmi->biCompression,
 			pbmi->biSizeImage,
 			pbmi->biPlanes,
 			pbmi->biClrUsed);
-    }
+	}
 }
 
-int sprintf_pmt(char *buffer, size_t count, char *label, const AM_MEDIA_TYPE *pmtIn) 
+int sprintf_pmt(char *buffer, size_t count, char *label, const AM_MEDIA_TYPE *pmtIn)
 {
 	int cnt = 0;
 
@@ -55,7 +65,8 @@ int sprintf_pmt(char *buffer, size_t count, char *label, const AM_MEDIA_TYPE *pm
 
 	if (pmtIn->bFixedSizeSamples) {
 		cnt += snprintf(&buffer[cnt], count - cnt, " [Sample Size %d]", pmtIn->lSampleSize);
-	} else {
+	}
+	else {
 		cnt += snprintf(&buffer[cnt], count - cnt, " [Variable size samples]");
 	}
 
@@ -76,9 +87,10 @@ int sprintf_pmt(char *buffer, size_t count, char *label, const AM_MEDIA_TYPE *pm
 		// cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo->rcSource);
 		// cnt += snprintf(&buffer[cnt], count - cnt, " dstRect:");
 		// cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo->rcTarget);
-        cnt += DisplayBITMAPINFO(&buffer[cnt], count - cnt, HEADER(pmtIn->pbFormat));
+		cnt += DisplayBITMAPINFO(&buffer[cnt], count - cnt, HEADER(pmtIn->pbFormat));
 
-	} else if (pmtIn->formattype == FORMAT_VideoInfo2) {
+	}
+	else if (pmtIn->formattype == FORMAT_VideoInfo2) {
 
 		VIDEOINFOHEADER2 *pVideoInfo2 = (VIDEOINFOHEADER2 *)pmtIn->pbFormat;
 
@@ -87,7 +99,8 @@ int sprintf_pmt(char *buffer, size_t count, char *label, const AM_MEDIA_TYPE *pm
 		// cnt += snprintf(&buffer[cnt], count - cnt, " dstRect:");
 		// cnt += DisplayRECT(&buffer[cnt], count - cnt, pVideoInfo2->rcTarget);
 		cnt += DisplayBITMAPINFO(&buffer[cnt], count - cnt, &pVideoInfo2->bmiHeader);
-	} else {
+	}
+	else {
 		WCHAR format_uuid[64];
 		StringFromGUID2(pmtIn->formattype, format_uuid, 64);
 		cnt += snprintf(&buffer[cnt], count - cnt, " Format type %S", format_uuid);
@@ -97,7 +110,6 @@ int sprintf_pmt(char *buffer, size_t count, char *label, const AM_MEDIA_TYPE *pm
 
 void info_pmt(char* label, const AM_MEDIA_TYPE *pmtIn)
 {
-
 	const int SIZE = 10 * 4096;
 	char buffer[SIZE];
 	sprintf_pmt(buffer, SIZE, label, pmtIn);
@@ -154,38 +166,41 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 	}
 
 	const GUID SubType2 = *pMediaType->Subtype();
-	
-    // Get the format area of the media type
-    VIDEOINFO *pvi = (VIDEOINFO *) pMediaType->Format();
+
+	// Get the format area of the media type
+	VIDEOINFO *pvi = (VIDEOINFO *)pMediaType->Format();
 	if (pvi == NULL) {
-	  warn("CheckMediaType - E_INVALIDARG - pvi == NULL");
-	  return E_INVALIDARG; // usually never this...
+		warn("CheckMediaType - E_INVALIDARG - pvi == NULL");
+		return E_INVALIDARG; // usually never this...
 	}
 
+#if 0
 	// graphedit comes in with a really large one and then we set it (no good)
 	if (pvi->bmiHeader.biHeight > m_iCaptureConfigHeight || pvi->bmiHeader.biWidth > m_iCaptureConfigWidth) {
 		warn("CheckMediaType - E_INVALIDARG %d > %d || %d > %d",
 			pvi->bmiHeader.biHeight, m_iCaptureConfigHeight,
 			pvi->bmiHeader.biWidth, m_iCaptureConfigWidth);
-        return E_INVALIDARG;
+		return E_INVALIDARG;
 	}
+#endif
 
-    if((SubType2 != MEDIASUBTYPE_RGB8) // these are all the same value? But maybe the pointers are different. Hmm.
-        && (SubType2 != MEDIASUBTYPE_RGB565)
-        && (SubType2 != MEDIASUBTYPE_RGB555)
-        && (SubType2 != MEDIASUBTYPE_RGB24)
-        && (SubType2 != MEDIASUBTYPE_RGB32)
+	if ((SubType2 != MEDIASUBTYPE_RGB8) // these are all the same value? But maybe the pointers are different. Hmm.
+		&& (SubType2 != MEDIASUBTYPE_RGB565)
+		&& (SubType2 != MEDIASUBTYPE_RGB555)
+		&& (SubType2 != MEDIASUBTYPE_RGB24)
+		&& (SubType2 != MEDIASUBTYPE_RGB32)
 		&& (SubType2 != GUID_NULL)) {
 
 		if (SubType2 == WMMEDIASUBTYPE_I420) { // 30323449-0000-0010-8000-00AA00389B71 MEDIASUBTYPE_I420 == WMMEDIASUBTYPE_I420
 			if (pvi->bmiHeader.biBitCount == 12) { // biCompression 808596553 == 0x30323449
-				// 12 is correct for i420 -- WFMLE uses this, VLC *can* also use it, too
+												   // 12 is correct for i420 -- WFMLE uses this, VLC *can* also use it, too
 			}
 			else {
 				warn("CheckMediaType - E_INVALIDARG invalid bit count: %d", pvi->bmiHeader.biBitCount);
 				return E_INVALIDARG;
 			}
-		} else {
+		}
+		else {
 			if (SubType2 != MEDIASUBTYPE_YUY2 && SubType2 != MEDIASUBTYPE_UYVY) {
 				OLECHAR* bstrGuid;
 				StringFromCLSID(SubType2, &bstrGuid);
@@ -200,24 +215,26 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 			// 56555949-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_IYUV # dunno if I actually get this one
 			return E_INVALIDARG;
 		}
-	} else {
-		 // RGB's -- our default -- WFMLE doesn't get here, VLC does :P
+	}
+	else {
+		// RGB's -- our default -- WFMLE doesn't get here, VLC does :P
 	}
 
-	if(m_bFormatAlreadySet) {
+	if (m_bFormatAlreadySet) {
 		// then it must be the same as our current...see SetFormat msdn
-	    if(m_mt == *pMediaType) {
+		if (m_mt == *pMediaType) {
 			info("CheckMediaType - S_OK - format already set to the same type");
 			return S_OK;
-		} else {
+		}
+		else {
 			// FIXME: this always shows up, so setting to info instead of warn
 			info("CheckMediaType - VFW_E_TYPE_NOT_ACCEPTED format already set to different type");
-  		    return VFW_E_TYPE_NOT_ACCEPTED;
+			return VFW_E_TYPE_NOT_ACCEPTED;
 		}
 	}
 
-    // Don't accept formats with negative height, which would cause the desktop
-    // image to be displayed upside down.
+	// Don't accept formats with negative height, which would cause the desktop
+	// image to be displayed upside down.
 	// also reject 0's, that would be weird.
 	if (pvi->bmiHeader.biHeight <= 0) {
 		warn("CheckMediaType - E_INVALIDARG (height: %d)", pvi->bmiHeader.biHeight);
@@ -229,26 +246,33 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 		return E_INVALIDARG;
 	}
 
+	m_iCaptureConfigWidth = pvi->bmiHeader.biWidth;
+	m_iCaptureConfigHeight = pvi->bmiHeader.biHeight;
+
+	// info("%s - AvgTimePerFrame %lld", __func__, (UNITS / pvi->AvgTimePerFrame));
+	// set_fps(&game_context, m_rtFrameLength * 100);
+
 	info("CheckMediaType - S_OK - This format is acceptable.");
-    return S_OK;
+	return S_OK;
 
 } // CheckMediaType
 
 
-//
-// SetMediaType
-//
-// Called when a media type is agreed between filters (i.e. they call GetMediaType+GetStreamCaps/ienumtypes I guess till they find one they like, then they call SetMediaType).
-// all this after calling Set Format, if they even do, I guess...
-// pMediaType is assumed to have passed CheckMediaType "already" and be good to go...
-// except WFMLE sends us a junk type, so we check it anyway LODO do we? Or is it the other method Set Format that they call in vain? Or it first?
+  //
+  // SetMediaType
+  //
+  // Called when a media type is agreed between filters (i.e. they call GetMediaType+GetStreamCaps/ienumtypes I guess till they find one they like, then they call SetMediaType).
+  // all this after calling Set Format, if they even do, I guess...
+  // pMediaType is assumed to have passed CheckMediaType "already" and be good to go...
+  // except WFMLE sends us a junk type, so we check it anyway LODO do we? Or is it the other method Set Format that they call in vain? Or it first?
 HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 {
-    CAutoLock cAutoLock(m_pFilter->pStateLock());
+	info("%s", __func__);
+
+	CAutoLock cAutoLock(m_pFilter->pStateLock());
 
 	// Pass the call up to my base class
 	HRESULT hr = CSourceStream::SetMediaType(pMediaType); // assigns our local m_mt via m_mt.Set(*pmt) ... 
-	m_bConvertToI420 = false; // in case we are re-negotiating the type and it was set to i420 before...
 
 	if (!SUCCEEDED(hr)) {
 		error_pmt("SetMediaType - SetMediaType failed", pMediaType);
@@ -261,60 +285,57 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 		return E_UNEXPECTED;
 	}
 
-	switch(pvi->bmiHeader.biBitCount) {
+	switch (pvi->bmiHeader.biBitCount) {
 
-		case 12:     // i420
-			hr = S_OK;
-			m_bConvertToI420 = true;
-			break;
-		case 8:     // 8-bit palettized
-		case 16:    // RGB565, RGB555
-		case 24:    // RGB24
-		case 32:    // RGB32
-			// Save the current media type and bit depth
-			//m_MediaType = *pMediaType; // use SetMediaType above instead
-			hr = S_OK;
-			break;
+	case 12:     // i420
+		hr = S_OK;
+		// m_bConvertToI420 = true;
+		break;
+	case 8:     // 8-bit palettized
+	case 16:    // RGB565, RGB555
+	case 24:    // RGB24
+	case 32:    // RGB32
+				// Save the current media type and bit depth
+				//m_MediaType = *pMediaType; // use SetMediaType above instead
+		hr = S_OK;
+		break;
 
-		default:
-			// We should never agree any other media types
-			hr = E_INVALIDARG;
-			break;
+	default:
+		// We should never agree any other media types
+		hr = E_INVALIDARG;
+		break;
 	}
-    
-    // The frame rate at which your filter should produce data is determined by the AvgTimePerFrame field of VIDEOINFOHEADER
-	
-	// Workaround: an issue which WebRTC GetUserMedia would fail on going from 30fps -> 60 fps.
-	// We set 60 (MaxFPS) on GetMediaType, for some reason, webrtc would always negotiate whatever
-	// what given at GetMediaType and not necessarily based on the GetUserMedia constraints
-	// Thusm we're going to ignore what's being asked, but just used what's in the registry. 
-	/*
-	if (pvi->AvgTimePerFrame) { // or should Set Format accept this? hmm...
-        m_rtFrameLength = pvi->AvgTimePerFrame; // allow them to set whatever fps they request, i.e. if it's less than the max default.  VLC command line can specify this, for instance...
-        set_fps(&game_context, m_rtFrameLength * 100);
-    }
-	*/
 
-    char debug_buffer[1024];
-    if (hr == S_OK) {
-        snprintf(debug_buffer, 1024, "SetMediaType - S_OK requested/negotiated[fps:%.02f x:%d y:%d bitcount:%d]",
-        GetFps(), pvi->bmiHeader.biWidth, pvi->bmiHeader.biHeight, pvi->bmiHeader.biBitCount);
-        info_pmt(debug_buffer, pMediaType);
-    } else {
-        snprintf(debug_buffer, 1024, "SetMediaType - E_INVALIDARG [bitcount requested/negotiated: %d]", pvi->bmiHeader.biBitCount);
-        error_pmt(debug_buffer, pMediaType);
-    }
+	// The frame rate at which your filter should produce data is determined by the AvgTimePerFrame field of VIDEOINFOHEADER
+#if 0
+	(if (pvi->AvgTimePerFrame) { // or should Set Format accept this? hmm...
+		m_rtFrameLength = pvi->AvgTimePerFrame; // allow them to set whatever fps they request, i.e. if it's less than the max default.  VLC command line can specify this, for instance...
+		set_fps(&game_context, m_rtFrameLength * 100);
+	}
+#endif
 
-    return hr;
+	char debug_buffer[1024];
+	if (hr == S_OK) {
+		snprintf(debug_buffer, 1024, "SetMediaType - S_OK requested/negotiated[fps:%.02f x:%d y:%d bitcount:%d]",
+			(UNITS / pvi->AvgTimePerFrame), pvi->bmiHeader.biWidth, pvi->bmiHeader.biHeight, pvi->bmiHeader.biBitCount);
+		info_pmt(debug_buffer, pMediaType);
+	}
+	else {
+		snprintf(debug_buffer, 1024, "SetMediaType - E_INVALIDARG [bitcount requested/negotiated: %d]", pvi->bmiHeader.biBitCount);
+		error_pmt(debug_buffer, pMediaType);
+	}
+
+	return hr;
 
 } // SetMediaType
 
 #define DECLARE_PTR(type, ptr, expr) type* ptr = (type*)(expr);
 
-// sets fps, size, (etc.) maybe, or maybe just saves it away for later use...
+  // sets fps, size, (etc.) maybe, or maybe just saves it away for later use...
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::SetFormat(AM_MEDIA_TYPE *pmt)
 {
-    CAutoLock cAutoLock(m_pFilter->pStateLock());
+	CAutoLock cAutoLock(m_pFilter->pStateLock());
+
 
 	// I *think* it can go back and forth, then.  You can call GetStreamCaps to enumerate, then call
 	// SetFormat, then later calls to GetMediaType/GetStreamCaps/EnumMediatypes will all "have" to just give this one
@@ -325,58 +346,61 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::SetFormat(AM_MEDIA_TYPE *pmt)
 	// "they" [can] call this...see msdn for SetFormat
 
 	// NULL means reset to default type...
-	if(pmt != NULL)
+	if (pmt != NULL)
 	{
 		if (pmt->formattype != FORMAT_VideoInfo) {  // FORMAT_VideoInfo == {CLSID_KsDataTypeHandlerVideo} 
-			//error()
+													//error()
 			return E_FAIL;
 		}
-	
-		// LODO I should do more here...http://msdn.microsoft.com/en-us/library/dd319788.aspx I guess [meh]
-	    // LODO should fail if we're already streaming... [?]
 
-		if(CheckMediaType((CMediaType *) pmt) != S_OK) {
+		// LODO I should do more here...http://msdn.microsoft.com/en-us/library/dd319788.aspx I guess [meh]
+		// LODO should fail if we're already streaming... [?]
+
+		if (CheckMediaType((CMediaType *)pmt) != S_OK) {
 			return E_FAIL; // just in case :P [FME...]
 		}
-		VIDEOINFOHEADER *pvi = (VIDEOINFOHEADER *) pmt->pbFormat;
+		VIDEOINFOHEADER *pvi = (VIDEOINFOHEADER *)pmt->pbFormat;
 
-        // for FMLE's benefit, only accept a setFormat of our "final" width [force setting via registry I guess, otherwise it only shows 80x60 whoa!]	    
+		info("%s - %lld", __func__, pvi->AvgTimePerFrame);
+		// for FMLE's benefit, only accept a setFormat of our "final" width [force setting via registry I guess, otherwise it only shows 80x60 whoa!]	    
 		// flash media live encoder uses setFormat to determine widths [?] and then only displays the smallest? huh?
-        if( pvi->bmiHeader.biWidth != getCaptureDesiredFinalWidth() || 
-           pvi->bmiHeader.biHeight != getCaptureDesiredFinalHeight())
-        {
-          return E_INVALIDARG;
-        }
+		if (pvi->bmiHeader.biWidth != getNegotiatedFinalWidth() ||
+			pvi->bmiHeader.biHeight != getNegotiatedFinalHeight())
+		{
+			return E_INVALIDARG;
+		}
 
 		// ignore other things like cropping requests for now...
 
 		// now save it away...for being able to re-offer it later. We could use Set MediaType but we're just being lazy and re-using m_mt for many things I guess
-	    m_mt = *pmt;  
+		m_mt = *pmt;
 
 	}
 
-    IPin* pin;
-    ConnectedTo(&pin);
-    if(pin)
-    {
-        IFilterGraph *pGraph = m_pParent->GetGraph();
+	IPin* pin;
+	ConnectedTo(&pin);
+	if (pin)
+	{
+		IFilterGraph *pGraph = m_pParent->GetGraph();
 		HRESULT res = pGraph->Reconnect(this);
 		if (res != S_OK) // LODO check first, and then just re-use the old one?
 			return res; // else return early...not really sure how to handle this...since we already set m_mt...but it's a pretty rare case I think...
-		// plus ours is a weird case...
-    } else {
+						// plus ours is a weird case...
+	}
+	else {
 		// graph hasn't been built yet...
 		// so we're ok with "whatever" format they pass us, we're just in the setup phase...
 	}
-	
+
 	// success of some type
-	if(pmt == NULL) {		
+	if (pmt == NULL) {
 		m_bFormatAlreadySet = false;
-	} else {
+	}
+	else {
 		m_bFormatAlreadySet = true;
 	}
 
-    return S_OK;
+	return S_OK;
 }
 
 // get's the current format...I guess...
@@ -384,94 +408,91 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::SetFormat(AM_MEDIA_TYPE *pmt)
 // TODO the default, which probably we don't do yet...unless they've already called GetStreamCaps then it'll be the last index they used LOL.
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetFormat(AM_MEDIA_TYPE **ppmt)
 {
-    CAutoLock cAutoLock(m_pFilter->pStateLock());
+	CAutoLock cAutoLock(m_pFilter->pStateLock());
 
-    *ppmt = CreateMediaType(&m_mt); // windows internal method, also does copy
+	*ppmt = CreateMediaType(&m_mt); // windows internal method, also does copy
 	info_pmt("GetFormat - S_OK", *ppmt);
-    return S_OK;
+	return S_OK;
 }
 
 
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetNumberOfCapabilities(int *piCount, int *piSize)
 {
-    *piCount = 1; 
-    *piSize = sizeof(VIDEO_STREAM_CONFIG_CAPS); // VIDEO_STREAM_CONFIG_CAPS is an MS struct
+	*piCount = PIN_RESOLUTION_SIZE * PIN_FPS_SIZE;
+	*piSize = sizeof(VIDEO_STREAM_CONFIG_CAPS); // VIDEO_STREAM_CONFIG_CAPS is an MS struct
 	info("GetNumberOfCapabilities - %d size:%d", *piCount, *piSize);
-    return S_OK;
+	return S_OK;
 }
 
-/*
-const int PIN_SIZE = 9;
-const int PIN_FPS_SIZE = 3;
-const int PIN_WIDTH[PIN_SIZE] = { 640, 854, 21:9, // 4:3, 16:9, 21:9
-								  960, 1280, 1680, 
-								  1440, 1920, 2560 };
-const int PIN_HEIGHT[PIN_SIZE] = { 480, 480, 480, 
-								   720, 720, 720, 
-								   1080, 1080, 1080 };
-const REFERENCE_TIME PIN_FPS[PIN_FPS_SIZE] = {30fps, 45fps, 60fps};
-*/
 
 // returns the "range" of fps, etc. for this index
 HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TYPE **pmt, BYTE *pSCC)
 {
-    CAutoLock cAutoLock(m_pFilter->pStateLock());
+	CAutoLock cAutoLock(m_pFilter->pStateLock());
 
 	HRESULT hr = GetMediaType(iIndex, &m_mt); // ensure setup/re-use m_mt ...
 
-	// some are indeed shared, apparently.
-    if(FAILED(hr))
-    {
+											  // some are indeed shared, apparently.
+	if (FAILED(hr))
+	{
 		error("GetStreamCaps p: %d - FAILED: %x", iIndex, hr);
-        return hr;
-    }
+		return hr;
+	}
 
 
-    *pmt = CreateMediaType(&m_mt); // a windows lib method, also does a copy for us
+	*pmt = CreateMediaType(&m_mt); // a windows lib method, also does a copy for us
 	if (*pmt == NULL) {
 		error("GetStreamCaps p: %d - E_OUTOFMEMORY", iIndex);
 		return E_OUTOFMEMORY;
 	}
 
-    DECLARE_PTR(VIDEO_STREAM_CONFIG_CAPS, pvscc, pSCC);
-	
-    /*
-	  most of these are listed as deprecated by msdn... yet some still used, apparently. odd.
+	DECLARE_PTR(VIDEO_STREAM_CONFIG_CAPS, pvscc, pSCC);
+
+	/*
+	most of these are listed as deprecated by msdn... yet some still used, apparently. odd.
 	*/
 
-    pvscc->VideoStandard = AnalogVideo_None;
-    pvscc->InputSize.cx = getCaptureDesiredFinalWidth();
-	pvscc->InputSize.cy = getCaptureDesiredFinalHeight();
+	int width = PIN_WIDTH[iIndex % PIN_RESOLUTION_SIZE];
+	int height = PIN_HEIGHT[iIndex % PIN_RESOLUTION_SIZE];
+	REFERENCE_TIME fps = PIN_FPS[iIndex / PIN_RESOLUTION_SIZE];
+	int fps_n = (int)fps / UNITS;
 
-	// most of these values are fakes..
-	pvscc->MinCroppingSize.cx = getCaptureDesiredFinalWidth();
-    pvscc->MinCroppingSize.cy = getCaptureDesiredFinalHeight();
+	pvscc->VideoStandard = AnalogVideo_None;
+	pvscc->InputSize.cx = width; // getCaptureDesiredFinalWidth();
+	pvscc->InputSize.cy = height; //  getCaptureDesiredFinalHeight();
 
-    pvscc->MaxCroppingSize.cx = getCaptureDesiredFinalWidth();
-    pvscc->MaxCroppingSize.cy = getCaptureDesiredFinalHeight();
+								  // most of these values are fakes..
+	pvscc->MinCroppingSize.cx = width; //  getCaptureDesiredFinalWidth();
+	pvscc->MinCroppingSize.cy = height; // getCaptureDesiredFinalHeight();
 
-    pvscc->CropGranularityX = 1;
-    pvscc->CropGranularityY = 1;
-    pvscc->CropAlignX = 1;
-    pvscc->CropAlignY = 1;
+	pvscc->MaxCroppingSize.cx = width; // getCaptureDesiredFinalWidth();
+	pvscc->MaxCroppingSize.cy = height; // getCaptureDesiredFinalHeight();
 
-    pvscc->MinOutputSize.cx = 1;
-    pvscc->MinOutputSize.cy = 1;
-    pvscc->MaxOutputSize.cx = getCaptureDesiredFinalWidth();
-    pvscc->MaxOutputSize.cy = getCaptureDesiredFinalHeight();
-    pvscc->OutputGranularityX = 1;
-    pvscc->OutputGranularityY = 1;
+	pvscc->CropGranularityX = 1;
+	pvscc->CropGranularityY = 1;
+	pvscc->CropAlignX = 1;
+	pvscc->CropAlignY = 1;
 
-    pvscc->StretchTapsX = 1; // We do 1 tap. I guess...
-    pvscc->StretchTapsY = 1;
-    pvscc->ShrinkTapsX = 1;
-    pvscc->ShrinkTapsY = 1;
+	pvscc->MinOutputSize.cx = 1;
+	pvscc->MinOutputSize.cy = 1;
+	pvscc->MaxOutputSize.cx = width; // getCaptureDesiredFinalWidth();
+	pvscc->MaxOutputSize.cy = height; // getCaptureDesiredFinalHeight();
+	pvscc->OutputGranularityX = 1;
+	pvscc->OutputGranularityY = 1;
 
-	pvscc->MinFrameInterval = m_rtFrameLength; // the larger default is actually the MinFrameInterval, not the max
+	pvscc->StretchTapsX = 1; // We do 1 tap. I guess...
+	pvscc->StretchTapsY = 1;
+	pvscc->ShrinkTapsX = 1;
+	pvscc->ShrinkTapsY = 1;
+
+	pvscc->MinFrameInterval = fps; // the larger default is actually the MinFrameInterval, not the max
 	pvscc->MaxFrameInterval = 500000000; // 0.02 fps :) [though it could go lower, really...]
 
-    pvscc->MinBitsPerSecond = (LONG) 1*1*8*GetFps(); // if in 8 bit mode 1x1. I guess.
-    pvscc->MaxBitsPerSecond = (LONG) getCaptureDesiredFinalWidth()*getCaptureDesiredFinalHeight()*32*GetMaxFps() + 44; // + 44 header size? + the palette?
+										 //    pvscc->MinBitsPerSecond = (LONG) 1*1*8*GetFps(); // if in 8 bit mode 1x1. I guess.
+										 //   pvscc->MaxBitsPerSecond = (LONG) getCaptureDesiredFinalWidth()*getCaptureDesiredFinalHeight()*32*GetMaxFps() + 44; // + 44 header size? + the palette?
+
+	pvscc->MinBitsPerSecond = (LONG)1 * 1 * 8 * fps_n; // if in 8 bit mode 1x1. I guess.
+	pvscc->MaxBitsPerSecond = (LONG)width*height * 32 * fps_n + 44; // + 44 header size? + the palette?
 
 	char debug_buffer[1024];
 	snprintf(debug_buffer, 1024, "GetStreamCaps S_OK p:%d", iIndex);
@@ -485,14 +506,14 @@ HRESULT CPushPinDesktop::QuerySupported(REFGUID guidPropSet, DWORD dwPropID, DWO
 {
 	info("QuerySupported");
 	//DebugBreak();
-    if (guidPropSet != AMPROPSETID_Pin) return E_PROP_SET_UNSUPPORTED;
-    if (dwPropID != AMPROPERTY_PIN_CATEGORY) return E_PROP_ID_UNSUPPORTED;
-    // We support getting this property, but not setting it.
-    if (pTypeSupport) *pTypeSupport = KSPROPERTY_SUPPORT_GET; 
-    return S_OK;
+	if (guidPropSet != AMPROPSETID_Pin) return E_PROP_SET_UNSUPPORTED;
+	if (dwPropID != AMPROPERTY_PIN_CATEGORY) return E_PROP_ID_UNSUPPORTED;
+	// We support getting this property, but not setting it.
+	if (pTypeSupport) *pTypeSupport = KSPROPERTY_SUPPORT_GET;
+	return S_OK;
 }
 
-STDMETHODIMP CGameCapture::Stop(){
+STDMETHODIMP CGameCapture::Stop() {
 
 	CAutoLock filterLock(m_pLock);
 	info("GameCapture::Stop");
@@ -511,28 +532,28 @@ STDMETHODIMP CGameCapture::Stop(){
 // according to msdn...
 HRESULT CGameCapture::GetState(DWORD dw, FILTER_STATE *pState)
 {
-    CheckPointer(pState, E_POINTER);
-    *pState = m_State;
+	CheckPointer(pState, E_POINTER);
+	*pState = m_State;
 	info("GetState: %d %s", m_State, m_State == State_Paused ? "VFS_S_CANT_CUE" : "S_OK");
-    if (m_State == State_Paused)
-        return VFW_S_CANT_CUE;
-    else
-        return S_OK;
+	if (m_State == State_Paused)
+		return VFW_S_CANT_CUE;
+	else
+		return S_OK;
 }
 
 HRESULT CPushPinDesktop::QueryInterface(REFIID riid, void **ppv)
-{   
+{
 	//info("GameCapture::QueryInterface");
-    // Standard OLE stuff, needed for capture source
-    if(riid == _uuidof(IAMStreamConfig))
-        *ppv = (IAMStreamConfig*)this;
-    else if(riid == _uuidof(IKsPropertySet))
-        *ppv = (IKsPropertySet*)this;
-    else
-        return CSourceStream::QueryInterface(riid, ppv);
+	// Standard OLE stuff, needed for capture source
+	if (riid == _uuidof(IAMStreamConfig))
+		*ppv = (IAMStreamConfig*)this;
+	else if (riid == _uuidof(IKsPropertySet))
+		*ppv = (IKsPropertySet*)this;
+	else
+		return CSourceStream::QueryInterface(riid, ppv);
 
-    AddRef(); // avoid interlocked decrement error... // I think
-    return S_OK;
+	AddRef(); // avoid interlocked decrement error... // I think
+	return S_OK;
 }
 
 
@@ -542,22 +563,22 @@ HRESULT CPushPinDesktop::QueryInterface(REFIID riid, void **ppv)
 //////////////////////////////////////////////////////////////////////////
 
 
-HRESULT CPushPinDesktop::Set(REFGUID guidPropSet, DWORD dwID, void *pInstanceData, 
-                        DWORD cbInstanceData, void *pPropData, DWORD cbPropData)
+HRESULT CPushPinDesktop::Set(REFGUID guidPropSet, DWORD dwID, void *pInstanceData,
+	DWORD cbInstanceData, void *pPropData, DWORD cbPropData)
 {
 	// Set: we don't have any specific properties to set...that we advertise yet anyway, and who would use them anyway?
-    return E_NOTIMPL;
+	return E_NOTIMPL;
 }
 
 // Get: Return the pin category (our only property). 
 HRESULT CPushPinDesktop::Get(
-    REFGUID guidPropSet,   // Which property set.
-    DWORD dwPropID,        // Which property in that set.
-    void *pInstanceData,   // Instance data (ignore).
-    DWORD cbInstanceData,  // Size of the instance data (ignore).
-    void *pPropData,       // Buffer to receive the property data.
-    DWORD cbPropData,      // Size of the buffer.
-    DWORD *pcbReturned     // Return the size of the property.
+	REFGUID guidPropSet,   // Which property set.
+	DWORD dwPropID,        // Which property in that set.
+	void *pInstanceData,   // Instance data (ignore).
+	DWORD cbInstanceData,  // Size of the instance data (ignore).
+	void *pPropData,       // Buffer to receive the property data.
+	DWORD cbPropData,      // Size of the buffer.
+	DWORD *pcbReturned     // Return the size of the property.
 )
 {
 	if (guidPropSet != AMPROPSETID_Pin) {
@@ -572,8 +593,8 @@ HRESULT CPushPinDesktop::Get(
 		error("Get - E_POINTER");
 		return E_POINTER;
 	}
-    
-    if (pcbReturned) *pcbReturned = sizeof(GUID);
+
+	if (pcbReturned) *pcbReturned = sizeof(GUID);
 	if (pPropData == NULL) {
 		info("Get - S_OK (%d)", *pcbReturned);
 		return S_OK; // Caller just wants to know the size. 
@@ -582,30 +603,30 @@ HRESULT CPushPinDesktop::Get(
 		error("Get - E_UNEXPECTED (%d)", cbPropData);
 		return E_UNEXPECTED;// The buffer is too small.
 	}
-        
-    *(GUID *)pPropData = PIN_CATEGORY_CAPTURE; // PIN_CATEGORY_PREVIEW ?
+
+	*(GUID *)pPropData = PIN_CATEGORY_CAPTURE; // PIN_CATEGORY_PREVIEW ?
 
 	info("Get - S_OK (PIN_CATEGORY_CAPTURE)");
-    return S_OK;
+	return S_OK;
 }
 
 
 enum FourCC { FOURCC_NONE = 0, FOURCC_I420 = 100, FOURCC_YUY2 = 101, FOURCC_RGB32 = 102 };// from http://www.conaito.com/docus/voip-video-evo-sdk-capi/group__videocapture.html
-//
-// GetMediaType
-//
-// Prefer 5 formats - 8, 16 (*2), 24 or 32 bits per pixel
-//
-// Prefered types should be ordered by quality, with zero as highest quality.
-// Therefore, iPosition =
-//      0    Return a 24bit mediatype "as the default" since I guessed it might be faster though who knows
-//      1    Return a 24bit mediatype
-//      2    Return 16bit RGB565
-//      3    Return a 16bit mediatype (rgb555)
-//      4    Return 8 bit palettised format
-//      >4   Invalid
-// except that we changed the orderings a bit...
-//
+																						  //
+																						  // GetMediaType
+																						  //
+																						  // Prefer 5 formats - 8, 16 (*2), 24 or 32 bits per pixel
+																						  //
+																						  // Prefered types should be ordered by quality, with zero as highest quality.
+																						  // Therefore, iPosition =
+																						  //      0    Return a 24bit mediatype "as the default" since I guessed it might be faster though who knows
+																						  //      1    Return a 24bit mediatype
+																						  //      2    Return 16bit RGB565
+																						  //      3    Return a 16bit mediatype (rgb555)
+																						  //      4    Return 8 bit palettised format
+																						  //      >4   Invalid
+																						  // except that we changed the orderings a bit...
+																						  //
 HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDIA_TYPE basically == CMediaType
 {
 	//DebugBreak();
@@ -642,14 +663,8 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
 	}
 
 	// Have we run out of types?
-	if (iPosition > 6) {
+	if (iPosition > PIN_RESOLUTION_SIZE * PIN_FPS_SIZE) {
 		warn("GetMediaType - VFW_S_NO_MORE_ITEMS p:%d", iPosition);
-		return VFW_S_NO_MORE_ITEMS;
-	}
-
-	// force I420 for now
-	if (iPosition > 1) {
-		warn("GetMediaType - VFW_S_NO_MORE_ITEMS - forcing I420 p:%d", iPosition);
 		return VFW_S_NO_MORE_ITEMS;
 	}
 
@@ -659,112 +674,47 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
 		return(E_OUTOFMEMORY);
 	}
 
-    // Initialize the VideoInfo structure before configuring its members
-    ZeroMemory(pvi, sizeof(VIDEOINFO));
+	// Initialize the VideoInfo structure before configuring its members
+	ZeroMemory(pvi, sizeof(VIDEOINFO));
 
-	if(iPosition == 0) {
-		// pass it our "preferred" which is 24 bits, since 16 is "poor quality" (really, it is), and I...think/guess that 24 is faster overall.
-		 // iPosition = 2; // 24 bit
-		// actually, just use 32 since it's more compatible, for now...too much fear...
-		iPosition = 1; // 32 bit   I once saw a freaky line in skype, too, so until I investigate, err on the side of compatibility...plus what about vlc with like 135 input?
-			// 32 -> 24 (2): getdibits took 2.251ms
-			// 32 -> 32 (1): getdibits took 2.916ms
-			// except those particular numbers might be misleading in terms of total speed...hmm...though if FFmpeg can use assembly to convert it, it might be a real speedup
-	}
-    switch(iPosition)
-    {
-        case 1:
-        {    
-			// the i420 freak-o added just for FME's benefit...
-            //pvi->bmiHeader.biCompression = 0x30323449; // => ASCII "I420" is apparently right here...
-			pvi->bmiHeader.biCompression = MAKEFOURCC('I', '4', '2', '0');
-            pvi->bmiHeader.biBitCount    = 12;
-			pvi->bmiHeader.biSizeImage = (getCaptureDesiredFinalWidth()*getCaptureDesiredFinalHeight()*3)/2; 
-			pmt->SetSubtype(&WMMEDIASUBTYPE_I420);
-			break;
-        }
-        case 2:
-        {    
-            // 32bit format
+	int width = PIN_WIDTH[iPosition % PIN_RESOLUTION_SIZE];
+	int height = PIN_HEIGHT[iPosition % PIN_RESOLUTION_SIZE];
+	REFERENCE_TIME fps = PIN_FPS[iPosition / PIN_RESOLUTION_SIZE];
+	LONGLONG fps_n = fps / UNITS;
 
-            // Since we use RGB888 (the default for 32 bit), there is
-            // no reason to use BI_BITFIELDS to specify the RGB
-            // masks [sometimes even if you don't have enough bits you don't need to anyway?]
-			// Also, not everything supports BI_BITFIELDS ...
-            pvi->bmiHeader.biCompression = BI_RGB;
-            pvi->bmiHeader.biBitCount    = 32;
-            break;
-        }
+	// the i420 freak-o added just for FME's benefit...
+	//pvi->bmiHeader.biCompression = 0x30323449; // => ASCII "I420" is apparently right here...
+	pvi->bmiHeader.biCompression = MAKEFOURCC('I', '4', '2', '0');
+	pvi->bmiHeader.biBitCount = 12;
+	// pvi->bmiHeader.biSizeImage = (getCaptureDesiredFinalWidth()*getCaptureDesiredFinalHeight() * 3) / 2;
+	pvi->bmiHeader.biSizeImage = (width * height * 3) / 2;
+	pmt->SetSubtype(&WMMEDIASUBTYPE_I420);
 
-        case 3:
-        {   // Return our 24bit format, same as above comments
-            pvi->bmiHeader.biCompression = BI_RGB;
-            pvi->bmiHeader.biBitCount    = 24;
-            break;
-        }
-
-        case 4:
-        {       
-            // 16 bit per pixel RGB565 BI_BITFIELDS
-
-            // Place the RGB masks as the first 3 doublewords in the palette area
-            for(int i = 0; i < 3; i++)
-                pvi->TrueColorInfo.dwBitMasks[i] = bits565[i];
-
-			pvi->bmiHeader.biCompression = BI_BITFIELDS;
-			pvi->bmiHeader.biCompression = BI_RGB;
-            pvi->bmiHeader.biBitCount    = 16;
-            break;
-        }
-
-        case 5:
-        {   // 16 bits per pixel RGB555
-
-            // Place the RGB masks as the first 3 doublewords in the palette area
-            for(int i = 0; i < 3; i++)
-                pvi->TrueColorInfo.dwBitMasks[i] = bits555[i];
-
-            // LODO ??? need? not need? BI_BITFIELDS? Or is this the default so we don't need it? Or do we need a different type that doesn't specify BI_BITFIELDS?
-			pvi->bmiHeader.biCompression = BI_BITFIELDS;
-            pvi->bmiHeader.biBitCount    = 16;
-            break;
-        }
-
-        case 6:
-        {   // 8 bit palettised
-
-            pvi->bmiHeader.biCompression = BI_RGB;
-            pvi->bmiHeader.biBitCount    = 8;
-            pvi->bmiHeader.biClrUsed     = iPALETTE_COLORS;
-            break;
-        }
-    }
-
-    // Now adjust some parameters that are the same for all formats
-    pvi->bmiHeader.biSize       = sizeof(BITMAPINFOHEADER);
-	pvi->bmiHeader.biWidth		= getCaptureDesiredFinalWidth();
-	pvi->bmiHeader.biHeight		= getCaptureDesiredFinalHeight();
-    pvi->bmiHeader.biPlanes     = 1;
+	// Now adjust some parameters that are the same for all formats
+	pvi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+	pvi->bmiHeader.biWidth = width; // getCaptureDesiredFinalWidth();
+	pvi->bmiHeader.biHeight = height; // getCaptureDesiredFinalHeight();
+	pvi->bmiHeader.biPlanes = 1;
 	pvi->bmiHeader.biSizeImage = GetBitmapSize(&pvi->bmiHeader); // calculates the size for us, after we gave it the width and everything else we already chucked into it
-    pmt->SetSampleSize(pvi->bmiHeader.biSizeImage); // use the above size
-
 	pvi->bmiHeader.biClrImportant = 0;
-	pvi->AvgTimePerFrame = (UNITS / GetMaxFps());
+	pmt->SetSampleSize(pvi->bmiHeader.biSizeImage); // use the above size
 
-    SetRectEmpty(&(pvi->rcSource)); // we want the whole image area rendered.
-    SetRectEmpty(&(pvi->rcTarget)); // no particular destination rectangle
+	pvi->AvgTimePerFrame = PIN_FPS[iPosition / PIN_RESOLUTION_SIZE];
 
-    pmt->SetType(&MEDIATYPE_Video);
-    pmt->SetFormatType(&FORMAT_VideoInfo);
-    pmt->SetTemporalCompression(FALSE);
+	SetRectEmpty(&(pvi->rcSource)); // we want the whole image area rendered.
+	SetRectEmpty(&(pvi->rcTarget)); // no particular destination rectangle
 
-    // Work out the GUID for the subtype from the header info.
-	if(*pmt->Subtype() == GUID_NULL) {
-      const GUID SubTypeGUID = GetBitmapSubtype(&pvi->bmiHeader);
-      pmt->SetSubtype(&SubTypeGUID);
+	pmt->SetType(&MEDIATYPE_Video);
+	pmt->SetFormatType(&FORMAT_VideoInfo);
+	pmt->SetTemporalCompression(FALSE);
+
+	// Work out the GUID for the subtype from the header info.
+	if (*pmt->Subtype() == GUID_NULL) {
+		const GUID SubTypeGUID = GetBitmapSubtype(&pvi->bmiHeader);
+		pmt->SetSubtype(&SubTypeGUID);
 	}
 
 	info_pmt("GetMediaType", pmt);
-    return NOERROR;
+	return NOERROR;
 
 } // GetMediaType
