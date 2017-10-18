@@ -195,8 +195,6 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		}
 	}
 
-	int oldAdapterId = m_iDesktopAdapterNumber;
-	int oldDesktopId = m_iDesktopNumber;
 	if (registry.HasValue(TEXT("CaptureId"))) {
 		std::wstring data;
 		registry.ReadValue(TEXT("CaptureId"), &data);
@@ -204,6 +202,8 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		char text[1024];
 		sprintf(text, "%S", data.c_str());
 
+		int oldAdapterId = m_iDesktopAdapterNumber;
+		int oldDesktopId = m_iDesktopNumber;
 		char * typeName = strtok(text, ":");
 		char * adapterId = strtok(NULL, ":");
 		char * desktopId = strtok(NULL, ":");
@@ -228,59 +228,48 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 
 	if (registry.HasValue(TEXT("CaptureWindowName"))) {
 		std::wstring data;
-		LPWSTR old = wcsdup(m_pCaptureWindowName);
 
 		registry.ReadValue(TEXT("CaptureWindowName"), &data);
 
-		if (old == NULL || wcscmp(old, m_pCaptureWindowName) != 0) {
+		if (m_pCaptureWindowName == NULL || wcscmp(data.c_str(), m_pCaptureWindowName) != 0) {
 			m_pCaptureWindowName = wcsdup(data.c_str());
 			info("CaptureWindowName: %S", m_pCaptureWindowName);
 			numberOfChanges++;
-			if (old != NULL) {
-				free(old);
-			}
 		}
 	}
 
 	if (registry.HasValue(TEXT("CaptureWindowClassName"))) {
 		std::wstring data;
-		LPWSTR old = wcsdup(m_pCaptureWindowClassName);
 
 		registry.ReadValue(TEXT("CaptureWindowClassName"), &data);
 
-		if (old == NULL || wcscmp(old, m_pCaptureWindowClassName) != 0) {
+		if (m_pCaptureWindowClassName == NULL || wcscmp(data.c_str(), m_pCaptureWindowClassName) != 0) {
 			m_pCaptureWindowClassName = wcsdup(data.c_str());
 			info("CaptureWindowClassName: %S", m_pCaptureWindowClassName);
 			numberOfChanges++;
-			if (old != NULL) {
-				free(old);
-			}
 		}
 	}
 
 	if (registry.HasValue(TEXT("CaptureExeFullName"))) {
 		std::wstring data;
-		LPWSTR old = wcsdup(m_pCaptureExeFullName);
 
 		registry.ReadValue(TEXT("CaptureExeFullName"), &data);
 
-		if (old == NULL || wcscmp(old, m_pCaptureExeFullName) != 0) {
+		if (m_pCaptureExeFullName == NULL || wcscmp(data.c_str(), m_pCaptureExeFullName) != 0) {
 			m_pCaptureExeFullName = wcsdup(data.c_str());
 			info("CaptureExeFullName: %S", m_pCaptureExeFullName);
 			numberOfChanges++;
-			if (old != NULL) {
-				free(old);
-			}
 		}
 	}
 
 	if (registry.HasValue(TEXT("CaptureWindowHandle"))) {
 		int64_t qout;
 		int64_t oldCaptureHandle = m_iCaptureHandle;
+
 		registry.ReadInt64(TEXT("CaptureWindowHandle"), &qout);
 
-		m_iCaptureHandle = qout;
-		if (oldCaptureHandle != m_iCaptureHandle) {
+		if (oldCaptureHandle != qout) {
+			m_iCaptureHandle = qout;
 			info("CaptureWindowHandle: %ld", m_iCaptureHandle);
 			numberOfChanges++;
 		}
@@ -470,19 +459,24 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 		if (result == WAIT_OBJECT_0) {
 			int changeCount = GetGameFromRegistry();
 			info("Received re-read registry event, number of changes in registry: %d", changeCount);
+
 			if (changeCount > 0) {
 				CleanupCapture();
 			}
 
 			ResetEvent(readRegistryEvent);
 		}
+
 		switch (m_iCaptureType) {
 		case CAPTURE_DESKTOP:
 			return FillBuffer_Desktop(pSample);
 		case CAPTURE_INJECT:
 			break;
-		case CAPTURE_GDI:
-			return FillBuffer_GDI(pSample);
+		case CAPTURE_GDI: {
+			int code = FillBuffer_GDI(pSample);
+			if (code == 2) continue; // gdi failed to get frame - try go to next loop
+			return code;
+		}
 		case CAPTURE_DSHOW:
 			error("LIBDSHOW CAPTURE IS NOT SUPPRTED YET");
 			break;
@@ -629,7 +623,7 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 			if (!hwnd) {
 				Sleep(50);
 				GetGameFromRegistry();
-				continue;
+				return 2;
 			}
 
 			info("GDI - window_handle: 0x%016x (%ld), class_name: %S, window_name: %S, exe_name: %S, capture_once: %d",
