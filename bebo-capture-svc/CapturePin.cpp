@@ -173,23 +173,24 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		std::wstring data;
 		registry.ReadValue(TEXT("CaptureType"), &data);
 
-		int old = m_iCaptureType;
+		int new_capture_type = -1;
 		char type[1024];
 		sprintf(type, "%S", data.c_str());
 
 		if (strcmp(type, "desktop") == 0) {
-			m_iCaptureType = CAPTURE_DESKTOP;
+			new_capture_type = CAPTURE_DESKTOP;
 		}
 		else if (strcmp(type, "inject") == 0) {
-			m_iCaptureType = CAPTURE_INJECT;
+			new_capture_type = CAPTURE_INJECT;
 		}
 		else if (strcmp(type, "gdi") == 0) {
-			m_iCaptureType = CAPTURE_GDI;
+			new_capture_type = CAPTURE_GDI;
 		}
 		else if (strcmp(type, "dshow") == 0) {
-			m_iCaptureType = CAPTURE_DSHOW;
+			new_capture_type = CAPTURE_DSHOW;
 		}
-		if (old != m_iCaptureType) {
+		if (new_capture_type > -1 && m_iCaptureType != new_capture_type) {
+			m_iCaptureType = new_capture_type;
 			info("CaptureType: %s (%d)", type, m_iCaptureType);
 			numberOfChanges++;
 		}
