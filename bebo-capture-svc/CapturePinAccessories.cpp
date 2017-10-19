@@ -267,8 +267,6 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
   // except WFMLE sends us a junk type, so we check it anyway LODO do we? Or is it the other method Set Format that they call in vain? Or it first?
 HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 {
-	info("%s", __func__);
-
 	CAutoLock cAutoLock(m_pFilter->pStateLock());
 
 	// Pass the call up to my base class
@@ -319,8 +317,7 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 		snprintf(debug_buffer, 1024, "SetMediaType - S_OK requested/negotiated[fps:%.02f x:%d y:%d bitcount:%d]",
 			(UNITS / pvi->AvgTimePerFrame), pvi->bmiHeader.biWidth, pvi->bmiHeader.biHeight, pvi->bmiHeader.biBitCount);
 		info_pmt(debug_buffer, pMediaType);
-	}
-	else {
+	} else {
 		snprintf(debug_buffer, 1024, "SetMediaType - E_INVALIDARG [bitcount requested/negotiated: %d]", pvi->bmiHeader.biBitCount);
 		error_pmt(debug_buffer, pMediaType);
 	}
@@ -361,7 +358,6 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::SetFormat(AM_MEDIA_TYPE *pmt)
 		}
 		VIDEOINFOHEADER *pvi = (VIDEOINFOHEADER *)pmt->pbFormat;
 
-		info("%s - %lld", __func__, pvi->AvgTimePerFrame);
 		// for FMLE's benefit, only accept a setFormat of our "final" width [force setting via registry I guess, otherwise it only shows 80x60 whoa!]	    
 		// flash media live encoder uses setFormat to determine widths [?] and then only displays the smallest? huh?
 		if (pvi->bmiHeader.biWidth != getNegotiatedFinalWidth() ||
@@ -494,9 +490,19 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TY
 	pvscc->MinBitsPerSecond = (LONG)1 * 1 * 8 * fps_n; // if in 8 bit mode 1x1. I guess.
 	pvscc->MaxBitsPerSecond = (LONG)width*height * 32 * fps_n + 44; // + 44 header size? + the palette?
 
-	char debug_buffer[1024];
-	snprintf(debug_buffer, 1024, "GetStreamCaps S_OK p:%d", iIndex);
-	info_pmt(debug_buffer, *pmt);
+	{
+		static bool stop_logging = false;
+		if (iIndex == 8) {
+			stop_logging = true;
+		}
+
+		if (!stop_logging) {
+			char debug_buffer[1024];
+			snprintf(debug_buffer, 1024, "GetStreamCaps S_OK p:%d", iIndex);
+			info_pmt(debug_buffer, *pmt);
+		}
+	}
+
 	return hr;
 }
 
@@ -714,7 +720,7 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
 		pmt->SetSubtype(&SubTypeGUID);
 	}
 
-	info_pmt("GetMediaType", pmt);
+	// info_pmt("GetMediaType", pmt);
 	return NOERROR;
 
 } // GetMediaType

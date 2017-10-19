@@ -173,24 +173,24 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		std::wstring data;
 		registry.ReadValue(TEXT("CaptureType"), &data);
 
-		int new_capture_type = -1;
+		int newCaptureType = -1;
 		char type[1024];
 		sprintf(type, "%S", data.c_str());
 
 		if (strcmp(type, "desktop") == 0) {
-			new_capture_type = CAPTURE_DESKTOP;
+			newCaptureType = CAPTURE_DESKTOP;
 		}
 		else if (strcmp(type, "inject") == 0) {
-			new_capture_type = CAPTURE_INJECT;
+			newCaptureType = CAPTURE_INJECT;
 		}
 		else if (strcmp(type, "gdi") == 0) {
-			new_capture_type = CAPTURE_GDI;
+			newCaptureType = CAPTURE_GDI;
 		}
 		else if (strcmp(type, "dshow") == 0) {
-			new_capture_type = CAPTURE_DSHOW;
+			newCaptureType = CAPTURE_DSHOW;
 		}
-		if (new_capture_type > -1 && m_iCaptureType != new_capture_type) {
-			m_iCaptureType = new_capture_type;
+		if (newCaptureType > -1 && m_iCaptureType != newCaptureType) {
+			m_iCaptureType = newCaptureType;
 			info("CaptureType: %s (%d)", type, m_iCaptureType);
 			numberOfChanges++;
 		}
@@ -205,24 +205,30 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 
 		int oldAdapterId = m_iDesktopAdapterNumber;
 		int oldDesktopId = m_iDesktopNumber;
+		int newAdapterId = m_iDesktopAdapterNumber;
+		int newDesktopId = m_iDesktopNumber;
+
 		char * typeName = strtok(text, ":");
 		char * adapterId = strtok(NULL, ":");
 		char * desktopId = strtok(NULL, ":");
 
 		if (adapterId != NULL) {
 			if (strcmp(typeName, "desktop") == 0) {
-				m_iDesktopAdapterNumber = atoi(adapterId);
-			}
-		}
-		if (desktopId != NULL) {
-			if (strcmp(typeName, "desktop") == 0) {
-				m_iDesktopNumber = atoi(desktopId);
+				newAdapterId = atoi(adapterId);
 			}
 		}
 
-		if (oldAdapterId != m_iDesktopAdapterNumber ||
-			oldDesktopId != m_iDesktopNumber) {
-			info("CaptureId: %s:%s:%s", typeName, adapterId, desktopId);
+		if (desktopId != NULL) {
+			if (strcmp(typeName, "desktop") == 0) {
+				newDesktopId = atoi(desktopId);
+			}
+		}
+
+		if (oldAdapterId != newAdapterId ||
+			oldDesktopId != newDesktopId) {
+			m_iDesktopAdapterNumber = newAdapterId;
+			m_iDesktopNumber = newDesktopId;
+			info("CaptureId: %s:%d:%d", typeName, m_iDesktopAdapterNumber, m_iDesktopNumber);
 			numberOfChanges++;
 		}
 	}
@@ -233,6 +239,9 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		registry.ReadValue(TEXT("CaptureWindowName"), &data);
 
 		if (m_pCaptureWindowName == NULL || wcscmp(data.c_str(), m_pCaptureWindowName) != 0) {
+			if (m_pCaptureWindowName != NULL) {
+				delete[] m_pCaptureWindowName;
+			}
 			m_pCaptureWindowName = wcsdup(data.c_str());
 			info("CaptureWindowName: %S", m_pCaptureWindowName);
 			numberOfChanges++;
@@ -245,6 +254,9 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		registry.ReadValue(TEXT("CaptureWindowClassName"), &data);
 
 		if (m_pCaptureWindowClassName == NULL || wcscmp(data.c_str(), m_pCaptureWindowClassName) != 0) {
+			if (m_pCaptureWindowClassName != NULL) {
+				delete[] m_pCaptureWindowClassName;
+			}
 			m_pCaptureWindowClassName = wcsdup(data.c_str());
 			info("CaptureWindowClassName: %S", m_pCaptureWindowClassName);
 			numberOfChanges++;
@@ -257,6 +269,9 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		registry.ReadValue(TEXT("CaptureExeFullName"), &data);
 
 		if (m_pCaptureExeFullName == NULL || wcscmp(data.c_str(), m_pCaptureExeFullName) != 0) {
+			if (m_pCaptureExeFullName != NULL) {
+				delete[] m_pCaptureExeFullName;
+			}
 			m_pCaptureExeFullName = wcsdup(data.c_str());
 			info("CaptureExeFullName: %S", m_pCaptureExeFullName);
 			numberOfChanges++;
@@ -265,11 +280,10 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 
 	if (registry.HasValue(TEXT("CaptureWindowHandle"))) {
 		int64_t qout;
-		int64_t oldCaptureHandle = m_iCaptureHandle;
 
 		registry.ReadInt64(TEXT("CaptureWindowHandle"), &qout);
 
-		if (oldCaptureHandle != qout) {
+		if (m_iCaptureHandle != qout) {
 			m_iCaptureHandle = qout;
 			info("CaptureWindowHandle: %ld", m_iCaptureHandle);
 			numberOfChanges++;
@@ -278,11 +292,10 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 
 	if (registry.HasValue(TEXT("CaptureAntiCheat"))) {
 		DWORD qout;
-		int oldAntiCheat = m_bCaptureAntiCheat;
 
 		registry.ReadValueDW(TEXT("CaptureAntiCheat"), &qout);
-		m_bCaptureAntiCheat = (qout == 1);
-		if (oldAntiCheat != m_bCaptureAntiCheat) {
+		if (m_bCaptureAntiCheat != qout) {
+			m_bCaptureAntiCheat = (qout == 1);
 			info("CaptureAntiCheat: %d", m_bCaptureAntiCheat);
 			numberOfChanges++;
 		}
@@ -290,12 +303,12 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 
 	if (registry.HasValue(TEXT("CaptureOnce"))) {
 		DWORD qout;
-		int oldCaptureOnce = m_bCaptureOnce;
 
 		registry.ReadValueDW(TEXT("CaptureOnce"), &qout);
-		m_bCaptureOnce = (qout == 1);
-		if (oldCaptureOnce != m_bCaptureAntiCheat) {
-			info("CaptureOnce: %d", m_bCaptureAntiCheat);
+
+		if (m_bCaptureOnce != qout) {
+			m_bCaptureOnce = (qout == 1);
+			info("CaptureOnce: %d", m_bCaptureOnce);
 			numberOfChanges++;
 		}
 	}
@@ -340,7 +353,7 @@ void CPushPinDesktop::CleanupCapture() {
 HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	CheckPointer(pSample, E_POINTER);
 
-	while (!m_pDesktopCapture->IsReady() && !m_pDesktopCapture->ExceedMaxRetry()) {
+	if (!m_pDesktopCapture->IsReady()) {
 		info("Initializing desktop capture - adapter: %d, desktop: %d, size: %dx%d",
 			m_iDesktopAdapterNumber, m_iDesktopNumber, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
 		m_pDesktopCapture->Init(m_iDesktopAdapterNumber, m_iDesktopNumber, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
@@ -352,12 +365,10 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 		m_iFrameNumber = 0;
 		missed = true;
 		previousFrame = 0;
-		debug("frame_length: %d", m_rtFrameLength);
 	}
 
-	if (!m_pDesktopCapture->IsReady() && m_pDesktopCapture->ExceedMaxRetry()) {
-		error("Unable to initialize desktop capture. Maximum retry exceeded.");
-		return S_FALSE;
+	if (!m_pDesktopCapture->IsReady()) {
+		return 2; // skip the loop
 	}
 
 	__int64 startThisRound = StartCounter();
@@ -444,6 +455,20 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	return S_OK;
 }
 
+void CPushPinDesktop::ProcessRegistryReadEvent(long timeout) {
+	DWORD result = WaitForSingleObject(readRegistryEvent, timeout);
+	if (result == WAIT_OBJECT_0) {
+		int changeCount = GetGameFromRegistry();
+		info("Received re-read registry event, number of changes in registry: %d", changeCount);
+
+		if (changeCount > 0) {
+			CleanupCapture();
+		}
+
+		ResetEvent(readRegistryEvent);
+	}
+}
+
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 {
 	__int64 startThisRound = StartCounter();
@@ -456,26 +481,28 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 	boolean gotFrame = false;
 	while (!gotFrame) {
-		DWORD result = WaitForSingleObject(readRegistryEvent, 0);
-		if (result == WAIT_OBJECT_0) {
-			int changeCount = GetGameFromRegistry();
-			info("Received re-read registry event, number of changes in registry: %d", changeCount);
-
-			if (changeCount > 0) {
-				CleanupCapture();
-			}
-
-			ResetEvent(readRegistryEvent);
-		}
+		ProcessRegistryReadEvent(0);
 
 		switch (m_iCaptureType) {
-		case CAPTURE_DESKTOP:
-			return FillBuffer_Desktop(pSample);
 		case CAPTURE_INJECT:
 			break;
+		case CAPTURE_DESKTOP: {
+			int code = FillBuffer_Desktop(pSample);
+			if (code == 2) { 
+				// failed to initialize desktop capture, sleep is to reduce the # of log that we failed
+				// this failure can happen pretty often due to mobile graphic card
+				// we should detect + log this smartly instead of putting 3s sleep hack.
+				ProcessRegistryReadEvent(3000);
+				continue; 
+			}
+			return code;
+		}
 		case CAPTURE_GDI: {
 			int code = FillBuffer_GDI(pSample);
-			if (code == 2) continue; // gdi failed to get frame - try go to next loop
+			if (code == 2) {
+				ProcessRegistryReadEvent(50);
+				continue; // gdi failed to get frame - try go to next loop
+			}
 			return code;
 		}
 		case CAPTURE_DSHOW:
@@ -498,8 +525,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 			game_context = hook(&game_context, m_pCaptureWindowClassName, m_pCaptureWindowName, config, m_rtFrameLength * 100);
 			if (!isReady(&game_context)) {
-				Sleep(50);
-				GetGameFromRegistry();
+				ProcessRegistryReadEvent(50);
 				continue;
 			}
 
@@ -622,8 +648,6 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 			HWND hwnd = FindCaptureWindows(m_bCaptureOnce, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName);
 
 			if (!hwnd) {
-				Sleep(50);
-				GetGameFromRegistry();
 				return 2;
 			}
 

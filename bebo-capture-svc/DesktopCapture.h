@@ -44,11 +44,9 @@ public:
 	bool GetOldFrame(IMediaSample *pSimple, bool captureMouse);
 	bool DoneWithFrame();
 	bool IsReady() { return m_Initialized;  };
-	bool ExceedMaxRetry() { return m_InitializeFailCount >= MAX_INIT_RETRY_COUNT;  };
 
 private:
 	// methods
-	static const int MAX_INIT_RETRY_COUNT = 5;
 	static const int DUPLICATOR_RETRY_SECONDS = 3;
 
 	void ProcessFrame(FrameData * Data, int OffsetX, int OffsetY);
@@ -81,7 +79,6 @@ private:
 	int m_iAdapterNumber;
 	int m_iDesktopNumber;
 	bool m_Initialized;
-	int m_InitializeFailCount;
 	FrameData* m_LastFrameData;
 	DesktopFrame* m_LastDesktopFrame;
 

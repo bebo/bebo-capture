@@ -43,7 +43,6 @@ DesktopCapture::DesktopCapture() : m_Device(nullptr),
 	m_MetaDataSize(0),
 	m_iDesktopNumber(0),
 	m_iAdapterNumber(0),
-	m_InitializeFailCount(0),
 	m_MouseInfo(new PtrInfo),
 	m_Initialized(false),
 	m_LastFrameData(new FrameData),
@@ -151,7 +150,6 @@ void DesktopCapture::Init(int adapterId, int desktopId, int width, int height)
 
 	if (FAILED(hr)) {
 		m_Initialized = false;
-		m_InitializeFailCount++;
 
 		_com_error err(hr);
 		error("Failed to initialize duplication. 0x%08x - %S", hr, err.ErrorMessage());
@@ -160,7 +158,7 @@ void DesktopCapture::Init(int adapterId, int desktopId, int width, int height)
 
 HRESULT DesktopCapture::InitializeDXResources() {
 	if (m_Device && m_DeviceContext) {
-		info("DX context is already initialize.");
+		debug("DX context is already initialize.");
 		return S_OK;
 	}
 
@@ -750,6 +748,7 @@ HRESULT DesktopCapture::ProcessFrameMetaData(FrameData* Data) {
 void DesktopCapture::Cleanup() 
 {
 	CleanRefs();
+	m_Initialized = false;
 }
 
 //

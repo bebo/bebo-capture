@@ -119,6 +119,7 @@ protected:
 
 	float GetFps();
 	float GetMaxFps() { return MAX_FPS; };
+	void ProcessRegistryReadEvent(long timeout);
 
 	int m_iCaptureType;
 	int m_iDesktopNumber;
