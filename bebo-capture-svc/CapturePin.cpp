@@ -128,6 +128,11 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 
 CPushPinDesktop::~CPushPinDesktop()
 {
+	if (game_context) {
+		stop_game_capture(&game_context);
+		game_context = NULL;
+	}
+	
 	if (m_pDesktopCapture) {
 		delete m_pDesktopCapture;
 		m_pDesktopCapture = nullptr;
