@@ -946,16 +946,27 @@ void * hook(void **data, LPCWSTR windowClassName, LPCWSTR windowName, game_captu
 	struct game_capture *gc = (game_capture *) *data;
 	if (gc == NULL) {
 		HWND hwnd = NULL;
-		if (windowClassName != NULL && lstrlenW(windowClassName) > 0) {
+		window_priority priority = WINDOW_PRIORITY_EXE;
+
+		if (windowClassName != NULL && lstrlenW(windowClassName) > 0 && 
+			windowName != NULL && lstrlenW(windowName) > 0 ) {
 			hwnd = FindWindowW(windowClassName, windowName);
 		}
-		if (hwnd == NULL && windowClassName != NULL && lstrlenW(windowClassName) > 0) {
-			char asciiName[1024];
-			wsprintfA(asciiName, "%S", windowClassName);
-			hwnd = FindWindowA(asciiName, NULL);
+
+		if (hwnd == NULL &&
+			windowClassName != NULL && lstrlenW(windowClassName) > 0) {
+			hwnd = FindWindowW(windowClassName, NULL);
+			priority = WINDOW_PRIORITY_CLASS;
 		}
+
+		if (hwnd == NULL &&
+			windowName != NULL && lstrlenW(windowName) > 0) {
+			hwnd = FindWindowW(NULL, windowName);
+			priority = WINDOW_PRIORITY_TITLE;
+		}
+
 		if (hwnd == NULL) {
-			hwnd = FindWindow(NULL, windowName);
+			return NULL;
 		}
 
 		config->window = hwnd;
@@ -971,13 +982,16 @@ void * hook(void **data, LPCWSTR windowClassName, LPCWSTR windowName, game_captu
 
 		gc->config.executable = strdup(exe->array);
 		gc->config.title = strdup(title->array);
-		gc->config.klass = strdup(klass->array);
+		gc->config.klass = strdup(klass->array);;
+
+		gc->priority = priority;
 	}
 
 	try_hook(gc);
 	if (gc->active || gc->retrying) {
 		return gc;
 	}
+
 	return NULL;
 }
 
