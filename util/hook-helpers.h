@@ -50,3 +50,11 @@ static inline bool object_signalled(HANDLE event)
 	return WaitForSingleObject(event, 0) == WAIT_OBJECT_0;
 }
 
+static inline bool object_signalled_or_abandoned(HANDLE event) {
+	if (!event)
+		return false;
+
+	DWORD result = WaitForSingleObject(event, 0);
+	return result == WAIT_OBJECT_0 || result == WAIT_ABANDONED_0;
+}
+

@@ -468,9 +468,9 @@ static inline int try_lock_shmem_tex(int id)
 {
 	int next = id == 0 ? 1 : 0;
 
-	if (WaitForSingleObject(tex_mutexes[id], 0) == WAIT_OBJECT_0) {
+	if (object_signalled_or_abandoned(tex_mutexes[id])) {
 		return id;
-	} else if (WaitForSingleObject(tex_mutexes[next], 0) == WAIT_OBJECT_0) {
+	} else if (object_signalled_or_abandoned(tex_mutexes[next])) {
 		return next;
 	}
 
