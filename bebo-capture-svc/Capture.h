@@ -101,6 +101,9 @@ protected:
 
 	int m_iCaptureConfigWidth;
 	int m_iCaptureConfigHeight;
+	std::wstring m_pCaptureTypeName;
+	std::wstring m_pCaptureId;
+	std::wstring m_pCaptureLabel;
 	LPWSTR m_pCaptureWindowName;
 	LPWSTR m_pCaptureWindowClassName;
 	LPWSTR m_pCaptureExeFullName;
@@ -165,7 +168,6 @@ public:
     // Override the version that offers exactly one media type
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
     HRESULT FillBuffer(IMediaSample *pSample);
-
     HRESULT FillBuffer_Desktop(IMediaSample *pSample);
     HRESULT FillBuffer_GDI(IMediaSample *pSample);
 
@@ -175,6 +177,8 @@ public:
     // Support multiple display formats (CBasePin)
     HRESULT CheckMediaType(const CMediaType *pMediaType);
     HRESULT GetMediaType(int iPosition, CMediaType *pmt);
+
+	void LogCapture();
 
     // IQualityControl
 	// Not implemented because we aren't going in real time.

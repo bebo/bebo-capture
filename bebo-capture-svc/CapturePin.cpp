@@ -25,7 +25,7 @@ long countMissed = 0;
 long fastestRoundMillis = 1000000; // random big number
 long sumMillisTook = 0;
 
-char out[1000];
+char out[1024];
 // FIXME :  move these
 bool ever_started = false;
 boolean missed = false;
@@ -55,11 +55,14 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_bFormatAlreadySet(false),
 	previousFrame(0),
 	active(false),
+    m_iCaptureType(-1),
+	m_pCaptureTypeName(L""),
+	m_pCaptureLabel(L""),
+	m_pCaptureId(L""),
 	m_pCaptureWindowName(NULL),
 	m_pCaptureWindowClassName(NULL),
 	m_pCaptureExeFullName(NULL),
 	game_context(NULL),
-    m_iCaptureType(CAPTURE_INJECT),
 	m_pDesktopCapture(new DesktopCapture),
 	m_pGDICapture(new GDICapture),
 	m_iDesktopNumber(-1),
@@ -147,7 +150,41 @@ CPushPinDesktop::~CPushPinDesktop()
 		CloseHandle(readRegistryEvent);
 	}
 
+	CleanupCapture();
+}
+
+void CPushPinDesktop::CleanupCapture() {
+	if (game_context) {
+		stop_game_capture(&game_context);
+		game_context = NULL;
+	}
+
+	if (m_pDesktopCapture) {
+		m_pDesktopCapture->Cleanup();
+	}
+
+	if (m_pGDICapture) {
+		m_pGDICapture->SetCaptureHandle(NULL);
+	}
+
 	LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out;
+
+	globalStart = GetTickCount();
+	countMissed = 0;
+	sumMillisTook = 0;
+	fastestRoundMillis = LONG_MAX;
+	m_iFrameNumber = 0;
+	missed = true;
+	previousFrame = 0;
+
+	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, label: %S, id: %S",
+		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), 
+		0, 0, 0, 0, 0, 0, countMissed, 
+		m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str());
+}
+
+void CPushPinDesktop::LogCapture() {
+	info("Capture Type: %S, Capture Label: %S, Capture Id: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str()); 
 }
 
 int CPushPinDesktop::GetConstraintsFromRegistry(void) {
@@ -196,6 +233,7 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		}
 		if (newCaptureType > -1 && m_iCaptureType != newCaptureType) {
 			m_iCaptureType = newCaptureType;
+			m_pCaptureTypeName = data;
 			info("CaptureType: %s (%d)", type, m_iCaptureType);
 			numberOfChanges++;
 		}
@@ -233,6 +271,7 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 			oldDesktopId != newDesktopId) {
 			m_iDesktopAdapterNumber = newAdapterId;
 			m_iDesktopNumber = newDesktopId;
+			m_pCaptureId = data;
 			info("CaptureId: %s:%d:%d", typeName, m_iDesktopAdapterNumber, m_iDesktopNumber);
 			numberOfChanges++;
 		}
@@ -279,6 +318,18 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 			}
 			m_pCaptureExeFullName = wcsdup(data.c_str());
 			info("CaptureExeFullName: %S", m_pCaptureExeFullName);
+			numberOfChanges++;
+		}
+	}
+
+	if (registry.HasValue(TEXT("CaptureLabel"))) {
+		std::wstring data;
+
+		registry.ReadValue(TEXT("CaptureLabel"), &data);
+
+		if (data.compare(m_pCaptureLabel) != 0) {
+			m_pCaptureLabel = data;
+			info("CaptureLabel: %S", m_pCaptureLabel.c_str());
 			numberOfChanges++;
 		}
 	}
@@ -331,29 +382,6 @@ HRESULT CPushPinDesktop::Active(void) {
 	active = true;
 	return CSourceStream::Active();
 };
-
-void CPushPinDesktop::CleanupCapture() {
-	if (game_context) {
-		stop_game_capture(&game_context);
-		game_context = NULL;
-	}
-
-	if (m_pDesktopCapture) {
-		m_pDesktopCapture->Cleanup();
-	}
-
-	if (m_pGDICapture) {
-		m_pGDICapture->SetCaptureHandle(NULL);
-	}
-
-	globalStart = GetTickCount();
-	countMissed = 0;
-	sumMillisTook = 0;
-	fastestRoundMillis = LONG_MAX;
-	m_iFrameNumber = 0;
-	missed = true;
-	previousFrame = 0;
-}
 
 HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	CheckPointer(pSample, E_POINTER);
@@ -444,6 +472,10 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	CSourceStream::m_pFilter->StreamTime(now);	
 	debug("timestamping (%11f) video packet %llf -> %llf length:(%11f) drift:(%llf)", 0.0001 * now, 0.0001 * startFrame, 0.0001 * endFrame, 0.0001 * (endFrame - startFrame), 0.0001 * (now - previousFrame));
 
+	if (m_iFrameNumber == 1) {
+		info("Got first frame, type: %S, label: %S, id: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str());
+	}
+
 	m_iFrameNumber++;
 
 	// Set TRUE on every sample for uncompressed frames http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
@@ -453,9 +485,9 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 	pSample->SetDiscontinuity(m_iFrameNumber <= 1);
 
 	double m_fFpsSinceBeginningOfTime = ((double)m_iFrameNumber) / (GetTickCount() - globalStart) * 1000;
-	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed %d",
+	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, label: %S, id: %S",
 		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0 * 1000 / millisThisRoundTook,
-		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed);
+		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str());
 	debug(out);
 	return S_OK;
 }
@@ -464,9 +496,9 @@ void CPushPinDesktop::ProcessRegistryReadEvent(long timeout) {
 	DWORD result = WaitForSingleObject(readRegistryEvent, timeout);
 	if (result == WAIT_OBJECT_0) {
 		int changeCount = GetGameFromRegistry();
-		info("Received re-read registry event, number of changes in registry: %d", changeCount);
 
 		if (changeCount > 0) {
+		    info("Received re-read registry event, number of changes in registry: %d", changeCount);
 			CleanupCapture();
 		}
 
@@ -543,8 +575,8 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			missed = true;
 			previousFrame = 0;
 			debug("frame_length: %d", m_rtFrameLength);
-
 		}
+
 		CSourceStream::m_pFilter->StreamTime(now);
 
 		if (now <= 0) {
@@ -618,6 +650,10 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 	m_iFrameNumber++;
 
+	if (m_iFrameNumber == 1) {
+		info("Got first frame, type: %S, label: %S, id: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str());
+	}
+
 	// Set TRUE on every sample for uncompressed frames http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
 	pSample->SetSyncPoint(TRUE);
 
@@ -625,9 +661,9 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	pSample->SetDiscontinuity(m_iFrameNumber <= 1);
 
 	double m_fFpsSinceBeginningOfTime = ((double)m_iFrameNumber) / (GetTickCount() - globalStart) * 1000;
-	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed %d",
+	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, label: %S, id: %S",
 		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0 * 1000 / millisThisRoundTook,
-		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed);
+		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str());
 	debug(out);
 	return S_OK;
 }
@@ -728,6 +764,10 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 	CSourceStream::m_pFilter->StreamTime(now);	
 	debug("timestamping (%11f) video packet %llf -> %llf length:(%11f) drift:(%llf)", 0.0001 * now, 0.0001 * startFrame, 0.0001 * endFrame, 0.0001 * (endFrame - startFrame), 0.0001 * (now - previousFrame));
 
+	if (m_iFrameNumber == 1) {
+		info("Got first frame, type: %S, label: %S, id: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str());
+	}
+
 	m_iFrameNumber++;
 
 	// Set TRUE on every sample for uncompressed frames http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
@@ -737,9 +777,9 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 	pSample->SetDiscontinuity(m_iFrameNumber <= 1);
 
 	double m_fFpsSinceBeginningOfTime = ((double)m_iFrameNumber) / (GetTickCount() - globalStart) * 1000;
-	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed %d",
+	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, label: %S, id: %S",
 		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0 * 1000 / millisThisRoundTook,
-		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed);
+		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str());
 	debug(out);
 	return S_OK;
 }
@@ -749,16 +789,11 @@ float CPushPinDesktop::GetFps() {
 }
 
 int CPushPinDesktop::getNegotiatedFinalWidth() {
-	int iImageWidth = m_iCaptureConfigWidth;
-	ASSERT_RAISE(iImageWidth > 0);
-	return iImageWidth;
+	return m_iCaptureConfigWidth;
 }
 
 int CPushPinDesktop::getNegotiatedFinalHeight() {
-	// might be smaller than the "getCaptureDesiredFinalWidth" if they tell us to give them an even smaller setting...
-	int iImageHeight = m_iCaptureConfigHeight;
-	ASSERT_RAISE(iImageHeight > 0);
-	return iImageHeight;
+	return m_iCaptureConfigHeight;
 }
 
 int CPushPinDesktop::getCaptureDesiredFinalWidth() {
@@ -851,10 +886,7 @@ HRESULT CPushPinDesktop::OnThreadCreate() {
 
 HRESULT CPushPinDesktop::OnThreadDestroy() {
 	info("CPushPinDesktop::OnThreadDestroy");
-	if (game_context) {
-		stop_game_capture(&game_context);
-		game_context = NULL;
-	}
+	CleanupCapture();
 	return NOERROR;
 };
 

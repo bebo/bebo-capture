@@ -110,6 +110,14 @@ int sprintf_pmt(char *buffer, size_t count, char *label, const AM_MEDIA_TYPE *pm
 	return cnt;
 }
 
+void debug_pmt(char* label, const AM_MEDIA_TYPE *pmtIn)
+{
+	const int SIZE = 10 * 4096;
+	char buffer[SIZE];
+	sprintf_pmt(buffer, SIZE, label, pmtIn);
+	debug(buffer);
+}
+
 void info_pmt(char* label, const AM_MEDIA_TYPE *pmtIn)
 {
 	const int SIZE = 10 * 4096;
@@ -494,14 +502,14 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TY
 
 	{
 		static bool stop_logging = false;
-		if (iIndex == 8) {
+		if (iIndex == PIN_RESOLUTION_SIZE - 1) {
 			stop_logging = true;
 		}
 
 		if (!stop_logging) {
 			char debug_buffer[1024];
 			snprintf(debug_buffer, 1024, "GetStreamCaps S_OK p:%d", iIndex);
-			info_pmt(debug_buffer, *pmt);
+			debug_pmt(debug_buffer, *pmt);
 		}
 	}
 
