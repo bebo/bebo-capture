@@ -64,7 +64,7 @@ enum capture_mode {
 	CAPTURE_MODE_HOTKEY
 };
 
-
+static uint32_t inject_failed_count = 0;
 
 struct game_capture {
 	int                           last_tex;
@@ -74,7 +74,6 @@ struct game_capture {
 	uint32_t                      cx;
 	uint32_t                      cy;
 	uint32_t                      pitch;
-	uint32_t					  inject_failed_count;
 	DWORD                         process_id;
 	DWORD                         thread_id;
 	HWND                          next_window;
@@ -208,7 +207,7 @@ static struct game_capture *game_capture_create(game_capture_config *config, uin
 	gc->config.allow_transparency = config->allow_transparency;
 	gc->config.limit_framerate = config->limit_framerate;
 	gc->config.capture_overlays = config->capture_overlays;
-	gc->config.anticheat_hook = config->anticheat_hook;
+	gc->config.anticheat_hook = inject_failed_count > 10 ? true : config->anticheat_hook;
 	gc->frame_interval = frame_interval;
 	gc->last_tex = -1;
 
@@ -389,11 +388,8 @@ static inline bool hook_direct(struct game_capture *gc,
 
 	if (ret != 0) {
 		error("hook_direct: inject failed: %d, anti_cheat: %d, %s, %s, %s", ret, gc->config.anticheat_hook, gc->config.title, gc->config.klass, gc->config.executable);
-		gc->inject_failed_count++;
-		if (ret == INJECT_ERROR_UNLIKELY_FAIL && gc->inject_failed_count == 10) {
-			gc->config.anticheat_hook = true;
-			gc->inject_failed_count = 0;
-			info("hook_direct: inject failed for 10th time, retrying with anticheat = true");
+		if (ret == INJECT_ERROR_UNLIKELY_FAIL) {
+			inject_failed_count++;
 		}
 		return false;
 	}
@@ -604,10 +600,21 @@ static inline bool inject_hook(struct game_capture *gc)
 	if (matching_architecture && !use_anticheat(gc)) {
 		info("using direct hook");
 		success = hook_direct(gc, hook_path);
+
+		if (!success && inject_failed_count > 10) {
+			gc->config.anticheat_hook = true;
+			info("hook_direct: inject failed for 10th time, retrying with helper (%s hook)", use_anticheat(gc) ?
+				"compatibility" : "direct");
+			success = create_inject_process(gc, inject_path, hook_dll);
+		}
 	} else {
 		info("using helper (%s hook)", use_anticheat(gc) ?
 				"compatibility" : "direct");
 		success = create_inject_process(gc, inject_path, hook_dll);
+	}
+
+	if (success) {
+		inject_failed_count = 0;
 	}
 
 cleanup:
