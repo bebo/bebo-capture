@@ -238,7 +238,7 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 		}
 		else {
 			// FIXME: this always shows up, so setting to info instead of warn
-			info("CheckMediaType - VFW_E_TYPE_NOT_ACCEPTED format already set to different type");
+			// info("CheckMediaType - VFW_E_TYPE_NOT_ACCEPTED format already set to different type");
 			return VFW_E_TYPE_NOT_ACCEPTED;
 		}
 	}

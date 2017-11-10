@@ -119,6 +119,8 @@ protected:
 	bool m_bCaptureOnce;
 	volatile bool active;
 	bool m_bCaptureAntiCheat;
+	bool isBlackFrame;
+	bool threadCreated;
 
 	float GetFps();
 	float GetMaxFps() { return MAX_FPS; };
@@ -140,7 +142,6 @@ public:
 	HRESULT OnThreadDestroy(void);
 	HRESULT OnThreadStartPlay(void);
 	int GetGameFromRegistry(void);
-	int GetConstraintsFromRegistry(void);
 	void CleanupCapture();
 	HRESULT Inactive(void);
 	HRESULT Active(void);

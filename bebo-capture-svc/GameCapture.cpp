@@ -30,17 +30,18 @@
         "settings of the security software you are using."
 
 extern "C" {
-	char *bebo_find_file(const char *file) {
+	static std::vector<std::string> logged_file;
+	char *bebo_find_file(const char *file_c) {
 		RegKey machine_registry(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Bebo\\GameCapture", KEY_READ);
 
 		LPCTSTR key = L"Directory";
 		HRESULT r;
+		std::string file(file_c);
 		std::wstring out;
 
 		if (machine_registry.HasValue(key)) {
 			machine_registry.ReadValue(key, &out);
-		}
-		else {
+		} else {
 			warn("can not find registry key in HKLM, fallback to HKCU: %S", key);
 			RegKey local_registry(HKEY_CURRENT_USER, L"Software\\Bebo\\GameCapture", KEY_READ);
 			if (!local_registry.HasValue(key)) {
@@ -49,9 +50,24 @@ extern "C" {
 			local_registry.ReadValue(key, &out);
 		}
 
-		CHAR * result = (CHAR *)bmalloc(wcslen(out.c_str()) + strlen(file) + 1);
-		wsprintfA(result, "%S\\%s", out.c_str(), file);
-		info("RegGetBeboSZ %S, %S, %s", key, out.c_str(), result);
+
+		const wchar_t* out_c = out.c_str();
+		CHAR * result = (CHAR *)bmalloc(wcslen(out_c) + strlen(file_c) + 1);
+		wsprintfA(result, "%S\\%s", out_c, file_c);
+
+		bool found_in_vector = false;
+		for (auto &it : logged_file) {
+			if (it.compare(file) == 0) {
+				found_in_vector = true;
+				break;
+			}
+		}
+
+		if (!found_in_vector) {
+			info("RegGetBeboSZ %S, %S, %s", key, out_c, result);
+			logged_file.push_back(file);
+		}
+
 		return result;
 	}
 	struct graphics_offsets offsets32 = { 0 };
@@ -873,7 +889,7 @@ static void stop_capture(struct game_capture *gc)
 	close_handle(&gc->texture_mutexes[1]);
 
 	if (gc->active)
-		info("capture stopped");
+		info("game capture stopped");
 
 	gc->copy_texture = NULL;
 	gc->wait_for_target_startup = false;
@@ -1288,7 +1304,6 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 
 
 		// FIXME make sure 16 byte alignment!
-
 		const uint8* src_frame = gc->texture_buffers[cur_texture];
 		int src_stride_frame = pitch;
 
@@ -1302,11 +1317,10 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 		uint8* dst_v = dst_u + ((width * height) >> 2);
 		int dst_stride_v = dst_stride_u;
 
-		debug("width: %d, height: %d", width, height);
-
 		if (gc->global_hook_info->flip) {
 			height = -height;
 		}
+
 		// TODO - better to initialize function pointer once ?
 		int err = NULL;
 		if (gc->global_hook_info->format == DXGI_FORMAT_R8G8B8A8_UNORM) {
@@ -1382,6 +1396,7 @@ static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 	}
 
 	ReleaseMutex(mutex);
+
 	return true;
 }
 
