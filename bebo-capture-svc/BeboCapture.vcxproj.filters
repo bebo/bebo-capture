@@ -1,0 +1,80 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="BeboCapture.cpp" />
+    <ClCompile Include="DesktopCapture.cpp" />
+    <ClCompile Include="DibHelper.cpp" />
+    <ClCompile Include="GameCapture.cpp" />
+    <ClCompile Include="GDICapture.cpp" />
+    <ClCompile Include="load-graphics-offsets.c" />
+    <ClCompile Include="parent.cpp" />
+    <ClCompile Include="CapturePin.cpp" />
+    <ClCompile Include="CapturePinAccessories.cpp" />
+    <ClCompile Include="registry.cpp" />
+    <ClCompile Include="setup.cpp" />
+    <ClCompile Include="..\third_party\g2log\active.cpp">
+      <Filter>logger</Filter>
+    </ClCompile>
+    <ClCompile Include="..\third_party\g2log\g2log.cpp">
+      <Filter>logger</Filter>
+    </ClCompile>
+    <ClCompile Include="..\third_party\g2log\g2logworker.cpp">
+      <Filter>logger</Filter>
+    </ClCompile>
+    <ClCompile Include="..\third_party\g2log\g2time.cpp">
+      <Filter>logger</Filter>
+    </ClCompile>
+    <ClCompile Include="Logging.cpp">
+      <Filter>logger</Filter>
+    </ClCompile>
+    <ClCompile Include="..\third_party\g2log\crashhandler_win.cpp">
+      <Filter>logger</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\third_party\g2log\shared_queue.h" />
+    <ClInclude Include="BeboCapture.h" />
+    <ClInclude Include="BeboCaptureGuids.h" />
+    <ClInclude Include="CommonTypes.h" />
+    <ClInclude Include="DesktopCapture.h" />
+    <ClInclude Include="DibHelper.h" />
+    <ClInclude Include="CaptureGuids.h" />
+    <ClInclude Include="Capture.h" />
+    <ClInclude Include="GameCapture.h" />
+    <ClInclude Include="GDICapture.h" />
+    <ClInclude Include="IBeboCapture.h" />
+    <ClInclude Include="registry.h" />
+    <ClInclude Include="..\third_party\g2log\active.h">
+      <Filter>logger</Filter>
+    </ClInclude>
+    <ClInclude Include="..\third_party\g2log\g2log.h">
+      <Filter>logger</Filter>
+    </ClInclude>
+    <ClInclude Include="..\third_party\g2log\g2logworker.h">
+      <Filter>logger</Filter>
+    </ClInclude>
+    <ClInclude Include="..\third_party\g2log\g2time.h">
+      <Filter>logger</Filter>
+    </ClInclude>
+    <ClInclude Include="Logging.h">
+      <Filter>logger</Filter>
+    </ClInclude>
+    <ClInclude Include="..\third_party\g2log\crashhandler.h">
+      <Filter>logger</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Capture.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Midl Include="IBeboCapture.idl" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="BeboGameCapture.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="logger">
+      <UniqueIdentifier>{8d90ee7e-1186-4950-a73a-622fdfa1e49d}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
