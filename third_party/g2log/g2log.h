@@ -27,6 +27,7 @@
 #include <chrono>
 #include <functional>
 #include <ctime>
+#include "g2time.h"
 
 class g2LogWorker;
 
@@ -173,10 +174,10 @@ namespace internal {
 
 /// returns timepoint as std::time_t
 std::time_t systemtime_now();
-
+g2::high_resolution_time_point highresolution_clock_now();
 
 struct LogEntry {
-   LogEntry(std::string msg, std::time_t timestamp) : msg_(msg), timestamp_(timestamp) {}
+   LogEntry(std::string msg, g2::high_resolution_time_point timestamp) : msg_(msg), timestamp_(timestamp) {}
    LogEntry(const LogEntry& other): msg_(other.msg_), timestamp_(other.timestamp_) {}
    LogEntry& operator=(const LogEntry& other) {
       msg_ = other.msg_;
@@ -186,7 +187,7 @@ struct LogEntry {
 
 
    std::string msg_;
-   std::time_t timestamp_;
+   g2::high_resolution_time_point timestamp_;
 };
 
 bool isLoggingInitialized();
@@ -242,7 +243,7 @@ class LogMessage {
    const std::string level_;
    std::ostringstream stream_;
    std::string log_entry_;
-   std::time_t timestamp_;
+   g2::high_resolution_time_point timestamp_;
 };
 
 

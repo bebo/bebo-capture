@@ -37,7 +37,7 @@ std::once_flag g_initialize_flag;
 g2LogWorker* g_logger_instance = nullptr; // instantiated and OWNED somewhere else (main)
 std::mutex g_logging_init_mutex;
 
-g2::internal::LogEntry g_first_unintialized_msg = {"", 0};
+g2::internal::LogEntry g_first_unintialized_msg = {"", std::chrono::high_resolution_clock::now()};
 std::once_flag g_set_first_uninitialized_flag;
 std::once_flag g_save_first_unintialized_flag;
 
@@ -65,7 +65,7 @@ void saveToLogger(const g2::internal::LogEntry& log_entry) {
       std::string err("LOGGER NOT INITIALIZED: " + log_entry.msg_);
       std::call_once(g_set_first_uninitialized_flag,
                      [&] { g_first_unintialized_msg.msg_ += err;
-                           g_first_unintialized_msg.timestamp_ = g2::internal::systemtime_now();
+                           g_first_unintialized_msg.timestamp_ = std::chrono::high_resolution_clock::now();
                          });
       // dump to std::err all the non-initialized logs
       std::cerr << err << std::endl;
@@ -131,6 +131,9 @@ std::time_t systemtime_now() {
    return std::chrono::system_clock::to_time_t(now);
 }
 
+g2::high_resolution_time_point highresolution_clock_now() {
+   return std::chrono::high_resolution_clock::now();
+}
 
 bool isLoggingInitialized() {
    return g_logger_instance != nullptr;
@@ -191,7 +194,7 @@ LogMessage::LogMessage(const std::string& file, const int line, const std::strin
    , line_(line)
    , function_(function)
    , level_(level)
-   , timestamp_(systemtime_now())
+   , timestamp_(std::chrono::high_resolution_clock::now())
 {}
 
 
