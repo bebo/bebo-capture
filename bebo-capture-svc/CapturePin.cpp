@@ -364,7 +364,7 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 
 		if (oldCaptureFPS != newCaptureFPS) {
 			m_rtFrameLength = UNITS / newCaptureFPS;
-			message << "CaptureFPS: %d" << newCaptureFPS << ", ";
+			message << "CaptureFPS: " << newCaptureFPS << ", ";
 			numberOfChanges++;
 		}
 	}
