@@ -179,8 +179,6 @@ public:
     HRESULT CheckMediaType(const CMediaType *pMediaType);
     HRESULT GetMediaType(int iPosition, CMediaType *pmt);
 
-	void LogCapture();
-
     // IQualityControl
 	// Not implemented because we aren't going in real time.
 	// If the file-writing filter slows the graph down, we just do nothing, which means

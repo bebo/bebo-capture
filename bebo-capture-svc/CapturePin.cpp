@@ -192,10 +192,6 @@ void CPushPinDesktop::CleanupCapture() {
 		m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str(), isBlackFrame);
 }
 
-void CPushPinDesktop::LogCapture() {
-	info("Capture Type: %S, Capture Label: %S, Capture Id: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str()); 
-}
-
 int CPushPinDesktop::GetGameFromRegistry(void) {
 	std::wstringstream message;
 	message << "Reading from registry: ";
