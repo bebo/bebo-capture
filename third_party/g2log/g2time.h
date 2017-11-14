@@ -42,23 +42,6 @@ namespace g2
 	  // static const std::string time_formatted = "%H:%M:%S %f6";
   } // internal
 
-
-
-  //  wrap for std::chrono::system_clock::now()
-  std::time_t systemtime_now();
-
-  /** return time representing POD struct (ref ctime + wchar) that is normally
-  * retrieved with std::gmtime. g2::gmtime is threadsafe which std::gmtime is not.
-  * g2::gmtime is probably used together with @ref g2::systemtime_now */
-  tm gmtime(const std::time_t& time);
-
-  /** format string must conform to std::put_time's demands.
-  * WARNING: At time of writing there is only so-so compiler support for
-  * std::put_time. A possible fix if your c++11 library is not updated is to
-  * modify this to use std::strftime instead */
-  std::string gmtime_formatted(const std::time_t& time_snapshot, const std::string& time_format) ;
-
-
 	// This mimics the original "std::put_time(const std::tm* tmb, const charT* fmt)"
 	// This is needed since latest version (at time of writing) of gcc4.7 does not implement this library function yet.
 	// return value is SIMPLIFIED to only return a std::string
@@ -75,6 +58,7 @@ namespace g2
   * modify this to use std::strftime instead */
   std::string localtime_formatted(const system_time_point& ts, const std::string& time_format);
   std::string localtime_formatted(const g2::high_resolution_time_point& ts, const std::string& time_format);
+  std::string localtime_formatted_now(const std::string& time_format);
 
 
   inline system_time_point to_system_time(const high_resolution_time_point& ts)

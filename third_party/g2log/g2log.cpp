@@ -125,12 +125,6 @@ bool shutDownLoggingForActiveOnly(g2LogWorker* active) {
 
 namespace internal {
 
-/// returns timepoint as std::time_t
-std::time_t systemtime_now() {
-   const auto now = std::chrono::system_clock::now();
-   return std::chrono::system_clock::to_time_t(now);
-}
-
 g2::high_resolution_time_point highresolution_clock_now() {
    return std::chrono::high_resolution_clock::now();
 }

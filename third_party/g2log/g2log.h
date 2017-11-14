@@ -172,8 +172,6 @@ bool shutDownLoggingForActiveOnly(g2LogWorker* active);
 // defined here but should't not have to be used outside the g2log
 namespace internal {
 
-/// returns timepoint as std::time_t
-std::time_t systemtime_now();
 g2::high_resolution_time_point highresolution_clock_now();
 
 struct LogEntry {

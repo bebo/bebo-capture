@@ -93,7 +93,7 @@ std::string createLogFileName(const std::string& verified_prefix) {
    std::stringstream oss_name;
    oss_name.fill('0');
    oss_name << verified_prefix << ".g2log.";
-   oss_name << g2::gmtime_formatted(g2::systemtime_now(), file_name_time_formatted);
+   oss_name << g2::localtime_formatted_now(file_name_time_formatted);
    oss_name << ".log";
    return oss_name.str();
 }
@@ -111,11 +111,6 @@ bool openLogFile(const std::string& complete_file_with_path, std::ofstream& outs
       outstream.close();
       return false;
    }
-   // std::ostringstream ss_entry;
-   // ss_entry << "g2log created log file at: " << g2::gmtime_formatted(g2::systemtime_now(), "%Y-%m-%dT%H:%M:%S") << "\n";
-   // ss_entry << "LOG format: [%Y-%m-%dT%H:%M:%S.mmm  LEVEL FILE:LINE] message\n\n"; 
-   // outstream << ss_entry.str() << std::flush;
-   // outstream.fill('0');
    return true;
 }
 
@@ -188,7 +183,7 @@ g2LogWorkerImpl::g2LogWorkerImpl(const std::string& log_prefix, const std::strin
 g2LogWorkerImpl::~g2LogWorkerImpl() {
    std::ostringstream ss_exit;
    bg_.reset(); // flush the log queue
-   ss_exit << "\ng2log file shutdown at: " << g2::gmtime_formatted(g2::systemtime_now(), time_formatted);
+   ss_exit << "\ng2log file shutdown at: " << g2::localtime_formatted_now(time_formatted);
    filestream() << ss_exit.str() << std::flush;
 }
 

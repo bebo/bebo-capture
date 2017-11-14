@@ -119,30 +119,6 @@ namespace g2 { namespace internal {
 
 namespace g2
 {
-std::time_t systemtime_now()
-{
-  system_time_point system_now = std::chrono::system_clock::now();
-  return std::chrono::system_clock::to_time_t(system_now);
-}
-
-
-tm gmtime(const std::time_t& time)
-{
-  struct tm tm_snapshot;
-  gmtime_s(&tm_snapshot, &time); // windows
-  return tm_snapshot;
-}
-
-/// returns a std::string with content of time_t as localtime formatted by input format string
-/// * format string must conform to std::put_time
-/// This is similar to std::put_time(std::localtime(std::time_t*), time_format.c_str());
-std::string gmtime_formatted(const std::time_t& time_snapshot, const std::string& time_format)
-{
-  std::tm t = gmtime(time_snapshot); // could be const, but cannot due to VS2012 is non conformant for C++11's std::put_time (see above)
-  std::stringstream buffer;
-  buffer << g2::internal::put_time(&t, time_format.c_str());  // format example: //"%Y/%m/%d %H:%M:%S");
-  return buffer.str();
-}
 
 std::string put_time(const struct tm* tmb, const char* c_time_format) {
 	std::ostringstream oss;
@@ -152,9 +128,13 @@ std::string put_time(const struct tm* tmb, const char* c_time_format) {
 	return oss.str();
 }
 
-tm localtime(const std::time_t& ts) {
+tm localtime(const std::time_t& time) {
 	struct tm tm_snapshot;
-	localtime_s(&tm_snapshot, &ts); // windsows
+#if (defined(WIN32) || defined(_WIN32) || defined(__WIN32__) && !defined(__GNUC__))
+	localtime_s(&tm_snapshot, &time); // windsows
+#else
+	localtime_r(&time, &tm_snapshot); // POSIX
+#endif
 	return tm_snapshot;
 }
 
@@ -168,4 +148,10 @@ std::string localtime_formatted(const g2::system_time_point& ts, const std::stri
 std::string localtime_formatted(const g2::high_resolution_time_point& ts, const std::string& time_format) {
 	return localtime_formatted(to_system_time(ts), time_format); // format example: //"%Y/%m/%d %H:%M:%S");
 }
+
+std::string localtime_formatted_now(const std::string& time_format) {
+	auto now_time = std::chrono::high_resolution_clock::now();
+	return localtime_formatted(now_time, time_format);
+}
 } // g2
+
