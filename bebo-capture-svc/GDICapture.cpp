@@ -50,6 +50,11 @@ void GDICapture::SetSize(int width, int height) {
 
 void GDICapture::SetCaptureHandle(HWND handle) {
 	capture_hwnd = handle;
+
+	if (handle == NULL && last_frame) {
+		delete last_frame;
+		last_frame = new GDIFrame;
+	}
 }
 
 GDIFrame* GDICapture::CaptureFrame()

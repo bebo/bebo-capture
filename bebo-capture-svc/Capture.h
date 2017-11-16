@@ -134,6 +134,7 @@ protected:
 
 	HANDLE readRegistryEvent;
 	QWORD m_iCaptureHandle;
+	UINT64 blackFrameCount;
 
 public:
 	
@@ -169,6 +170,7 @@ public:
     // Override the version that offers exactly one media type
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
     HRESULT FillBuffer(IMediaSample *pSample);
+    HRESULT FillBuffer_Inject(IMediaSample *pSample);
     HRESULT FillBuffer_Desktop(IMediaSample *pSample);
     HRESULT FillBuffer_GDI(IMediaSample *pSample);
 

@@ -75,7 +75,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	readRegistryEvent(NULL),
 	init_hooks_thread(NULL),
 	threadCreated(false),
-	isBlackFrame(true)
+	isBlackFrame(true),
+	blackFrameCount(0)
 {
 	info("CPushPinDesktop");
 
@@ -121,7 +122,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 				error("Failed to open registry signal event, after attempted to create it. We should die here.");
 			}
 		} else {
-			info("Created read registry signal event. Handle: %lld", readRegistryEvent);
+			info("Created read registry signal event. Handle: %llu", readRegistryEvent);
 		}
 	}
 
@@ -185,11 +186,12 @@ void CPushPinDesktop::CleanupCapture() {
 	m_iFrameNumber = 0;
 	previousFrame = 0;
 	isBlackFrame = true;
+	blackFrameCount = 0;
 
-	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, label: %S, id: %S, black frame: %d",
+	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, name: %S, black frame: %d, black frame count: %llu",
 		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), 
 		0, 0, 0, 0, 0, 0, countMissed, 
-		m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str(), isBlackFrame);
+		m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), isBlackFrame, blackFrameCount);
 }
 
 int CPushPinDesktop::GetGameFromRegistry(void) {
@@ -314,7 +316,13 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 
 		registry.ReadValue(TEXT("CaptureLabel"), &data);
 
-		if (data.compare(m_pCaptureLabel) != 0) {
+		if (m_iCaptureType == CAPTURE_DESKTOP && data.length() == 0) {
+			if (m_pCaptureLabel.compare(m_pCaptureId) != 0) {
+				m_pCaptureLabel = m_pCaptureId;
+				message << "CaptureLabel: " << m_pCaptureLabel << ", ";
+				numberOfChanges++;
+			}
+		} else if (data.compare(m_pCaptureLabel) != 0) {
 			m_pCaptureLabel = data;
 			message << "CaptureLabel: " << m_pCaptureLabel << ", ";
 			numberOfChanges++;
@@ -389,132 +397,6 @@ HRESULT CPushPinDesktop::Active(void) {
 	return CSourceStream::Active();
 };
 
-HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
-	CheckPointer(pSample, E_POINTER);
-
-	if (!m_pDesktopCapture->IsReady()) {
-		info("Initializing desktop capture - adapter: %d, desktop: %d, size: %dx%d",
-			m_iDesktopAdapterNumber, m_iDesktopNumber, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
-		m_pDesktopCapture->Init(m_iDesktopAdapterNumber, m_iDesktopNumber, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
-
-		globalStart = GetTickCount();
-		countMissed = 0;
-		sumMillisTook = 0;
-		fastestRoundMillis = LONG_MAX;
-		m_iFrameNumber = 0;
-		missed = true;
-		previousFrame = 0;
-	}
-
-	if (!m_pDesktopCapture->IsReady()) {
-		return 2; // skip the loop
-	}
-
-	__int64 startThisRound = StartCounter();
-
-	long double millisThisRoundTook = 0;
-	CRefTime now;
-	now = 0;
-	
-	bool frame = false;
-	while (!frame) {
-		if (!active) {
-			info("inactive - fillbuffer_desktop");
-			return S_FALSE;
-		}
-		CSourceStream::m_pFilter->StreamTime(now);
-		if (now <= 0) {
-			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
-			debug("no reference graph clock - sleeping %d", dwMilliseconds);
-			Sleep(dwMilliseconds);
-		} else if (now < (previousFrame + m_rtFrameLength)) {
-			DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), m_rtFrameLength) / 10000L);
-			debug("sleeping - %d", dwMilliseconds);
-			Sleep(dwMilliseconds);
-		} else if (missed) {
-			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
-			debug("starting/missed - sleeping %d", dwMilliseconds);
-			Sleep(dwMilliseconds);
-			CSourceStream::m_pFilter->StreamTime(now);
-		} else if (now > (previousFrame + 2 * m_rtFrameLength)) {
-			int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
-			m_iFrameNumber += missed_nr;
-			countMissed += missed_nr;
-			debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
-				missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
-			previousFrame = previousFrame + missed_nr * m_rtFrameLength;
-			missed = true;
-		}
-
-		startThisRound = StartCounter();
-		frame = m_pDesktopCapture->GetFrame(pSample, false, now);
-
-		if (!frame && missed && now > (previousFrame + 10000000L / 5)) {
-			debug("fake frame");
-			countMissed += 1;
-			frame = m_pDesktopCapture->GetOldFrame(pSample, false);
-		}
-		if (frame && previousFrame <= 0) {
-			frame = false;
-			previousFrame = now;
-			missed = false;
-			debug("skip first frame");
-		} 
-
-	}
-	missed = false;
-	millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
-	fastestRoundMillis = min(millisThisRoundTook, fastestRoundMillis);
-	sumMillisTook += millisThisRoundTook;
-
-	// accomodate for 0 to avoid startup negatives, which would kill our math on the next loop...
-	previousFrame = max(0, previousFrame);
-	// auto-correct drift
-	previousFrame = previousFrame + m_rtFrameLength;
-
-	REFERENCE_TIME startFrame = m_iFrameNumber * m_rtFrameLength;
-	REFERENCE_TIME endFrame = startFrame + m_rtFrameLength;
-	pSample->SetTime((REFERENCE_TIME *)&startFrame, (REFERENCE_TIME *)&endFrame);
-	CSourceStream::m_pFilter->StreamTime(now);	
-	debug("timestamping (%11f) video packet %llf -> %llf length:(%11f) drift:(%llf)", 0.0001 * now, 0.0001 * startFrame, 0.0001 * endFrame, 0.0001 * (endFrame - startFrame), 0.0001 * (now - previousFrame));
-
-	m_iFrameNumber++;
-
-	if (m_iFrameNumber == 1) {
-		info("Got first frame, type: %S, label: %S", m_pCaptureTypeName.c_str(), m_pCaptureId.c_str());
-	}
-
-	if (m_iFrameNumber <= 10 && isBlackFrame) {
-		long size = pSample->GetSize();
-		long y_size = m_iCaptureConfigWidth * m_iCaptureConfigHeight;
-		BYTE* pData;
-		pSample->GetPointer(&pData);
-		for (int i = 0; i < size; i++) {
-			if ((i < y_size && pData[i] != 0x10) || (i >= y_size && pData[i] != 0x80)) {
-				 isBlackFrame = false;
-				 break;
-			}
-		}
-
-		if (m_iFrameNumber == 10 && isBlackFrame) {
-			error("Black frame detected, type: %S, label: %S", m_pCaptureTypeName.c_str(), m_pCaptureId.c_str());
-		}
-	}	
-
-	// Set TRUE on every sample for uncompressed frames http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
-	pSample->SetSyncPoint(TRUE);
-
-	// only set discontinuous for the first...I think...
-	pSample->SetDiscontinuity(m_iFrameNumber <= 1);
-
-	double m_fFpsSinceBeginningOfTime = ((double)m_iFrameNumber) / (GetTickCount() - globalStart) * 1000;
-	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, label: %S, id: %S, black frame: %d",
-		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0 * 1000 / millisThisRoundTook,
-		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str(), isBlackFrame);
-	debug(out);
-	return S_OK;
-}
-
 void CPushPinDesktop::ProcessRegistryReadEvent(long timeout) {
 	DWORD result = WaitForSingleObject(readRegistryEvent, timeout);
 	if (result == WAIT_OBJECT_0) {
@@ -541,119 +423,55 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 	boolean gotFrame = false;
 	while (!gotFrame) {
-		ProcessRegistryReadEvent(0);
-
-		switch (m_iCaptureType) {
-		case CAPTURE_INJECT:
-			break;
-		case CAPTURE_DESKTOP: {
-			int code = FillBuffer_Desktop(pSample);
-			if (code == 2) { 
-				// failed to initialize desktop capture, sleep is to reduce the # of log that we failed
-				// this failure can happen pretty often due to mobile graphic card
-				// we should detect + log this smartly instead of putting 3s sleep hack.
-				ProcessRegistryReadEvent(3000);
-				continue; 
-			}
-			return code;
-		}
-		case CAPTURE_GDI: {
-			int code = FillBuffer_GDI(pSample);
-			if (code == 2) {
-				ProcessRegistryReadEvent(300);
-				continue; // gdi failed to get frame - try go to next loop
-			}
-			return code;
-		}
-		case CAPTURE_DSHOW:
-			error("LIBDSHOW CAPTURE IS NOT SUPPRTED YET");
-			break;
-		default:
-			error("UNKNOWN CAPTURE TYPE: %d", m_iCaptureType);
-		}
-		// IsStopped() is not set until we have returned, so we need to do a peek to exit or we will never stop
 		if (!active) {
 			info("FillBuffer - inactive");
 			return S_FALSE;
 		}
 
-		if (!isReady(&game_context)) {
-			config->scale_cx = m_iCaptureConfigWidth;
-			config->scale_cy = m_iCaptureConfigHeight;
-			config->force_scaling = 1;
-			config->anticheat_hook = m_bCaptureAntiCheat;
+		ProcessRegistryReadEvent(0);
 
-			game_context = hook(&game_context, m_pCaptureWindowClassName, m_pCaptureWindowName, config, m_rtFrameLength * 100);
-			if (!isReady(&game_context)) {
-				ProcessRegistryReadEvent(300);
-				continue;
-			}
+		int code = E_FAIL;
 
-			// reset stats - stream really starts here
-			globalStart = GetTickCount();
-			countMissed = 0;
-			sumMillisTook = 0;
-			fastestRoundMillis = LONG_MAX;
-			m_iFrameNumber = 0;
-			missed = true;
-			previousFrame = 0;
-		}
+		switch (m_iCaptureType) {
+		case CAPTURE_INJECT:
+			code = FillBuffer_Inject(pSample);
+			break;
+		case CAPTURE_DESKTOP: 
+			code = FillBuffer_Desktop(pSample);
+			break;
+		case CAPTURE_GDI: 
+			code = FillBuffer_GDI(pSample);
+			break;
+		case CAPTURE_DSHOW:
+			error("LIBDSHOW CAPTURE IS NOT SUPPRTED YET");
+			break;
+		default:
+			error("UNKNOWN CAPTURE TYPE: %d", m_iCaptureType);
+		}			
 
-		CSourceStream::m_pFilter->StreamTime(now);
+		// failed to initialize desktop capture, sleep is to reduce the # of log that we failed
+		// this failure can happen pretty often due to mobile graphic card
+		// we should detect + log this smartly instead of putting 3s sleep hack.
 
-		if (now <= 0) {
-			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
-			debug("no reference graph clock - sleeping %d", dwMilliseconds);
-			Sleep(dwMilliseconds);
-		}
-		else if (now < (previousFrame + (m_rtFrameLength / 2))) {
-			DWORD dwMilliseconds = (DWORD)max(1, min(10000 + previousFrame + (m_rtFrameLength / 2) - now, (m_rtFrameLength / 2)) / 10000L);
-			debug("sleeping A - %d", dwMilliseconds);
-			Sleep(dwMilliseconds);
-		}
-		else if (now < (previousFrame + m_rtFrameLength)) {
-			DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), (m_rtFrameLength / 2)) / 10000L);
-			debug("sleeping B - %d", dwMilliseconds);
-			Sleep(dwMilliseconds);
-		}
-		else if (missed) {
-			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
-			debug("starting/missed - sleeping %d", dwMilliseconds);
-			Sleep(dwMilliseconds);
-			CSourceStream::m_pFilter->StreamTime(now);
-		}
-		else if (missed == false && m_iFrameNumber == 0) {
-			debug("getting second frame");
-			missed = true;
-		}
-		else if (now > (previousFrame + 2 * m_rtFrameLength)) {
-			int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
-			m_iFrameNumber += missed_nr;
-			countMissed += missed_nr;
-			debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
-				missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
-			previousFrame = previousFrame + missed_nr * m_rtFrameLength;
-			missed = true;
-		}
-		else {
-			debug("late need to catch up");
-			missed = true;
-		}
-
-		startThisRound = StartCounter();
-		gotFrame = get_game_frame(&game_context, missed, pSample);
-		if (!game_context) {
+		if (code == S_OK) {
+			gotFrame = true;
+		} else if (code == 2) { // not initialized yet
+			long sleep = (m_iCaptureType == CAPTURE_DESKTOP) ? 3000 : 300;
+			ProcessRegistryReadEvent(sleep);
+			continue;
+		} else if (code == 3) { // black frame
 			gotFrame = false;
-			info("Capture Ended");
+
+			double m_fFpsSinceBeginningOfTime = ((double)m_iFrameNumber) / (GetTickCount() - globalStart) * 1000;
+			sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, name: %S, id: %S, black frame: %d, black frame count: %llu",
+				m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0 * 1000 / millisThisRoundTook,
+				/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str(), isBlackFrame, blackFrameCount);
+		} else {
+			gotFrame = false;
 		}
 
-		if (gotFrame && previousFrame <= 0) {
-			gotFrame = false;
-			previousFrame = now;
-			missed = false;
-			debug("skip first frame");
-		}
 	}
+
 	missed = false;
 	millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
 	fastestRoundMillis = min(millisThisRoundTook, fastestRoundMillis);
@@ -672,26 +490,9 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 	m_iFrameNumber++;
 
-	if (m_iFrameNumber == 1) {
-		info("Got first frame, type: %S, label: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
+	if ((m_iFrameNumber - countMissed) == 1) {
+		info("Got first frame, type: %S, name: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
 	}
-
-	if (m_iFrameNumber <= 10 && isBlackFrame) {
-		long size = pSample->GetSize();
-		long y_size = m_iCaptureConfigWidth * m_iCaptureConfigHeight;
-		BYTE* pData;
-		pSample->GetPointer(&pData);
-		for (int i = 0; i < size; i++) {
-			if ((i < y_size && pData[i] != 0x10) || (i >= y_size && pData[i] != 0x80)) {
-				 isBlackFrame = false;
-				 break;
-			}
-		}
-
-		if (m_iFrameNumber == 10 && isBlackFrame) {
-			error("Black frame detected, type: %S, label: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
-		}
-	}	
 
 	// Set TRUE on every sample for uncompressed frames http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
 	pSample->SetSyncPoint(TRUE);
@@ -700,143 +501,309 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	pSample->SetDiscontinuity(m_iFrameNumber <= 1);
 
 	double m_fFpsSinceBeginningOfTime = ((double)m_iFrameNumber) / (GetTickCount() - globalStart) * 1000;
-	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, label: %S, id: %S, black frame: %d",
+	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, name: %S, black frame: %d, black frame count: %llu",
 		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0 * 1000 / millisThisRoundTook,
-		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str(), isBlackFrame);
+		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), isBlackFrame, blackFrameCount);
 	debug(out);
 	return S_OK;
 }
+
+HRESULT CPushPinDesktop::FillBuffer_Inject(IMediaSample *pSample)
+{
+	CheckPointer(pSample, E_POINTER);
+	
+	if (!isReady(&game_context)) {
+		if (m_iFrameNumber > 0) {
+			CleanupCapture();
+		}
+
+		config->scale_cx = m_iCaptureConfigWidth;
+		config->scale_cy = m_iCaptureConfigHeight;
+		config->force_scaling = 1;
+		config->anticheat_hook = m_bCaptureAntiCheat;
+
+		game_context = hook(&game_context, m_pCaptureWindowClassName, m_pCaptureWindowName, config, m_rtFrameLength * 100);
+
+		if (!isReady(&game_context)) {
+			return 2;
+		}
+	}
+
+	CRefTime now;
+	now = 0;
+	CSourceStream::m_pFilter->StreamTime(now);
+
+	if (now <= 0) {
+		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
+		debug("no reference graph clock - sleeping %d", dwMilliseconds);
+		Sleep(dwMilliseconds);
+	}
+	else if (now < (previousFrame + (m_rtFrameLength / 2))) {
+		DWORD dwMilliseconds = (DWORD)max(1, min(10000 + previousFrame + (m_rtFrameLength / 2) - now, (m_rtFrameLength / 2)) / 10000L);
+		debug("sleeping A - %d", dwMilliseconds);
+		Sleep(dwMilliseconds);
+	}
+	else if (now < (previousFrame + m_rtFrameLength)) {
+		DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), (m_rtFrameLength / 2)) / 10000L);
+		debug("sleeping B - %d", dwMilliseconds);
+		Sleep(dwMilliseconds);
+	}
+	else if (missed) {
+		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
+		debug("starting/missed - sleeping %d", dwMilliseconds);
+		Sleep(dwMilliseconds);
+		CSourceStream::m_pFilter->StreamTime(now);
+	}
+	else if (missed == false && m_iFrameNumber == 0) {
+		debug("getting second frame");
+		missed = true;
+	}
+	else if (now > (previousFrame + 2 * m_rtFrameLength)) {
+		int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
+		m_iFrameNumber += missed_nr;
+		countMissed += missed_nr;
+		debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
+			missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
+		previousFrame = previousFrame + missed_nr * m_rtFrameLength;
+		missed = true;
+	}
+	else {
+		debug("late need to catch up");
+		missed = true;
+	}
+
+	bool frame = get_game_frame(&game_context, missed, pSample);
+	if (!game_context) {
+		frame = false;
+		info("Capture Ended");
+	}
+
+	if (frame && previousFrame <= 0) {
+		frame = false;
+		previousFrame = now;
+		missed = false;
+		debug("skip first frame");
+	}
+
+	if (frame && isBlackFrame) {
+		long size = pSample->GetSize();
+		long y_size = m_iCaptureConfigWidth * m_iCaptureConfigHeight;
+		BYTE* pData;
+		pSample->GetPointer(&pData);
+		for (int i = 0; i < size; i++) {
+			if ((i < y_size && pData[i] != 0x10) || (i >= y_size && pData[i] != 0x80)) {
+				isBlackFrame = false;
+				break;
+			}
+		}
+
+		if (isBlackFrame) {
+			frame = false;
+			previousFrame = now;
+			missed = false;
+			blackFrameCount++;
+
+			if (blackFrameCount == GetFps() * 5 * 2) { // 5s frames, cause we double sampling, texture A and B so 5*2
+				error("Black frame detected, type: %S, name: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
+			}
+		}
+	}
+
+	if (!frame) {
+		return 3;
+	}
+
+	return S_OK;
+}
+
+HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
+	CheckPointer(pSample, E_POINTER);
+
+	if (!m_pDesktopCapture->IsReady()) {
+		if (m_iFrameNumber > 0) {
+			CleanupCapture();
+		}
+
+		info("Initializing desktop capture - adapter: %d, desktop: %d, size: %dx%d",
+			m_iDesktopAdapterNumber, m_iDesktopNumber, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
+		m_pDesktopCapture->Init(m_iDesktopAdapterNumber, m_iDesktopNumber, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
+
+		if (!m_pDesktopCapture->IsReady()) {
+			return 2;
+		}
+	}
+
+	CRefTime now;
+	now = 0;
+	CSourceStream::m_pFilter->StreamTime(now);
+	if (now <= 0) {
+		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
+		debug("no reference graph clock - sleeping %d", dwMilliseconds);
+		Sleep(dwMilliseconds);
+	}
+	else if (now < (previousFrame + m_rtFrameLength)) {
+		DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), m_rtFrameLength) / 10000L);
+		debug("sleeping - %d", dwMilliseconds);
+		Sleep(dwMilliseconds);
+	}
+	else if (missed) {
+		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
+		debug("starting/missed - sleeping %d", dwMilliseconds);
+		Sleep(dwMilliseconds);
+		CSourceStream::m_pFilter->StreamTime(now);
+	}
+	else if (now > (previousFrame + 2 * m_rtFrameLength)) {
+		int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
+		m_iFrameNumber += missed_nr;
+		countMissed += missed_nr;
+		debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
+			missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
+		previousFrame = previousFrame + missed_nr * m_rtFrameLength;
+		missed = true;
+	}
+
+	bool frame = m_pDesktopCapture->GetFrame(pSample, false, now);
+
+	if (!frame && missed && now > (previousFrame + 10000000L / 5)) {
+		debug("fake frame");
+		countMissed += 1;
+		frame = m_pDesktopCapture->GetOldFrame(pSample, false);
+	}
+
+	if (frame && previousFrame <= 0) {
+		frame = false;
+		previousFrame = now;
+		missed = false;
+		debug("skip first frame");
+	}
+
+	if (frame && isBlackFrame) {
+		long size = pSample->GetSize();
+		long y_size = m_iCaptureConfigWidth * m_iCaptureConfigHeight;
+		BYTE* pData;
+		pSample->GetPointer(&pData);
+		for (int i = 0; i < size; i++) {
+			if ((i < y_size && pData[i] != 0x10) || (i >= y_size && pData[i] != 0x80)) {
+				isBlackFrame = false;
+				break;
+			}
+		}
+
+		if (isBlackFrame) {
+			frame = false;
+			previousFrame = now;
+			missed = false;
+			blackFrameCount++;
+
+			if (blackFrameCount == GetFps() * 5) { // 5s frames
+				error("Black frame detected, type: %S, name: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
+			}
+		}
+	}
+
+	if (!frame) {
+		return 3;
+	}
+
+	return S_OK;
+}
+
+
 
 HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 {
 	CheckPointer(pSample, E_POINTER);
 
-	__int64 startThisRound = StartCounter();
+	if (!m_pGDICapture->IsReady()) {
+		if (m_iFrameNumber > 0) {
+			CleanupCapture();
+		}
 
-	long double millisThisRoundTook = 0;
+		HWND hwnd = FindCaptureWindows(m_bCaptureOnce, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName);
+
+		if (!hwnd) {
+			return 2;
+		}
+
+		info("GDI - window_handle: 0x%016x (%ld), class_name: %S, window_name: %S, exe_name: %S, capture_once: %d",
+			m_iCaptureHandle, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName, m_bCaptureOnce);
+
+		m_pGDICapture->SetSize(getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
+		m_pGDICapture->SetCaptureHandle(hwnd);
+	}
+
 	CRefTime now;
 	now = 0;
-	
-	bool frame = false;
-	while (!frame) {
-		if (!active) {
-			info("inactive - fillbuffer_gdi");
-			return S_FALSE;
-		}
 
-		if (!m_pGDICapture->IsReady()) {
-			HWND hwnd = FindCaptureWindows(m_bCaptureOnce, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName);
-
-			if (!hwnd) {
-				return 2;
-			}
-
-			info("GDI - window_handle: 0x%016x (%ld), class_name: %S, window_name: %S, exe_name: %S, capture_once: %d",
-				m_iCaptureHandle, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName, m_bCaptureOnce);
-
-			m_pGDICapture->SetSize(getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
-			m_pGDICapture->SetCaptureHandle(hwnd);
-
-			globalStart = GetTickCount();
-			countMissed = 0;
-			sumMillisTook = 0;
-			fastestRoundMillis = LONG_MAX;
-			m_iFrameNumber = 0;
-			missed = true;
-			previousFrame = 0;
-		}
-
+	CSourceStream::m_pFilter->StreamTime(now);
+	if (now <= 0) {
+		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
+		debug("no reference graph clock - sleeping %d", dwMilliseconds);
+		Sleep(dwMilliseconds);
+	}
+	else if (now < (previousFrame + m_rtFrameLength)) {
+		DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), m_rtFrameLength) / 10000L);
+		debug("sleeping - %d", dwMilliseconds);
+		Sleep(dwMilliseconds);
+	}
+	else if (missed) {
+		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
+		debug("starting/missed - sleeping %d", dwMilliseconds);
+		Sleep(dwMilliseconds);
 		CSourceStream::m_pFilter->StreamTime(now);
-		if (now <= 0) {
-			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
-			debug("no reference graph clock - sleeping %d", dwMilliseconds);
-			Sleep(dwMilliseconds);
-		} else if (now < (previousFrame + m_rtFrameLength)) {
-			DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), m_rtFrameLength) / 10000L);
-			debug("sleeping - %d", dwMilliseconds);
-			Sleep(dwMilliseconds);
-		} else if (missed) {
-			DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
-			debug("starting/missed - sleeping %d", dwMilliseconds);
-			Sleep(dwMilliseconds);
-			CSourceStream::m_pFilter->StreamTime(now);
-		} else if (now > (previousFrame + 2 * m_rtFrameLength)) {
-			int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
-			m_iFrameNumber += missed_nr;
-			countMissed += missed_nr;
-			debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
-				missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
-			previousFrame = previousFrame + missed_nr * m_rtFrameLength;
-			missed = true;
-		}
-
-		startThisRound = StartCounter();
-		frame = m_pGDICapture->GetFrame(pSample);
-
-		if (!frame) {
-			if (!IsWindow(m_pGDICapture->GetCaptureHandle())) {
-				info("capturing window is no longer alive"); // TODO: instead of dying - maybe retrying
-				m_pGDICapture->SetCaptureHandle(NULL);
-			}
-		}
-
-		if (frame && previousFrame <= 0) {
-			frame = false;
-			previousFrame = now;
-			missed = false;
-			debug("skip first frame");
-		} 
 	}
-	missed = false;
-	millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
-	fastestRoundMillis = min(millisThisRoundTook, fastestRoundMillis);
-	sumMillisTook += millisThisRoundTook;
-
-	// accomodate for 0 to avoid startup negatives, which would kill our math on the next loop...
-	previousFrame = max(0, previousFrame);
-	// auto-correct drift
-	previousFrame = previousFrame + m_rtFrameLength;
-
-	REFERENCE_TIME startFrame = m_iFrameNumber * m_rtFrameLength;
-	REFERENCE_TIME endFrame = startFrame + m_rtFrameLength;
-	pSample->SetTime((REFERENCE_TIME *)&startFrame, (REFERENCE_TIME *)&endFrame);
-	CSourceStream::m_pFilter->StreamTime(now);	
-	debug("timestamping (%11f) video packet %llf -> %llf length:(%11f) drift:(%llf)", 0.0001 * now, 0.0001 * startFrame, 0.0001 * endFrame, 0.0001 * (endFrame - startFrame), 0.0001 * (now - previousFrame));
-
-	m_iFrameNumber++;
-
-	if (m_iFrameNumber == 1) {
-		info("Got first frame, type: %S, label: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
+	else if (now > (previousFrame + 2 * m_rtFrameLength)) {
+		int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
+		m_iFrameNumber += missed_nr;
+		countMissed += missed_nr;
+		debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
+			missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
+		previousFrame = previousFrame + missed_nr * m_rtFrameLength;
+		missed = true;
 	}
 
-	if (m_iFrameNumber <= 10 && isBlackFrame) {
+	bool frame = m_pGDICapture->GetFrame(pSample);
+
+	if (frame && previousFrame <= 0) {
+		frame = false;
+		previousFrame = now;
+		missed = false;
+		debug("skip first frame");
+	}
+
+	if (frame && isBlackFrame) {
 		long size = pSample->GetSize();
 		long y_size = m_iCaptureConfigWidth * m_iCaptureConfigHeight;
 		BYTE* pData;
 		pSample->GetPointer(&pData);
 		for (int i = 0; i < size; i++) {
 			if ((i < y_size && pData[i] != 0x10) || (i >= y_size && pData[i] != 0x80)) {
-				 isBlackFrame = false;
-				 break;
+				isBlackFrame = false;
+				break;
 			}
 		}
 
-		if (m_iFrameNumber == 10 && isBlackFrame) {
-			error("Black frame detected, type: %S, label: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
+		if (isBlackFrame) {
+			frame = false;
+			missed = false;
+			previousFrame = now;
+			blackFrameCount++;
+
+			if (blackFrameCount == GetFps() * 5) { // 5s frames
+				error("Black frame detected, type: %S, name: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
+			}
 		}
-	}	
+	}
 
-	// Set TRUE on every sample for uncompressed frames http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
-	pSample->SetSyncPoint(TRUE);
+	if (!frame) {
+		if (!IsWindow(m_pGDICapture->GetCaptureHandle())) {
+			info("capturing window is no longer alive"); // TODO: instead of dying - maybe retrying
+			m_pGDICapture->SetCaptureHandle(NULL);
+		}
 
-	// only set discontinuous for the first...I think...
-	pSample->SetDiscontinuity(m_iFrameNumber <= 1);
+		return 3;
+	}
 
-	double m_fFpsSinceBeginningOfTime = ((double)m_iFrameNumber) / (GetTickCount() - globalStart) * 1000;
-	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, label: %S, id: %S, black frame: %d",
-		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0 * 1000 / millisThisRoundTook,
-		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str(), isBlackFrame);
-	debug(out);
 	return S_OK;
 }
 
@@ -1025,7 +992,7 @@ BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
 		p->to_window_found = true;
 	}
 
-	// debug("WindowsProcVerifier. HWND: %lld, class name: %S, exe name: %S, found: %d", hwnd, class_name, exe_name, found);
+	// debug("WindowsProcVerifier. HWND: %llu, class name: %S, exe name: %S, found: %d", hwnd, class_name, exe_name, found);
 
 	return !found;
 }
