@@ -116,22 +116,34 @@ STDAPI RegisterFilters( BOOL bRegister )
     char achTemp[MAX_PATH];
     ASSERT(g_hInst != 0);
 
-    if( 0 == GetModuleFileNameA(g_hInst, achTemp, sizeof(achTemp))) 
-        return AmHresultFromWin32(GetLastError());
+	if (0 == GetModuleFileNameA(g_hInst, achTemp, sizeof(achTemp))) {
+		error("Failed to get module file name");
+		return AmHresultFromWin32(GetLastError());
+	}
 
     MultiByteToWideChar(CP_ACP, 0L, achTemp, lstrlenA(achTemp) + 1, 
                        achFileName, NUMELMS(achFileName));
   
     hr = CoInitialize(0);
+	if (FAILED(hr)) {
+		error("Failed to coinitialize %ld", hr);
+	}
+
     if(bRegister)
     { 
-		info("achFileName: %S", achFileName);
+		info("achFileName: %ls", achFileName);
+		info("Registering movie setup server");
         hr = AMovieSetupRegisterServer(CLSID_PushSourceDesktop, L"bebo-game-capture", achFileName, L"Both", L"InprocServer32");
+
+		if (FAILED(hr)) {
+			error("Failed to AMovieSetupRegisterServer %ld", hr);
+		}
     }
 
     if( SUCCEEDED(hr) )
     {
         IFilterMapper2 *fm = 0;
+		info("Create FilterMapper2 COM Object");
         hr = CreateComObject( CLSID_FilterMapper2, IID_IFilterMapper2, fm );
         if( SUCCEEDED(hr) )
         {
@@ -144,11 +156,20 @@ STDAPI RegisterFilters( BOOL bRegister )
                 rf2.cPins = 1;
                 rf2.rgPins = &sudOutputPinDesktop;
 				// this is the name that actually shows up in VLC et al. weird
+				
+				info("Registering PushSourceDesktop, bebo-game-capture filter");
                 hr = fm->RegisterFilter(CLSID_PushSourceDesktop, L"bebo-game-capture", &pMoniker, &CLSID_CQzFilterClassManager, NULL, &rf2);
+				if (FAILED(hr)) {
+					error("Failed to RegisterFilter %ld", hr);
+				}
             }
             else
             {
+				info("Unregistering PushSourceDesktop, bebo-game-capture filter");
                 hr = fm->UnregisterFilter(&CLSID_CQzFilterClassManager, 0, CLSID_PushSourceDesktop);
+				if (FAILED(hr)) {
+					error("Failed to UnregisterFilter %ld", hr);
+				}
             }
         }
 
@@ -158,12 +179,18 @@ STDAPI RegisterFilters( BOOL bRegister )
           fm->Release();
     }
 
-    if( SUCCEEDED(hr) && !bRegister )
-        hr = AMovieSetupUnregisterServer( CLSID_PushSourceDesktop );
+	if (SUCCEEDED(hr) && !bRegister) {
+		info("Unregistering movie setup server");
+		hr = AMovieSetupUnregisterServer(CLSID_PushSourceDesktop);
+
+		if (FAILED(hr)) {
+			error("Failed to AMovieSetupUnregisterServer %ld", hr);
+		}
+	}
 
     CoFreeUnusedLibraries();
     CoUninitialize();
-	info("RegisterFilters %d - DONE %x", bRegister, hr);
+	info("RegisterFilters Register: %d - DONE result: %x", bRegister, hr);
     return hr;
 }
 BOOL   HelperWriteKey(
@@ -191,7 +218,7 @@ BOOL   HelperWriteKey(
 	//
 	//
 
-	info("Writing registry %S: %S", lpSubKey, lpvData);
+	info("Writing registry %ls: %ls", lpSubKey, lpvData);
 
 	HKEY hk;
 	if (ERROR_SUCCESS != RegCreateKey(roothk, lpSubKey, &hk)) return FALSE;
@@ -224,9 +251,9 @@ STDAPI RegisterApi() {
     wsprintf(szClsid,L"%s",lpwszClsid);
     wsprintf(szInproc,L"%s\\%s\\%s",L"clsid",szClsid,L"InprocServer32");
     wsprintf(szProgId,L"%s\\%s\\%s",L"clsid",szClsid,L"ProgId");
-	info("lpwszClsid: %S", lpwszClsid);
-	info("szClsid: %S", szClsid);
-	info("szInproc: %S", szInproc);
+	info("lpwszClsid: %ls", lpwszClsid);
+	info("szClsid: %ls", szClsid);
+	info("szInproc: %ls", szInproc);
 
 
     //
@@ -235,7 +262,7 @@ STDAPI RegisterApi() {
     wsprintf(szBuff,L"%s",L"Bebo Capture COM API");
     wsprintf(szDescriptionVal,L"%s\\%s",L"clsid",szClsid);
 
-	info("%S", szDescriptionVal);
+	info("%ls", szDescriptionVal);
 
     HelperWriteKey (
                 HKEY_CLASSES_ROOT,
@@ -254,7 +281,7 @@ STDAPI RegisterApi() {
                 g_hModule,
                 szBuff,
                 sizeof(szBuff));
-	info("%S", szBuff);
+	info("%ls", szBuff);
     HelperWriteKey (
                 HKEY_CLASSES_ROOT,
                 szInproc,

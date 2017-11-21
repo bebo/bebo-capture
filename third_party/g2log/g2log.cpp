@@ -28,6 +28,7 @@
 #include <chrono>
 #include <signal.h>
 #include <thread>
+#include <windows.h>
 
 #include "g2logworker.h"
 #include "crashhandler.h"
@@ -249,19 +250,23 @@ FatalTrigger::~FatalTrigger() {
 
 
 
-void LogMessage::messageSave(const char* printf_like_message, ...) {
-   char finished_message[kMaxMessageSize];
+void LogMessage::messageSave(const wchar_t* printf_like_message, ...) {
+   wchar_t finished_message[kMaxMessageSize];
    va_list arglist;
    va_start(arglist, printf_like_message);
-   const int nbrcharacters = vsnprintf(finished_message, sizeof(finished_message), printf_like_message, arglist);
+   const int nbrcharacters = _vsnwprintf(finished_message, sizeof(finished_message), printf_like_message, arglist);
    va_end(arglist);
+
    if (nbrcharacters <= 0) {
-      stream_ << "\n\tERROR LOG MSG NOTIFICATION: Failure to parse successfully the message";
-      stream_ << '"' << printf_like_message << '"' << std::endl;
+	   stream_ << "\n\tERROR LOG MSG NOTIFICATION: Failure to parse successfully the message";
+	   stream_ << '"' << printf_like_message << '"' << std::endl;
    } else if (nbrcharacters > kMaxMessageSize) {
-      stream_  << finished_message << kTruncatedWarningText;
+	   stream_ << finished_message << kTruncatedWarningText;
    } else {
-      stream_ << finished_message;
+	   char data[kMaxMessageSize] = { 0 };
+	   int datasize;
+	   datasize = WideCharToMultiByte(CP_UTF8, 0, finished_message, kMaxMessageSize, data, kMaxMessageSize, NULL, NULL);
+	   stream_ << data;
    }
 }
 

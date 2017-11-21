@@ -25,7 +25,7 @@ long countMissed = 0;
 long fastestRoundMillis = 1000000; // random big number
 long sumMillisTook = 0;
 
-char out[1024];
+wchar_t out[1024];
 // FIXME :  move these
 bool ever_started = false;
 boolean missed = false;
@@ -173,7 +173,9 @@ void CPushPinDesktop::CleanupCapture() {
 	if (!threadCreated) {
 		LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << ", before thread created.";
 	} else {
-		LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out;
+		char out_c[1024] = { 0 };
+		WideCharToMultiByte(CP_UTF8, 0, out, 1024, out_c, 1024, NULL, NULL);
+		LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out_c;
 	}
 
 	// reset counter values 
@@ -188,7 +190,7 @@ void CPushPinDesktop::CleanupCapture() {
 	isBlackFrame = true;
 	blackFrameCount = 0;
 
-	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, name: %S, black frame: %d, black frame count: %llu",
+	_swprintf(out, L"done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %ls, name: %ls, black frame: %d, black frame count: %llu",
 		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), 
 		0, 0, 0, 0, 0, 0, countMissed, 
 		m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), isBlackFrame, blackFrameCount);
@@ -205,19 +207,19 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		registry.ReadValue(TEXT("CaptureType"), &data);
 
 		int newCaptureType = -1;
-		char type[1024];
-		sprintf(type, "%S", data.c_str());
+		wchar_t type[1024];
+		_swprintf(type, L"%ls", data.c_str());
 
-		if (strcmp(type, "desktop") == 0) {
+		if (wcscmp(type, L"desktop") == 0) {
 			newCaptureType = CAPTURE_DESKTOP;
 		}
-		else if (strcmp(type, "inject") == 0) {
+		else if (wcscmp(type, L"inject") == 0) {
 			newCaptureType = CAPTURE_INJECT;
 		}
-		else if (strcmp(type, "gdi") == 0) {
+		else if (wcscmp(type, L"gdi") == 0) {
 			newCaptureType = CAPTURE_GDI;
 		}
-		else if (strcmp(type, "dshow") == 0) {
+		else if (wcscmp(type, L"dshow") == 0) {
 			newCaptureType = CAPTURE_DSHOW;
 		}
 		if (newCaptureType > -1 && m_iCaptureType != newCaptureType) {
@@ -232,27 +234,27 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		std::wstring data;
 		registry.ReadValue(TEXT("CaptureId"), &data);
 
-		char text[1024];
-		sprintf(text, "%S", data.c_str());
+		wchar_t text[1024];
+		_swprintf(text, L"%ls", data.c_str());
 
 		int oldAdapterId = m_iDesktopAdapterNumber;
 		int oldDesktopId = m_iDesktopNumber;
 		int newAdapterId = m_iDesktopAdapterNumber;
 		int newDesktopId = m_iDesktopNumber;
 
-		char * typeName = strtok(text, ":");
-		char * adapterId = strtok(NULL, ":");
-		char * desktopId = strtok(NULL, ":");
+		wchar_t * typeName = _wcstok(text, L":");
+		wchar_t * adapterId = _wcstok(NULL, L":");
+		wchar_t * desktopId = _wcstok(NULL, L":");
 
 		if (adapterId != NULL) {
-			if (strcmp(typeName, "desktop") == 0) {
-				newAdapterId = atoi(adapterId);
+			if (wcscmp(typeName, L"desktop") == 0) {
+				newAdapterId = _wtoi(adapterId);
 			}
 		}
 
 		if (desktopId != NULL) {
-			if (strcmp(typeName, "desktop") == 0) {
-				newDesktopId = atoi(desktopId);
+			if (wcscmp(typeName, L"desktop") == 0) {
+				newDesktopId = _wtoi(desktopId);
 			}
 		}
 
@@ -275,7 +277,7 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 			if (m_pCaptureWindowName != NULL) {
 				delete[] m_pCaptureWindowName;
 			}
-			m_pCaptureWindowName = wcsdup(data.c_str());
+			m_pCaptureWindowName = _wcsdup(data.c_str());
 			message << "CaptureWindowName: " << m_pCaptureWindowName << ", ";
 			numberOfChanges++;
 		}
@@ -290,7 +292,7 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 			if (m_pCaptureWindowClassName != NULL) {
 				delete[] m_pCaptureWindowClassName;
 			}
-			m_pCaptureWindowClassName = wcsdup(data.c_str());
+			m_pCaptureWindowClassName = _wcsdup(data.c_str());
 			message << "CaptureWindowClassName: " << m_pCaptureWindowClassName << ", ";
 			numberOfChanges++;
 		}
@@ -305,7 +307,7 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 			if (m_pCaptureExeFullName != NULL) {
 				delete[] m_pCaptureExeFullName;
 			}
-			m_pCaptureExeFullName = wcsdup(data.c_str());
+			m_pCaptureExeFullName = _wcsdup(data.c_str());
 			message << "CaptureExeFullName: " << m_pCaptureExeFullName << ", ";
 			numberOfChanges++;
 		}
@@ -380,7 +382,7 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 	if (numberOfChanges > 0) {
 		std::wstring wstr = message.str();
 		wstr.erase(wstr.size() - 2);
-		info("%S", wstr.c_str());
+		info("%ls", wstr.c_str());
 	}
 
 	return numberOfChanges;
@@ -456,20 +458,27 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 		if (code == S_OK) {
 			gotFrame = true;
 		} else if (code == 2) { // not initialized yet
+			gotFrame = false;
 			long sleep = (m_iCaptureType == CAPTURE_DESKTOP) ? 3000 : 300;
 			ProcessRegistryReadEvent(sleep);
 			continue;
 		} else if (code == 3) { // black frame
 			gotFrame = false;
 
+			long double avg_fps = (sumMillisTook == 0) ? 0 : 1.0 * 1000 * m_iFrameNumber / sumMillisTook;
+			long double max = (millisThisRoundTook == 0) ? 0 : 1.0 * 1000 / millisThisRoundTook;
+
 			double m_fFpsSinceBeginningOfTime = ((double)m_iFrameNumber) / (GetTickCount() - globalStart) * 1000;
-			sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, name: %S, id: %S, black frame: %d, black frame count: %llu",
-				m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0 * 1000 / millisThisRoundTook,
-				/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), m_pCaptureId.c_str(), isBlackFrame, blackFrameCount);
+
+			_swprintf(out, L"done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %ls, name: %ls, black frame: %d, black frame count: %llu",
+				m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, 
+				getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 
+				max, sumMillisTook, 
+				1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), isBlackFrame, blackFrameCount);
 		} else {
 			gotFrame = false;
+			ProcessRegistryReadEvent(5000);
 		}
-
 	}
 
 	missed = false;
@@ -491,7 +500,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	m_iFrameNumber++;
 
 	if ((m_iFrameNumber - countMissed) == 1) {
-		info("Got first frame, type: %S, name: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
+		info("Got first frame, type: %ls, name: %ls", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
 	}
 
 	// Set TRUE on every sample for uncompressed frames http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
@@ -501,7 +510,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	pSample->SetDiscontinuity(m_iFrameNumber <= 1);
 
 	double m_fFpsSinceBeginningOfTime = ((double)m_iFrameNumber) / (GetTickCount() - globalStart) * 1000;
-	sprintf(out, "done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %S, name: %S, black frame: %d, black frame count: %llu",
+	_swprintf(out, L"done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %ls, name: %ls, black frame: %d, black frame count: %llu",
 		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0 * 1000 / millisThisRoundTook,
 		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), isBlackFrame, blackFrameCount);
 	debug(out);
@@ -603,8 +612,8 @@ HRESULT CPushPinDesktop::FillBuffer_Inject(IMediaSample *pSample)
 			missed = false;
 			blackFrameCount++;
 
-			if (blackFrameCount == GetFps() * 5 * 2) { // 5s frames, cause we double sampling, texture A and B so 5*2
-				error("Black frame detected, type: %S, name: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
+			if (blackFrameCount == GetFps() * 10 * 2) { // 10s frames, cause we double sampling, texture A and B so 5*2
+				error("Black frame detected, type: %ls, name: %ls", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
 			}
 		}
 	}
@@ -696,7 +705,7 @@ HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
 			blackFrameCount++;
 
 			if (blackFrameCount == GetFps() * 5) { // 5s frames
-				error("Black frame detected, type: %S, name: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
+				error("Black frame detected, type: %ls, name: %ls", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
 			}
 		}
 	}
@@ -725,7 +734,7 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 			return 2;
 		}
 
-		info("GDI - window_handle: 0x%016x (%ld), class_name: %S, window_name: %S, exe_name: %S, capture_once: %d",
+		info("GDI - window_handle: 0x%016x (%ld), class_name: %ls, window_name: %ls, exe_name: %ls, capture_once: %d",
 			m_iCaptureHandle, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName, m_bCaptureOnce);
 
 		m_pGDICapture->SetSize(getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
@@ -790,7 +799,7 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 			blackFrameCount++;
 
 			if (blackFrameCount == GetFps() * 5) { // 5s frames
-				error("Black frame detected, type: %S, name: %S", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
+				error("Black frame detected, type: %ls, name: %ls", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
 			}
 		}
 	}
@@ -991,8 +1000,6 @@ BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
 		p->to_capture_hwnd = hwnd;
 		p->to_window_found = true;
 	}
-
-	// debug("WindowsProcVerifier. HWND: %llu, class name: %S, exe name: %S, found: %d", hwnd, class_name, exe_name, found);
 
 	return !found;
 }

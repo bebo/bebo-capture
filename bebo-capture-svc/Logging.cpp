@@ -18,7 +18,7 @@ void getLogsPath(CHAR *filename) {
 	if (registry.HasValue(L"Logs")) {
 		std::wstring data;
 		registry.ReadValue(L"Logs", &data);
-		wsprintfA(filename, "%S\\", data.c_str());
+		wsprintfA(filename, "%ls\\", data.c_str());
 	} else {
 		GetTempPathA(SIZE, filename);
 	}
@@ -90,7 +90,7 @@ void setupLogging() {
 
 		wchar_t filename[4096];
 		GetModuleFileName(NULL, filename, 4096);
-		info("Executable: %S", filename);
+		info("Executable: %ls", filename);
 
 		delete[] c_filename;
 	}

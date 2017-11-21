@@ -27,7 +27,7 @@ void AddMouse(HDC hMemDC, LPRECT lpRect, HDC hScrDC, HWND hwnd);
         { \
             const size_t len = 1256;\
             wchar_t buffer[len] = {};\
-	        _snwprintf_s(buffer, len - 1, L"assert failed, please fix (or report): %s %s %d", TEXT(#cond), TEXT(__FILE__), __LINE__);\
+	        _snwprintf_s(buffer, len - 1, L"assert failed, please fix (or report): %ls %ls %d", TEXT(#cond), TEXT(__FILE__), __LINE__);\
 			throw std::invalid_argument( "received negative value" );\
         } \
     } while(0);

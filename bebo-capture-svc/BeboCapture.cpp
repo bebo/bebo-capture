@@ -6,7 +6,7 @@
 #include "Logging.h"
 
 HRESULT CBeboCapture::SetTarget(long size, unsigned char * targetName) {
-	info("setTargetName %s", targetName);
+	info("setTargetName %S", targetName);
 	return S_OK;
 }
 

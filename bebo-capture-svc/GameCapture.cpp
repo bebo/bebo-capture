@@ -34,20 +34,20 @@ extern "C" {
 	char *bebo_find_file(const char *file_c) {
 		RegKey machine_registry(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Bebo\\GameCapture", KEY_READ);
 
-		LPCTSTR key = L"Directory";
+		const std::wstring key(L"Directory");
 		HRESULT r;
 		std::string file(file_c);
 		std::wstring out;
 
-		if (machine_registry.HasValue(key)) {
-			machine_registry.ReadValue(key, &out);
+		if (machine_registry.HasValue(key.c_str())) {
+			machine_registry.ReadValue(key.c_str(), &out);
 		} else {
-			warn("can not find registry key in HKLM, fallback to HKCU: %S", key);
+			warn("can not find registry key in HKLM, fallback to HKCU: %ls", key.c_str());
 			RegKey local_registry(HKEY_CURRENT_USER, L"Software\\Bebo\\GameCapture", KEY_READ);
-			if (!local_registry.HasValue(key)) {
+			if (!local_registry.HasValue(key.c_str())) {
 				return NULL;
 			}
-			local_registry.ReadValue(key, &out);
+			local_registry.ReadValue(key.c_str(), &out);
 		}
 
 
@@ -64,7 +64,7 @@ extern "C" {
 		}
 
 		if (!found_in_vector) {
-			info("RegGetBeboSZ %S, %S, %s", key, out_c, result);
+			info("RegGetBeboSZ %ls, %ls, %S", key.c_str(), out_c, result);
 			logged_file.push_back(file);
 		}
 
@@ -144,7 +144,7 @@ struct game_capture {
 		void *data;
 	};
 
-	boolean (*copy_texture)(struct game_capture*, IMediaSample *pSample);
+	bool (*copy_texture)(struct game_capture*, IMediaSample *pSample);
 };
 
 static inline int inject_library(HANDLE process, const wchar_t *dll)
@@ -394,7 +394,7 @@ static inline bool hook_direct(struct game_capture *gc,
 
 	process = open_process(PROCESS_ALL_ACCESS, false, gc->process_id);
 	if (!process) {
-		warn("hook_direct: could not open process: %s (%lu) %s, %s",
+		warn("hook_direct: could not open process: %S (%lu) %S, %S",
 				gc->config.executable, GetLastError(), gc->config.title, gc->config.klass);
 		return false;
 	}
@@ -403,7 +403,7 @@ static inline bool hook_direct(struct game_capture *gc,
 	CloseHandle(process);
 
 	if (ret != 0) {
-		error("hook_direct: inject failed: %d, anti_cheat: %d, %s, %s, %s", ret, gc->config.anticheat_hook, gc->config.title, gc->config.klass, gc->config.executable);
+		error("hook_direct: inject failed: %d, anti_cheat: %d, %S, %S, %S", ret, gc->config.anticheat_hook, gc->config.title, gc->config.klass, gc->config.executable);
 		if (ret == INJECT_ERROR_UNLIKELY_FAIL) {
 			inject_failed_count++;
 		}
@@ -446,7 +446,7 @@ static bool is_blacklisted_exe(const char *exe)
 		strcpy(cur_exe, *vals);
 		strcat(cur_exe, ".exe");
 
-		if (strcmpi(cur_exe, exe) == 0)
+		if (_strcmpi(cur_exe, exe) == 0)
 			return true;
 	}
 
@@ -488,7 +488,7 @@ static inline bool open_target_process(struct game_capture *gc)
 			PROCESS_QUERY_INFORMATION | SYNCHRONIZE,
 			false, gc->process_id);
 	if (!gc->target_process) {
-		warn("could not open process: %s (%lu) %s, %s",
+		warn("could not open process: %S (%lu) %S, %S",
 				gc->config.executable, GetLastError(), gc->config.title, gc->config.klass);
 		return false;
 	}
@@ -509,7 +509,7 @@ static bool check_file_integrity(struct game_capture *gc, const char *file,
 	wchar_t *w_file = NULL;
 
 	if (!file || !*file) {
-		warn("Game capture %s not found.", STOP_BEING_BAD, name);
+		warn("Game capture %S not found.", STOP_BEING_BAD, name);
 		return false;
 	}
 
@@ -530,13 +530,13 @@ static bool check_file_integrity(struct game_capture *gc, const char *file,
 
 	error = GetLastError();
 	if (error == ERROR_FILE_NOT_FOUND) {
-		warn("Game capture file '%s' not found."
+		warn("Game capture file '%S' not found."
 				STOP_BEING_BAD, file);
 	} else if (error == ERROR_ACCESS_DENIED) {
-		warn("Game capture file '%s' could not be loaded."
+		warn("Game capture file '%S' could not be loaded."
 				STOP_BEING_BAD, file);
 	} else {
-		warn("Game capture file '%s' could not be loaded: %lu."
+		warn("Game capture file '%S' could not be loaded: %lu."
 				STOP_BEING_BAD, file, error);
 	}
 
@@ -570,7 +570,7 @@ static inline bool create_inject_process(struct game_capture *gc,
 		CloseHandle(pi.hThread);
 		gc->injector_process = pi.hProcess;
 	} else {
-		warn("Failed to create inject helper process: %s (%lu)",
+		warn("Failed to create inject helper process: %S (%lu)",
 			gc->config.executable, GetLastError());
 	}
 
@@ -598,7 +598,7 @@ static inline bool inject_hook(struct game_capture *gc)
 
 	hook_path = bebo_find_file(hook_dll);
 
-	info("injecting %s with %s into %s", hook_dll, inject_path, gc->config.executable);
+	info("injecting %S with %S into %S", hook_dll, inject_path, gc->config.executable);
 
 	if (!check_file_integrity(gc, inject_path, "inject helper")) {
 		goto cleanup;
@@ -619,12 +619,12 @@ static inline bool inject_hook(struct game_capture *gc)
 
 		if (!success && inject_failed_count > 10) {
 			gc->config.anticheat_hook = true;
-			info("hook_direct: inject failed for 10th time, retrying with helper (%s hook)", use_anticheat(gc) ?
+			info("hook_direct: inject failed for 10th time, retrying with helper (%S hook)", use_anticheat(gc) ?
 				"compatibility" : "direct");
 			success = create_inject_process(gc, inject_path, hook_dll);
 		}
 	} else {
-		info("using helper (%s hook)", use_anticheat(gc) ?
+		info("using helper (%S hook)", use_anticheat(gc) ?
 				"compatibility" : "direct");
 		success = create_inject_process(gc, inject_path, hook_dll);
 	}
@@ -642,7 +642,7 @@ cleanup:
 static inline bool init_keepalive(struct game_capture *gc)
 {
 	wchar_t new_name[64];
-	_snwprintf(new_name, 64, L"%s%lu", WINDOW_HOOK_KEEPALIVE,
+	_snwprintf(new_name, 64, L"%S%lu", WINDOW_HOOK_KEEPALIVE,
 		gc->process_id);
 
 	gc->keepalive_mutex = CreateMutexW(NULL, false, new_name);
@@ -678,7 +678,7 @@ static void pipe_log(void *param, uint8_t *data, size_t size)
 {
 //	struct game_capture *gc = param;
 	if (data && size)
-		info("%s", data);
+		info("%S", data);
 }
 
 static inline bool init_pipe(struct game_capture *gc)
@@ -784,7 +784,7 @@ static inline bool attempt_existing_hook(struct game_capture *gc)
 {
 	gc->hook_stop = open_event_gc(gc, EVENT_CAPTURE_STOP);
 	if (gc->hook_stop) {
-		info("existing hook found, signaling process: %s",
+		info("existing hook found, signaling process: %S",
 			gc->config.executable);
 		SetEvent(gc->hook_stop);
 		return true;
@@ -800,17 +800,17 @@ static bool init_hook(struct game_capture *gc)
 
 	if (0 && gc->config.mode == CAPTURE_MODE_ANY) {
 		if (get_window_exe(&exe, gc->next_window)) {
-			info("attempting to hook fullscreen process: %s", exe.array);
+			info("attempting to hook fullscreen process: %S", exe.array);
 		}
 	}
 	else {
-		info("attempting to hook process: %s", gc->executable.array);
+		info("attempting to hook process: %S", gc->executable.array);
 		dstr_copy_dstr(&exe, &gc->executable);
 	}
 
 	blacklisted_process = is_blacklisted_exe(exe.array);
 	if (blacklisted_process)
-		info("cannot capture %s due to being blacklisted", exe.array);
+		info("cannot capture %S due to being blacklisted", exe.array);
 	dstr_free(&exe);
 
 	if (blacklisted_process) {
@@ -862,10 +862,12 @@ static void stop_capture(struct game_capture *gc)
 	if (gc->hook_stop) {
 		SetEvent(gc->hook_stop);
 	}
+
 	if (gc->global_hook_info) {
 		UnmapViewOfFile(gc->global_hook_info);
 		gc->global_hook_info = NULL;
 	}
+
 	if (gc->data) {
 		UnmapViewOfFile(gc->data);
 		gc->data = NULL;
@@ -911,7 +913,7 @@ static void try_hook(struct game_capture *gc)
 
 	if (gc->next_window) {
 		if (gc->next_window != dbg_last_window) {
-			info("hooking next window: %X, %s, %s", gc->next_window, gc->config.title, gc->config.klass);
+			info("hooking next window: %X, %S, %S", gc->next_window, gc->config.title, gc->config.klass);
 			dbg_last_window = gc->next_window;
 		}
 		gc->thread_id = GetWindowThreadProcessId(gc->next_window, &gc->process_id);
@@ -938,7 +940,7 @@ static void try_hook(struct game_capture *gc)
 	}
 }
 
-boolean isReady(void ** data) {
+bool isReady(void ** data) {
 	if (*data == NULL) {
 		return false;
 	}
@@ -997,9 +999,9 @@ void * hook(void **data, LPCWSTR windowClassName, LPCWSTR windowName, game_captu
 		get_window_exe(exe, hwnd);
 		get_window_title(title, hwnd);
 
-		gc->config.executable = strdup(exe->array);
-		gc->config.title = strdup(title->array);
-		gc->config.klass = strdup(klass->array);;
+		gc->config.executable = _strdup(exe->array);
+		gc->config.title = _strdup(title->array);
+		gc->config.klass = _strdup(klass->array);;
 
 		gc->priority = priority;
 	}
@@ -1052,7 +1054,7 @@ static inline enum capture_result init_capture_data(struct game_capture *gc)
 		return CAPTURE_FAIL;
 	}
 
-	info("init_capture_data successful for %s, %s, %s", gc->config.title, gc->config.klass, gc->config.executable);
+	info("init_capture_data successful for %S, %S, %S", gc->config.title, gc->config.klass, gc->config.executable);
 	return CAPTURE_SUCCESS;
 }
 
@@ -1234,7 +1236,7 @@ static inline void copy_16bit_tex(struct game_capture *gc, int cur_texture,
 	}
 }
 
-static boolean copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
+static bool copy_shmem_tex(struct game_capture *gc, IMediaSample *pSample)
 {
 	int cur_texture = gc->shmem_data->last_tex;
 
@@ -1421,7 +1423,7 @@ static bool start_capture(struct game_capture *gc)
 			return false;
 		}
 
-		info("memory capture successful for %s, %s, %s", gc->config.title,  gc->config.klass, gc->config.executable);
+		info("memory capture successful for %S, %S, %S", gc->config.title,  gc->config.klass, gc->config.executable);
 	} else {
 		if (!init_shtex_capture(gc)) {
 			return false;
@@ -1441,7 +1443,7 @@ static inline bool capture_valid(struct game_capture *gc)
 	return !object_signalled(gc->target_process);
 }
 
-boolean get_game_frame(void **data, boolean missed, IMediaSample *pSample) {
+bool get_game_frame(void **data, bool missed, IMediaSample *pSample) {
 	/*
 	 * Direct Show and OBS have a different strategy on dealing with frames
 	 * 
@@ -1535,7 +1537,7 @@ boolean get_game_frame(void **data, boolean missed, IMediaSample *pSample) {
 	return false;
 }
 
-boolean stop_game_capture(void **data) {
+bool stop_game_capture(void **data) {
 	struct game_capture *gc = (game_capture *) *data;
 	stop_capture(gc);
 	return true;

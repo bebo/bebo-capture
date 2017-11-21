@@ -231,7 +231,7 @@ class LogMessage {
    // Coder note: Since it's C++ and not C EVERY CLASS FUNCTION always get a first
    // compiler given argument 'this' this must be supplied as well, hence '2,3'
    // ref: http://www.codemaestro.com/reviews/18 -- ref KjellKod
-   void messageSave(const char* printf_like_message, ...)
+   void messageSave(const wchar_t* printf_like_message, ...)
    __attribute__((format(printf, 2, 3) ));
 
  protected:
