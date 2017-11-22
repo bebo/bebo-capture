@@ -642,7 +642,7 @@ cleanup:
 static inline bool init_keepalive(struct game_capture *gc)
 {
 	wchar_t new_name[64];
-	_snwprintf(new_name, 64, L"%S%lu", WINDOW_HOOK_KEEPALIVE,
+	_snwprintf(new_name, 64, L"%ls%lu", WINDOW_HOOK_KEEPALIVE,
 		gc->process_id);
 
 	gc->keepalive_mutex = CreateMutexW(NULL, false, new_name);

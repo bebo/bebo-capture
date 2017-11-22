@@ -33,7 +33,7 @@ namespace g2
 	  enum class Fractional { Millisecond, Microsecond, Nanosecond, NanosecondDefault };
 	  Fractional getFractional(const std::string& format_buffer, size_t pos);
 	  std::string to_string(const g2::system_time_point& ts, Fractional fractional);
-	  std::string localtime_formatted_fractions(const g2::system_time_point& ts, std::string format_buffer);
+	  std::string time_formatted_fractions(const g2::system_time_point& ts, std::string format_buffer);
 	  // static const std::string date_formatted = "%Y/%m/%d";
 	  // %f: fractions of seconds (%f is nanoseconds)
 	  // %f3: milliseconds, 3 digits: 001
@@ -50,15 +50,15 @@ namespace g2
   /** return time representing POD struct (ref ctime + wchar) that is normally
   * retrieved with std::localtime. g3::localtime is threadsafe which std::localtime is not.
   * g3::localtime is probably used together with @ref g3::systemtime_now */
-  tm localtime(const std::time_t& time);
+  tm gmtime(const std::time_t& time);
 
   /** format string must conform to std::put_time's demands.
   * WARNING: At time of writing there is only so-so compiler support for
   * std::put_time. A possible fix if your c++11 library is not updated is to
   * modify this to use std::strftime instead */
-  std::string localtime_formatted(const system_time_point& ts, const std::string& time_format);
-  std::string localtime_formatted(const g2::high_resolution_time_point& ts, const std::string& time_format);
-  std::string localtime_formatted_now(const std::string& time_format);
+  std::string gmtime_formatted(const system_time_point& ts, const std::string& time_format);
+  std::string gmtime_formatted(const g2::high_resolution_time_point& ts, const std::string& time_format);
+  std::string gmtime_formatted_now(const std::string& time_format);
 
 
   inline system_time_point to_system_time(const high_resolution_time_point& ts)

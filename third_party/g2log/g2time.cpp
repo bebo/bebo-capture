@@ -72,7 +72,7 @@ namespace g2 { namespace internal {
 		return std::string(zeroes - value.size(), '0') + value;
 	}
 
-	std::string localtime_formatted_fractions(const g2::system_time_point& ts, std::string format_buffer) {
+	std::string time_formatted_fractions(const g2::system_time_point& ts, std::string format_buffer) {
 		// iterating through every "%f" instance in the format string
 		auto identifierExtraSize = 0;
 		for (size_t pos = 0;
@@ -128,30 +128,30 @@ std::string put_time(const struct tm* tmb, const char* c_time_format) {
 	return oss.str();
 }
 
-tm localtime(const std::time_t& time) {
+tm gmtime(const std::time_t& time) {
 	struct tm tm_snapshot;
 #if (defined(WIN32) || defined(_WIN32) || defined(__WIN32__) && !defined(__GNUC__))
-	localtime_s(&tm_snapshot, &time); // windsows
+	gmtime_s(&tm_snapshot, &time); // windsows
 #else
-	localtime_r(&time, &tm_snapshot); // POSIX
+	gmtime_r(&time, &tm_snapshot); // POSIX
 #endif
 	return tm_snapshot;
 }
 
-std::string localtime_formatted(const g2::system_time_point& ts, const std::string& time_format) {
-	auto format_buffer = internal::localtime_formatted_fractions(ts, time_format);
+std::string gmtime_formatted(const g2::system_time_point& ts, const std::string& time_format) {
+	auto format_buffer = internal::time_formatted_fractions(ts, time_format);
 	auto time_point = std::chrono::system_clock::to_time_t(ts);
-	std::tm t = localtime(time_point);
+	std::tm t = gmtime(time_point);
 	return g2::put_time(&t, format_buffer.c_str()); // format example: //"%Y/%m/%d %H:%M:%S");
 }
 
-std::string localtime_formatted(const g2::high_resolution_time_point& ts, const std::string& time_format) {
-	return localtime_formatted(to_system_time(ts), time_format); // format example: //"%Y/%m/%d %H:%M:%S");
+std::string gmtime_formatted(const g2::high_resolution_time_point& ts, const std::string& time_format) {
+	return gmtime_formatted(to_system_time(ts), time_format); // format example: //"%Y/%m/%d %H:%M:%S");
 }
 
-std::string localtime_formatted_now(const std::string& time_format) {
+std::string gmtime_formatted_now(const std::string& time_format) {
 	auto now_time = std::chrono::high_resolution_clock::now();
-	return localtime_formatted(now_time, time_format);
+	return gmtime_formatted(now_time, time_format);
 }
 } // g2
 
