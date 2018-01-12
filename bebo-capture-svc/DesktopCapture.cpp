@@ -31,9 +31,6 @@ void error_hr(const char *message, HRESULT errorNumber) {
 	HeapFree(GetProcessHeap(), HEAP_NO_SERIALIZE, (LPVOID)errorMessage);
 }
 
-struct desktop_capture {
-};
-
 DesktopCapture::DesktopCapture() : m_Device(nullptr),
 	m_DeviceContext(nullptr),
 	m_MoveSurf(nullptr),
@@ -133,28 +130,27 @@ void DesktopCapture::CleanRefs()
 //
 void DesktopCapture::Init(int adapterId, int desktopId, int width, int height)
 {
-	m_iAdapterNumber = adapterId;
-	m_iDesktopNumber = desktopId;
-	m_negotiatedWidth = width;
-	m_negotiatedHeight = height;
-	m_Initialized = true;
+    m_iAdapterNumber = adapterId;
+    m_iDesktopNumber = desktopId;
+    m_negotiatedWidth = width;
+    m_negotiatedHeight = height;
 
-	if (m_negotiatedArgbBuffer) {
-		delete[] m_negotiatedArgbBuffer;
-	}
-	m_negotiatedArgbBuffer = new BYTE[4 * m_negotiatedWidth * m_negotiatedHeight];
+    if (m_negotiatedArgbBuffer) {
+        delete[] m_negotiatedArgbBuffer;
+    }
+    m_negotiatedArgbBuffer = new BYTE[4 * m_negotiatedWidth * m_negotiatedHeight];
 
-	HRESULT hr = InitializeDXResources();
+    HRESULT hr = InitializeDXResources();
 
-	if (SUCCEEDED(hr)) {
-		hr = InitDuplication();
-	}
+    if (SUCCEEDED(hr)) {
+        hr = InitDuplication();
+    }
 
-	if (FAILED(hr)) {
-		m_Initialized = false;
+    m_Initialized = SUCCEEDED(hr);
 
-		error_hr("Failed to initialize duplication", hr);
-	}
+    if (FAILED(hr)) {
+        error_hr("Failed to initialize duplication", hr);
+    }
 }
 
 HRESULT DesktopCapture::InitializeDXResources() {
@@ -507,8 +503,10 @@ static inline int getI420BufferSize(int width, int height) {
 	return width * height + half_width * half_height * 2;
 }
 
+static uint8_t* copy_frame = new uint8_t[4 * 1920 * 1080];
+
 bool DesktopCapture::PushFrame(IMediaSample* pSample, DesktopFrame* frame) {
-	if (!frame->data()) {
+	if (!frame->data() || frame->stride() == 0) {
 		warn("push frame - no data");
 		return false;
 	}
@@ -772,8 +770,8 @@ bool DesktopCapture::GetFrame(IMediaSample *pSample, bool captureMouse, REFERENC
 	m_Surface->GetDesc(&frame_desc);
 
 	m_Surface->Map(&map, D3D11_MAP_READ);
-	m_LastDesktopFrame->updateFrame(frame_desc.Width, frame_desc.Height, map.Pitch, map.pBits);
-	got_frame = PushFrame(pSample, m_LastDesktopFrame);
+    m_LastDesktopFrame->updateFrame(frame_desc.Width, frame_desc.Height, map.Pitch, map.pBits);
+    got_frame = PushFrame(pSample, m_LastDesktopFrame);
 	m_Surface->Unmap();
 
 	DoneWithFrame();
