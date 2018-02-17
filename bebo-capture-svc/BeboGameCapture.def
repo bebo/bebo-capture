@@ -2,7 +2,7 @@
 ;  Copyright (c) 2016  Pigs In Flight, Inc.
 ;===========================================================================
 
-LIBRARY     BeboGameCapture.DLL
+LIBRARY     bebo-inject-capture.DLL
 
 EXPORTS
             DllMain                 PRIVATE

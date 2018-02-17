@@ -12,8 +12,11 @@
 #define __CAPTURE_GUIDS_DEFINED
 
 #ifdef _WIN64
-// 1f1383ef-8019-4f96-9f53-1f0da2684163
-DEFINE_GUID(CLSID_PushSourceDesktop, 0x1f1383ef, 0x8019, 0x4f96, 0x9f, 0x53, 0x1f, 0x0d, 0xa2, 0x68, 0x41, 0x63);
+// bebo-inject-capture
+// 6f4437a3 - bd6f - 4fff - 8943 - 037f0f5cffe3
+
+DEFINE_GUID(CLSID_PushSourceDesktop, 0x6f4437a3, 0xbd6f, 0x4fff, \
+    0x89, 0x43, 0x03, 0x7f, 0x0f, 0x5c, 0xff, 0xe3);
 
 #else
 // 8404812b-1627-41f5-8dba-0eb6d298fd1d
@@ -21,3 +24,7 @@ DEFINE_GUID(CLSID_PushSourceDesktop, 0x8404812b, 0x1627, 0x41f5, 0x8d, 0xba, 0x0
 #endif
 
 #endif
+
+#define DS_FILTER_DESCRIPTION    L"Bebo Inject Game Capture Direct Show Filter"
+#define DS_FILTER_NAME           L"bebo-inject-capture"
+#define DS_LOG_NAME              "bonegnawer"

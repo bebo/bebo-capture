@@ -10,7 +10,7 @@
 #include <streams.h>
 #include <initguid.h>
 #include "Logging.h"
-#include "CaptureGuids.h"
+#include "names_and_ids.h"
 #include "BeboCaptureGuids.h"
 #include "Capture.h"
 #include "BeboCapture.h"
@@ -133,7 +133,7 @@ STDAPI RegisterFilters( BOOL bRegister )
   { 
     info("achFileName: %ls", achFileName);
     info("Registering movie setup server");
-    hr = AMovieSetupRegisterServer(CLSID_PushSourceDesktop, L"bebo-game-capture", achFileName, L"Both", L"InprocServer32");
+    hr = AMovieSetupRegisterServer(CLSID_PushSourceDesktop, DS_FILTER_NAME, achFileName, L"Both", L"InprocServer32");
 
     if (FAILED(hr)) {
       error("Failed to AMovieSetupRegisterServer %ld", hr);
@@ -157,16 +157,16 @@ STDAPI RegisterFilters( BOOL bRegister )
         rf2.rgPins = &sudOutputPinDesktop;
         // this is the name that actually shows up in VLC et al. weird
 
-        info("Registering PushSourceDesktop, bebo-game-capture filter");
+        info("Registering %s", DS_FILTER_NAME);
         //                hr = fm->RegisterFilter(CLSID_PushSourceDesktop, L"bebo-game-capture", &pMoniker, &CLSID_CQzFilterClassManager, NULL, &rf2);
-        hr = fm->RegisterFilter(CLSID_PushSourceDesktop, L"bebo-game-capture", &pMoniker, &CLSID_VideoInputDeviceCategory, NULL, &rf2);
+        hr = fm->RegisterFilter(CLSID_PushSourceDesktop, DS_FILTER_NAME, &pMoniker, &CLSID_VideoInputDeviceCategory, NULL, &rf2);
         if (FAILED(hr)) {
           error("Failed to RegisterFilter %ld", hr);
         }
       }
       else
       {
-        info("Unregistering PushSourceDesktop, bebo-game-capture filter");
+        info("Unregistering %s", DS_FILTER_NAME);
         //                hr = fm->UnregisterFilter(&CLSID_CQzFilterClassManager, 0, CLSID_PushSourceDesktop);
         hr = fm->UnregisterFilter(&CLSID_VideoInputDeviceCategory, 0, CLSID_PushSourceDesktop);
         if (FAILED(hr)) {

@@ -1,7 +1,7 @@
 #include <streams.h>
 
 #include "Capture.h"
-#include "CaptureGuids.h"
+#include "names_and_ids.h"
 #include "DibHelper.h"
 #include "Logging.h"
 

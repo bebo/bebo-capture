@@ -2,7 +2,7 @@
 
 #include <tchar.h>
 #include "Capture.h"
-#include "CaptureGuids.h"
+#include "names_and_ids.h"
 #include "DibHelper.h"
 #include <wmsdkidl.h>
 #include "GameCapture.h"
@@ -55,7 +55,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	m_bFormatAlreadySet(false),
 	previousFrame(0),
 	active(false),
-	m_iCaptureType(-1),
+	m_iCaptureType(CAPTURE_INJECT),
 	m_pCaptureTypeName(L""),
 	m_pCaptureLabel(L""),
 	m_pCaptureId(L""),

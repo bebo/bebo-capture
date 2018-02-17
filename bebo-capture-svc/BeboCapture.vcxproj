@@ -30,7 +30,7 @@
     <ProjectGuid>{39469123-3EB7-45F3-A15B-3854DFD2C2EB}</ProjectGuid>
     <RootNamespace>PushSource</RootNamespace>
     <Keyword>Win32Proj</Keyword>
-    <ProjectName>BeboGameCapture</ProjectName>
+    <ProjectName>bebo-inject-capture</ProjectName>
     <WindowsTargetPlatformVersion>10.0.14393.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -350,7 +350,7 @@
     <ClInclude Include="CommonTypes.h" />
     <ClInclude Include="DesktopCapture.h" />
     <ClInclude Include="DibHelper.h" />
-    <ClInclude Include="CaptureGuids.h" />
+    <ClInclude Include="names_and_ids.h" />
     <ClInclude Include="Capture.h" />
     <ClInclude Include="GameCapture.h" />
     <ClInclude Include="GDICapture.h" />

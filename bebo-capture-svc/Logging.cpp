@@ -1,6 +1,7 @@
 #include "Logging.h"
 #include "windows.h"
 #include "registry.h"
+#include "names_and_ids.h"
 
 #define SIZE 2048
 
@@ -81,7 +82,7 @@ void setupLogging() {
 		CHAR *c_filename = new CHAR[SIZE];
 		getLogsPath(c_filename);
 
-		std::unique_ptr<g2LogWorker> g2log(new g2LogWorker("sarlacc", c_filename));
+		std::unique_ptr<g2LogWorker> g2log(new g2LogWorker(DS_LOG_NAME, c_filename));
 		logworker = std::move(g2log);
 		g2::initializeLogging(&*logworker);
 		wchar_t dllfilename[4096];

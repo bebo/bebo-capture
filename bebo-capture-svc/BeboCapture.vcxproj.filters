@@ -38,7 +38,6 @@
     <ClInclude Include="CommonTypes.h" />
     <ClInclude Include="DesktopCapture.h" />
     <ClInclude Include="DibHelper.h" />
-    <ClInclude Include="CaptureGuids.h" />
     <ClInclude Include="Capture.h" />
     <ClInclude Include="GameCapture.h" />
     <ClInclude Include="GDICapture.h" />
@@ -62,6 +61,7 @@
     <ClInclude Include="..\third_party\g2log\crashhandler.h">
       <Filter>logger</Filter>
     </ClInclude>
+    <ClInclude Include="names_and_ids.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Capture.rc" />
