@@ -10,12 +10,12 @@
  *
  **********************************************/
 
-CGameCapture::CGameCapture(IUnknown *pUnk, HRESULT *phr)
+CGameCapture::CGameCapture(IUnknown *pUnk, HRESULT *phr, const CLSID* filter_clsid, int capture_type)
            : CSource(NAME("PushSourceDesktop Parent"), pUnk, CLSID_PushSourceDesktop)
 {
     // The pin magically adds itself to our pin array.
 	// except its not an array since we just have one [?]
-    m_pPin = new CPushPinDesktop(phr, this);
+    m_pPin = new CPushPinDesktop(phr, this, capture_type);
 
 	if (phr)
 	{
@@ -35,11 +35,11 @@ CGameCapture::~CGameCapture() // parent destructor
 }
 
 
-CUnknown * WINAPI CGameCapture::CreateInstance(IUnknown *pUnk, HRESULT *phr)
+CUnknown * WINAPI CGameCapture::CreateInstance(IUnknown *pUnk, HRESULT *phr, const CLSID* filter_clsid, int capture_type)
 {
 	// the first entry point
 	setupLogging();
-    CGameCapture *pNewFilter = new CGameCapture(pUnk, phr);
+    CGameCapture *pNewFilter = new CGameCapture(pUnk, phr, filter_clsid, capture_type);
 
 	if (phr)
 	{
@@ -50,6 +50,23 @@ CUnknown * WINAPI CGameCapture::CreateInstance(IUnknown *pUnk, HRESULT *phr)
 	}
     return pNewFilter;
 }
+
+
+CUnknown * WINAPI CGameCapture::CreateInstanceInject(IUnknown *pUnk, HRESULT *phr)
+{
+	return CreateInstance(pUnk, phr, &CLSID_PushSourceDesktop, CAPTURE_INJECT);
+}
+
+CUnknown * WINAPI CGameCapture::CreateInstanceWindow(IUnknown *pUnk, HRESULT *phr)
+{
+	return CreateInstance(pUnk, phr, &CLSID_BeboWindowCapture, CAPTURE_GDI);
+}
+
+CUnknown * WINAPI CGameCapture::CreateInstanceScreen(IUnknown *pUnk, HRESULT *phr)
+{
+	return CreateInstance(pUnk, phr, &CLSID_BeboScreenCapture, CAPTURE_DESKTOP);
+}
+
 
 HRESULT CGameCapture::QueryInterface(REFIID riid, void **ppv)
 {

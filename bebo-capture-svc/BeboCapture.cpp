@@ -2,6 +2,7 @@
 #include "BeboCapture.h"
 #include "IBeboCapture_i.c"
 #include "combase.h"
+#include "Capture.h"
 
 #include "Logging.h"
 

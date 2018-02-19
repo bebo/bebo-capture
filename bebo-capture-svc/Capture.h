@@ -31,7 +31,6 @@ const REFERENCE_TIME FPS_1  = UNITS / 1;
 */
 
 // Filter name strings
-#define g_wszPushDesktop    L"Bebo Game Capture Filter"
 typedef unsigned __int64 QWORD;
 
 const int CAPTURE_INJECT = 0;
@@ -48,7 +47,7 @@ class CGameCapture : public CSource // public IAMFilterMiscFlags // CSource is C
 
 private:
     // Constructor is private because you have to use CreateInstance
-    CGameCapture(IUnknown *pUnk, HRESULT *phr);
+    CGameCapture(IUnknown *pUnk, HRESULT *phr, const CLSID* filter_clsid, int capture_type);
     ~CGameCapture();
 
     CPushPinDesktop *m_pPin;
@@ -56,7 +55,13 @@ public:
     //////////////////////////////////////////////////////////////////////////
     //  IUnknown
     //////////////////////////////////////////////////////////////////////////
-    static CUnknown * WINAPI CreateInstance(LPUNKNOWN lpunk, HRESULT *phr);
+    static CUnknown * WINAPI CreateInstance(LPUNKNOWN lpunk, HRESULT *phr, const CLSID* filter_clsid, int capture_type);
+	static CUnknown * WINAPI CreateInstanceInject(LPUNKNOWN lpunk,  HRESULT *phr);
+	static CUnknown * WINAPI CreateInstanceWindow(LPUNKNOWN lpunk,  HRESULT *phr);
+	static CUnknown * WINAPI CreateInstanceScreen(LPUNKNOWN lpunk,  HRESULT *phr);
+
+
+
     STDMETHODIMP QueryInterface(REFIID riid, void **ppv);
 
 	// ?? compiler error that these be required here? huh?
@@ -164,7 +169,7 @@ public:
     HRESULT STDMETHODCALLTYPE GetNumberOfCapabilities(int *piCount, int *piSize);
     HRESULT STDMETHODCALLTYPE GetStreamCaps(int iIndex, AM_MEDIA_TYPE **pmt, BYTE *pSCC);
 
-    CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter);
+    CPushPinDesktop(HRESULT *phr, CGameCapture *filter, int capture_type);
     ~CPushPinDesktop();
 
     // Override the version that offers exactly one media type

@@ -71,27 +71,58 @@ const AMOVIESETUP_PIN sudOutputPinDesktop =
 const AMOVIESETUP_FILTER sudPushSourceDesktop =
 {
   &CLSID_PushSourceDesktop,// Filter CLSID
-  g_wszPushDesktop,       // String name
+  DS_FILTER_NAME,       // String name
   MERIT_DO_NOT_USE,       // Filter merit
   1,                      // Number pins
   &sudOutputPinDesktop    // Pin details
 };
 
+const AMOVIESETUP_FILTER windowCaptureSetupFilter =
+{
+  &CLSID_BeboWindowCapture,// Filter CLSID
+  DS_WINDOW_FILTER_NAME,       // String name
+  MERIT_DO_NOT_USE,       // Filter merit
+  1,                      // Number pins
+  &sudOutputPinDesktop    // Pin details
+};
 
+const AMOVIESETUP_FILTER screenCaptureSetupFilter =
+{
+  &CLSID_BeboScreenCapture,// Filter CLSID
+  DS_SCREEN_FILTER_NAME,       // String name
+  MERIT_DO_NOT_USE,       // Filter merit
+  1,                      // Number pins
+  &sudOutputPinDesktop    // Pin details
+};
 // List of class IDs and creator functions for the class factory. This
 // provides the link between the OLE entry point in the DLL and an object
 // being created. The class factory will call the static CreateInstance.
 // We provide a set of filters in this one DLL.
 
-CFactoryTemplate g_Templates[2] = 
+CFactoryTemplate g_Templates[4] = 
 {
   { 
-    g_wszPushDesktop,               // Name
+    DS_FILTER_NAME,               // Name
     &CLSID_PushSourceDesktop,       // CLSID
-    CGameCapture::CreateInstance, // Method to create an instance of MyComponent
+    CGameCapture::CreateInstanceInject, // Method to create an instance of MyComponent
     NULL,                           // Initialization function
     &sudPushSourceDesktop           // Set-up information (for filters)
-  }, {
+  }, 
+  { 
+    DS_WINDOW_FILTER_NAME,               // Name
+    &CLSID_BeboWindowCapture,       // CLSID
+    CGameCapture::CreateInstanceWindow, // Method to create an instance of MyComponent
+    NULL,                           // Initialization function
+    &windowCaptureSetupFilter // Set-up information (for filters)
+  }, 
+  { 
+    DS_SCREEN_FILTER_NAME,               // Name
+    &CLSID_BeboScreenCapture,       // CLSID
+    CGameCapture::CreateInstanceScreen, // Method to create an instance of MyComponent
+    NULL,                           // Initialization function
+    &screenCaptureSetupFilter // Set-up information (for filters)
+  }, 
+  {
     g_wszBeboCaptureApi,               // Name
     &CLSID_BeboCaptureApi,
     CBeboCapture::CreateInstance, // Method to create an instance of MyComponent
@@ -100,8 +131,16 @@ CFactoryTemplate g_Templates[2] =
   }
 };
 
+const int kNumberOfBeboCaptureFilter = 3;
 int g_cTemplates = sizeof(g_Templates) / sizeof(g_Templates[0]);    
 
+
+// FIXME
+#if 0
+#define REGISTER_DSHOW_CATEGORY_AS &CLSID_CQzFilterClassManager
+#else
+#define REGISTER_DSHOW_CATEGORY_AS &CLSID_VideoInputDeviceCategory
+#endif
 
 #define CreateComObject(clsid, iid, var) CoCreateInstance( clsid, NULL, CLSCTX_INPROC_SERVER, iid, (void **)&var);
 
@@ -129,65 +168,69 @@ STDAPI RegisterFilters( BOOL bRegister )
     error("Failed to coinitialize %ld", hr);
   }
 
-  if(bRegister)
-  { 
-    info("achFileName: %ls", achFileName);
-    info("Registering movie setup server");
-    hr = AMovieSetupRegisterServer(CLSID_PushSourceDesktop, DS_FILTER_NAME, achFileName, L"Both", L"InprocServer32");
+  for (int i = 0; i < kNumberOfBeboCaptureFilter; i++) {
+	  const CFactoryTemplate class_template = g_Templates[i];
+	  const WCHAR* filter_name = class_template.m_Name;
+	  const CLSID filter_clsid = *class_template.m_ClsID;
 
-    if (FAILED(hr)) {
-      error("Failed to AMovieSetupRegisterServer %ld", hr);
-    }
-  }
+	  if (bRegister)
+	  {
+		  info("achFileName: %ls", achFileName);
+		  info("Registering movie setup server");
+		  hr = AMovieSetupRegisterServer(filter_clsid, filter_name, achFileName, L"Both", L"InprocServer32");
 
-  if( SUCCEEDED(hr) )
-  {
-    IFilterMapper2 *fm = 0;
-    info("Create FilterMapper2 COM Object");
-    hr = CreateComObject( CLSID_FilterMapper2, IID_IFilterMapper2, fm );
-    if( SUCCEEDED(hr) )
-    {
-      if(bRegister)
-      {
-        IMoniker *pMoniker = 0;
-        REGFILTER2 rf2;
-        rf2.dwVersion = 1;
-        rf2.dwMerit = MERIT_DO_NOT_USE;
-        rf2.cPins = 1;
-        rf2.rgPins = &sudOutputPinDesktop;
-        // this is the name that actually shows up in VLC et al. weird
+		  if (FAILED(hr)) {
+			  error("Failed to AMovieSetupRegisterServer %ld", hr);
+		  }
+	  }
 
-        info("Registering %s", DS_FILTER_NAME);
-        //                hr = fm->RegisterFilter(CLSID_PushSourceDesktop, L"bebo-game-capture", &pMoniker, &CLSID_CQzFilterClassManager, NULL, &rf2);
-        hr = fm->RegisterFilter(CLSID_PushSourceDesktop, DS_FILTER_NAME, &pMoniker, &CLSID_VideoInputDeviceCategory, NULL, &rf2);
-        if (FAILED(hr)) {
-          error("Failed to RegisterFilter %ld", hr);
-        }
-      }
-      else
-      {
-        info("Unregistering %s", DS_FILTER_NAME);
-        //                hr = fm->UnregisterFilter(&CLSID_CQzFilterClassManager, 0, CLSID_PushSourceDesktop);
-        hr = fm->UnregisterFilter(&CLSID_VideoInputDeviceCategory, 0, CLSID_PushSourceDesktop);
-        if (FAILED(hr)) {
-          error("Failed to UnregisterFilter %ld", hr);
-        }
-      }
-    }
+	  if (SUCCEEDED(hr))
+	  {
+		  IFilterMapper2 *fm = 0;
+		  info("Create FilterMapper2 COM Object");
+		  hr = CreateComObject(CLSID_FilterMapper2, IID_IFilterMapper2, fm);
+		  if (SUCCEEDED(hr))
+		  {
+			  if (bRegister)
+			  {
+				  IMoniker *pMoniker = 0;
+				  REGFILTER2 rf2;
+				  rf2.dwVersion = 1;
+				  rf2.dwMerit = MERIT_DO_NOT_USE;
+				  rf2.cPins = 1;
+				  rf2.rgPins = &sudOutputPinDesktop;
+				  // this is the name that actually shows up in VLC et al. weird
 
-    // release interface
-    //
-    if(fm)
-      fm->Release();
-  }
+				  info("Registering %s", filter_name);
+				  hr = fm->RegisterFilter(filter_clsid, filter_name, &pMoniker, REGISTER_DSHOW_CATEGORY_AS, NULL, &rf2);
+				  if (FAILED(hr)) {
+					  error("Failed to RegisterFilter %ld", hr);
+				  }
+			  }
+			  else
+			  {
+				  info("Unregistering %s", filter_name);
+				  hr = fm->UnregisterFilter(REGISTER_DSHOW_CATEGORY_AS, 0, filter_clsid);
+				  if (FAILED(hr)) {
+					  error("Failed to UnregisterFilter %ld", hr);
+				  }
+			  }
+		  }
 
-  if (SUCCEEDED(hr) && !bRegister) {
-    info("Unregistering movie setup server");
-    hr = AMovieSetupUnregisterServer(CLSID_PushSourceDesktop);
+		  // release interface
+		  //
+		  if (fm)
+			  fm->Release();
+	  }
 
-    if (FAILED(hr)) {
-      error("Failed to AMovieSetupUnregisterServer %ld", hr);
-    }
+	  if (SUCCEEDED(hr) && !bRegister) {
+		  info("Unregistering movie setup server");
+		  hr = AMovieSetupUnregisterServer(filter_clsid);
+
+		  if (FAILED(hr)) {
+			  error("Failed to AMovieSetupUnregisterServer %ld", hr);
+		  }
+	  }
   }
 
   CoFreeUnusedLibraries();

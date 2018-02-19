@@ -48,14 +48,14 @@ static DWORD WINAPI init_hooks(LPVOID unused)
 }
 
 // the default child constructor...
-CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
+CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter, int capture_type)
 	: CSourceStream(NAME("Push Source CPushPinDesktop child/pin"), phr, pFilter, L"Capture"),
 	m_iFrameNumber(0),
 	m_pParent(pFilter),
 	m_bFormatAlreadySet(false),
 	previousFrame(0),
 	active(false),
-	m_iCaptureType(CAPTURE_INJECT),
+	m_iCaptureType(capture_type),
 	m_pCaptureTypeName(L""),
 	m_pCaptureLabel(L""),
 	m_pCaptureId(L""),
@@ -78,7 +78,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	isBlackFrame(true),
 	blackFrameCount(0)
 {
-	info("CPushPinDesktop");
+
+	info("CPushPinDesktop capture_type: %d", capture_type);
 
 	switch (m_iCaptureType) {
 	case CAPTURE_INJECT:
@@ -88,12 +89,13 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 		registry.Open(HKEY_CURRENT_USER, L"Software\\Bebo\\DesktopCapture", KEY_READ);
 		break;
 	case CAPTURE_GDI:
-		registry.Open(HKEY_CURRENT_USER, L"Software\\Bebo\\GdiCapture", KEY_READ);
+		registry.Open(HKEY_CURRENT_USER, L"Software\\Bebo\\WindowCapture", KEY_READ);
 		break;
 	default:
 		registry.Open(HKEY_CURRENT_USER, L"Software\\Bebo\\GameCapture", KEY_READ);
 		break;
 	}
+
 
 	// Get the device context of the main display, just to get some metrics for it...
 	config = (struct game_capture_config*) malloc(sizeof game_capture_config);
@@ -107,23 +109,22 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	}
 
 	if (!readRegistryEvent) {
-		readRegistryEvent = CreateEvent(NULL,
-			TRUE,
+		readRegistryEvent = OpenEvent(EVENT_ALL_ACCESS,
 			FALSE,
 			TEXT(EVENT_READ_REGISTRY));
-
+		
 		if (readRegistryEvent == NULL) {
-			warn("Failed to create read registry signal event. Attempting to open event.");
-			readRegistryEvent = OpenEvent(EVENT_ALL_ACCESS,
+			readRegistryEvent = CreateEvent(NULL,
+				TRUE,
 				FALSE,
 				TEXT(EVENT_READ_REGISTRY));
 
 			if (readRegistryEvent == NULL) {
-				error("Failed to open registry signal event, after attempted to create it. We should die here.");
+				error("Failed to create registry signal event, after attempted to open it first. We should die here.");
 			}
-		} else {
-			info("Created read registry signal event. Handle: %llu", readRegistryEvent);
 		}
+
+		info("Read registry signal event. Handle: %llu", readRegistryEvent);
 	}
 
 	// now read some custom settings...
