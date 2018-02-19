@@ -47,6 +47,15 @@ static DWORD WINAPI init_hooks(LPVOID unused)
 	return 0;
 }
 
+static const std::wstring GetCaptureTypeName(int type) {
+	switch (type) {
+	case CAPTURE_INJECT: return L"inject";
+	case CAPTURE_GDI: return L"gdi";
+	case CAPTURE_DESKTOP: return L"desktop";
+	default: return L"";
+	}
+}
+
 // the default child constructor...
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter, int capture_type)
 	: CSourceStream(NAME("Push Source CPushPinDesktop child/pin"), phr, pFilter, L"Capture"),
@@ -56,7 +65,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter, int captur
 	previousFrame(0),
 	active(false),
 	m_iCaptureType(capture_type),
-	m_pCaptureTypeName(L""),
+	m_pCaptureTypeName(GetCaptureTypeName(capture_type)),
 	m_pCaptureLabel(L""),
 	m_pCaptureId(L""),
 	m_pCaptureWindowName(NULL),
@@ -203,6 +212,7 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 
 	int numberOfChanges = 0;
 
+#if 0
 	if (registry.HasValue(TEXT("CaptureType"))) {
 		std::wstring data;
 		registry.ReadValue(TEXT("CaptureType"), &data);
@@ -230,6 +240,7 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 			numberOfChanges++;
 		}
 	}
+#endif
 
 	if (registry.HasValue(TEXT("CaptureId"))) {
 		std::wstring data;
