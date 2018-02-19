@@ -23,8 +23,8 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 // Version
 //
 
-#define VERSION		"1.0.14.10"
-#define VERSION_N	1, 0, 14, 10
+#define VERSION		"1.0.0.2"
+#define VERSION_N	1, 0, 0, 2
 
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION VERSION_N
@@ -46,10 +46,10 @@ BEGIN
 VALUE "CompanyName", "Pigs in Flight, Inc. (Bebo)"
 VALUE "FileDescription", "Bebo Game Capture"
 VALUE "FileVersion", VERSION
-VALUE "InternalName", "BeboGameCapture.dll"
-VALUE "LegalCopyright", "Copyright (C) Bebo, 2017"
-VALUE "OriginalFilename", "BeboGameCapture.dll"
-VALUE "ProductName", "Bebo Game Capture"
+VALUE "InternalName", "bebo-inject-capture.dll"
+VALUE "LegalCopyright", "Copyright (C) Bebo, 2018"
+VALUE "OriginalFilename", "bebo-inject-capture.dll"
+VALUE "ProductName", "Bebo Capture"
 VALUE "ProductVersion", VERSION
 END
 END
