@@ -18,6 +18,7 @@
 [Rr]elease/
 [Rr]eleases/
 x64/
+dist/
 x86/
 Win32/
 bld/
