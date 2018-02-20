@@ -186,10 +186,10 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 
 #if 0
 	// graphedit comes in with a really large one and then we set it (no good)
-	if (pvi->bmiHeader.biHeight > m_iCaptureConfigHeight || pvi->bmiHeader.biWidth > m_iCaptureConfigWidth) {
+	if (pvi->bmiHeader.biHeight > height_ || pvi->bmiHeader.biWidth > width_) {
 		warn("CheckMediaType - E_INVALIDARG %d > %d || %d > %d",
-			pvi->bmiHeader.biHeight, m_iCaptureConfigHeight,
-			pvi->bmiHeader.biWidth, m_iCaptureConfigWidth);
+			pvi->bmiHeader.biHeight, height_,
+			pvi->bmiHeader.biWidth, width_);
 		return E_INVALIDARG;
 	}
 #endif
@@ -256,8 +256,8 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 		return E_INVALIDARG;
 	}
 
-	m_iCaptureConfigWidth = pvi->bmiHeader.biWidth;
-	m_iCaptureConfigHeight = pvi->bmiHeader.biHeight;
+	width_ = pvi->bmiHeader.biWidth;
+	height_ = pvi->bmiHeader.biHeight;
 
 	// info("%s - AvgTimePerFrame %lld", __func__, (UNITS / pvi->AvgTimePerFrame));
 	// set_fps(&game_context, m_rtFrameLength * 100);

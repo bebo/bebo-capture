@@ -104,14 +104,14 @@ protected:
 	game_capture_config * config;
     void * game_context;
 
-	int m_iCaptureConfigWidth;
-	int m_iCaptureConfigHeight;
-	std::wstring m_pCaptureTypeName;
-	std::wstring m_pCaptureId;
-	std::wstring m_pCaptureLabel;
-	LPWSTR m_pCaptureWindowName;
-	LPWSTR m_pCaptureWindowClassName;
-	LPWSTR m_pCaptureExeFullName;
+	int width_;
+	int height_;
+	std::wstring typeName_;
+	std::wstring id_;
+	std::wstring label_;
+	LPWSTR windowName_;
+	LPWSTR windowClassName_;
+	LPWSTR exeFullName_;
 
 	HANDLE init_hooks_thread;
 
@@ -121,9 +121,9 @@ protected:
 	GDICapture* m_pGDICapture;
 
 	bool m_bFormatAlreadySet;
-	bool m_bCaptureOnce;
+	bool once_;
 	volatile bool active;
-	bool m_bCaptureAntiCheat;
+	bool antiCheat_;
 	bool isBlackFrame;
 	bool threadCreated;
 
@@ -131,14 +131,14 @@ protected:
 	float GetMaxFps() { return MAX_FPS; };
 	void ProcessRegistryReadEvent(long timeout);
 
-	int m_iCaptureType;
+	int type_;
 	int m_iDesktopNumber;
 	int m_iDesktopAdapterNumber;
 	int getCaptureDesiredFinalWidth();
 	int getCaptureDesiredFinalHeight();
 
 	HANDLE readRegistryEvent;
-	QWORD m_iCaptureHandle;
+	QWORD windowHandle_;
 	UINT64 blackFrameCount;
 
 public:

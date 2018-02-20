@@ -28,9 +28,29 @@ regsvr32 BeboGameCapture.DLL
  * "desktop" -> DXGI Desktop Duplication API
  * "inject" -> graphics hook injection
  * "gdi" -> gdi
- * "dshow" -> libdshow
 
  - defaults to "inject" for backwards compatibility
+
+### Capture Game (inject)
+```
+  WCHAR type = "inject"
+  WCHAR windowClassName = "TankWindow"
+  WCHAR windowName = "Overwatch"
+  DWORD antiCheat = 1
+
+```
+
+### Capture window using GDI
+```
+  WCHAR type = "gdi"
+  WCHAR label = "My Favorite window"
+  QWORD windowHandle = "0xdeadbeefdeadbeef"
+  WCHAR windowClassName = "TankWindow"
+  WCHAR windowName = "Overwatch"
+  WCHAR exeFullName = "C:\\Program Files(x86)\\whatever\\overwatch.exe"
+  DWORD once = 0
+```
+
 
 ## libyuv (notes)
 
@@ -76,3 +96,13 @@ Different parts of the project are under different licenses depending on their
 respective origin.
 
 For the full text of the licenses see: LICENSE.TXT
+antiCheat
+exeFullName
+fps
+id
+label
+once
+type
+windowClassName
+windowHandle
+windowName
