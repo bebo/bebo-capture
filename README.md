@@ -33,6 +33,9 @@ regsvr32 BeboGameCapture.DLL
 
 ### Capture Game (inject)
 ```
+  HLKU\\Software\\Bebo\\GameCapture
+
+  WCHAR id = ""
   WCHAR type = "inject"
   WCHAR windowClassName = "TankWindow"
   WCHAR windowName = "Overwatch"
@@ -42,6 +45,9 @@ regsvr32 BeboGameCapture.DLL
 
 ### Capture window using GDI
 ```
+  HLKU\\Software\\Bebo\\WindowCapture
+
+  WCHAR id = ""
   WCHAR type = "gdi"
   WCHAR label = "My Favorite window"
   QWORD windowHandle = "0xdeadbeefdeadbeef"
