@@ -378,11 +378,11 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		}
 	}
 
-	if (registry.HasValue(TEXT("fps"))) {
+	if (registry.HasValue(TEXT("CaptureFPS"))) {
 		DWORD oldfps = GetFps();
 		DWORD newfps = -1;
 
-		registry.ReadValueDW(TEXT("fps"), &newfps);
+		registry.ReadValueDW(TEXT("CaptureFPS"), &newfps);
 
 		if (oldfps != newfps) {
 			m_rtFrameLength = UNITS / newfps;
