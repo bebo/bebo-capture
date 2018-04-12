@@ -1,5 +1,6 @@
-ECHO ON
+@ECHO ON
 set errorlevel=
+set FILENAME=%TEMP%\%JOB_NAME%_%ENV%_%TAG%.zip
 
 rmdir /s /q dist
 rmdir /s /q x64
@@ -11,35 +12,52 @@ popd
 MSBuild.exe /property:Configuration=Release /property:Platform=x64 /target:clean,build
 
 if errorlevel 1 (
+  echo "Build Failed with %errorlevel%"
   exit /b %errorlevel%
 )
 
 mkdir dist
 if errorlevel 1 (
+  echo "mkdir dist failed with %errorlevel%"
   exit /b %errorlevel%
 )
 
 xcopy x64\Release\*.dll dist\
+
 if errorlevel 1 (
+  echo "Failed xcopy x64\Release\*.dll dist\ with %errorlevel%"
   exit /b %errorlevel%
 )
 
 xcopy x64\Release\*.pdb dist\
 if errorlevel 1 (
-  exit /b %errorlevel%
+    echo "Failed xcopy x64\Release\*.pdb dist\ with %errorlevel%"
+    exit /b %errorlevel%
 )
 
 xcopy third_party\obs-binaries\* dist\
 if errorlevel 1 (
-  exit /b %errorlevel%
+    echo "Failed third_party\obs-binaries\* dist\ with %errorlevel%"
+    exit /b %errorlevel%
 )
-
-set FILENAME=bebo-capture_%TAG%.zip
 
 "C:\Program Files\7-Zip\7z.exe" a -r %FILENAME% -w .\dist\* -mem=AES256
 
-if errorlevel 1 (
-  exit /b %errorlevel%
+@if errorlevel 1 (
+    echo "zip failed with %errorlevel%"
+    exit /b %errorlevel%
 )
 
-"C:\Program Files\Amazon\AWSCLI\aws.exe" s3api put-object --bucket bebo-app --key repo/bebo-capture/win64/%FILENAME% --body %FILENAME%
+if "%LIVE%" == "true" (
+    "C:\Python34\python.exe" "C:\w\jenkins_uploader.py" --project %JOB_NAME% --tag %TAG% --env %ENV%
+    @if errorlevel 1 (
+      echo "jenkins_upload failed with %errorlevel%"
+      exit /b %errorlevel%
+    )
+) else (
+    "C:\Python34\python.exe" "C:\w\jenkins_uploader.py" --project %JOB_NAME% --tag %TAG% --env %ENV% --no-deploy
+    @if errorlevel 1 (
+      echo "jenkins_upload failed with %errorlevel%"
+      exit /b %errorlevel%
+    )
+)
