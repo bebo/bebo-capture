@@ -1,6 +1,7 @@
 @ECHO ON
 set errorlevel=
 set FILENAME=%TEMP%\%JOB_NAME%_%ENV%_%TAG%.zip
+set LEGACY_FILENAME=%JOB_NAME%_%ENV%_%TAG%.zip
 
 rmdir /s /q dist
 rmdir /s /q x64
@@ -47,6 +48,8 @@ if errorlevel 1 (
     echo "zip failed with %errorlevel%"
     exit /b %errorlevel%
 )
+
+"C:\Program Files\Amazon\AWSCLI\aws.exe" s3api put-object --bucket bebo-app --key repo/%JOB_NAME%/%LEGACY_FILENAME% --body %FILENAME%
 
 if "%LIVE%" == "true" (
     "C:\Python34\python.exe" "C:\w\jenkins_uploader.py" --project %JOB_NAME% --tag %TAG% --env %ENV%
