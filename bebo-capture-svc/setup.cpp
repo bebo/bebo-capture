@@ -135,8 +135,7 @@ const int kNumberOfBeboCaptureFilter = 3;
 int g_cTemplates = sizeof(g_Templates) / sizeof(g_Templates[0]);    
 
 
-// FIXME
-#if 0
+#ifdef _DEBUG
 #define REGISTER_DSHOW_CATEGORY_AS &CLSID_CQzFilterClassManager
 #else
 #define REGISTER_DSHOW_CATEGORY_AS &CLSID_VideoInputDeviceCategory
