@@ -136,9 +136,9 @@ int g_cTemplates = sizeof(g_Templates) / sizeof(g_Templates[0]);
 
 
 #ifdef _DEBUG
-#define REGISTER_DSHOW_CATEGORY_AS &CLSID_CQzFilterClassManager
-#else
 #define REGISTER_DSHOW_CATEGORY_AS &CLSID_VideoInputDeviceCategory
+#else
+#define REGISTER_DSHOW_CATEGORY_AS &CLSID_CQzFilterClassManager
 #endif
 
 #define CreateComObject(clsid, iid, var) CoCreateInstance( clsid, NULL, CLSCTX_INPROC_SERVER, iid, (void **)&var);
