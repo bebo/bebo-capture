@@ -1,7 +1,7 @@
 @ECHO ON
 set errorlevel=
 set FILENAME=%TEMP%\%JOB_NAME%_%ENV%_%TAG%.zip
-set LEGACY_FILENAME=%JOB_NAME%_%ENV%_%TAG%.zip
+set LEGACY_FILENAME=%JOB_NAME%_%TAG%.zip
 
 rmdir /s /q dist
 rmdir /s /q x64
