@@ -209,10 +209,15 @@ STDAPI RegisterFilters( BOOL bRegister )
 			  else
 			  {
 				  info("Unregistering %s", filter_name);
-				  hr = fm->UnregisterFilter(REGISTER_DSHOW_CATEGORY_AS, 0, filter_clsid);
+				  hr = fm->UnregisterFilter(&CLSID_VideoInputDeviceCategory, 0, filter_clsid);
 				  if (FAILED(hr)) {
-					  error("Failed to UnregisterFilter %ld", hr);
+					  error("Failed to UnregisterFilter - inputdevice %ld", hr);
 				  }
+                  hr = fm->UnregisterFilter(&CLSID_CQzFilterClassManager, 0, filter_clsid);
+				  if (FAILED(hr)) {
+					  error("Failed to UnregisterFilter - filterclass %ld", hr);
+				  }
+
 			  }
 		  }
 
