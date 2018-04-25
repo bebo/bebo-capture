@@ -51,4 +51,4 @@ DEFINE_GUID(CLSID_BeboScreenCapture, 0x8404812b, 0x1627, 0x41f5, 0x8d, 0xba, 0x0
 #define DS_SCREEN_FILTER_DESCRIPTION    L"Bebo Screen Game Capture Direct Show Filter"
 #define DS_SCREEN_FILTER_NAME    L"bebo-screen-capture"
 
-#define DS_LOG_NAME              "bonegnawer"
+#define DS_LOG_NAME              "bebo-capture"
